@@ -35,15 +35,18 @@ export async function POST(request: NextRequest) {
   // Best-effort revoke at Google before deleting local credentials.
   const { data: cred } = await admin
     .from("google_oauth_credentials")
-    .select("refresh_token_ciphertext, refresh_token_iv")
+    .select("refresh_token_ciphertext, refresh_token_iv, crypto_version, key_id")
     .eq("calendar_account_id", accountId)
     .maybeSingle();
   if (cred) {
     try {
-      const token = decryptRefreshToken(
-        fromPgHex(cred.refresh_token_ciphertext as string),
-        fromPgHex(cred.refresh_token_iv as string),
-      );
+      const token = decryptRefreshToken({
+        ciphertext: fromPgHex(cred.refresh_token_ciphertext as string),
+        iv: fromPgHex(cred.refresh_token_iv as string),
+        cryptoVersion: (cred.crypto_version as number | null) ?? null,
+        keyId: (cred.key_id as string | null) ?? null,
+        calendarAccountId: accountId,
+      });
       await revokeToken(token);
     } catch {
       /* proceed with local disconnect regardless */

@@ -43,7 +43,9 @@ export function isGoogleConfigured(): boolean {
     trimmed(process.env.GOOGLE_CLIENT_ID) &&
       trimmed(process.env.GOOGLE_CLIENT_SECRET) &&
       trimmed(process.env.GOOGLE_REDIRECT_URI) &&
-      trimmed(process.env.TOKEN_ENCRYPTION_KEY),
+      // Qualquer uma das duas serve: a lista (formato novo, com rotação) ou a
+      // chave única (formato antigo, ainda suportado).
+      (trimmed(process.env.TOKEN_ENCRYPTION_KEYS) || trimmed(process.env.TOKEN_ENCRYPTION_KEY)),
   );
 }
 
@@ -59,7 +61,18 @@ export function serverEnv() {
     googleClientId: trimmed(process.env.GOOGLE_CLIENT_ID),
     googleClientSecret: trimmed(process.env.GOOGLE_CLIENT_SECRET),
     googleRedirectUri: trimmed(process.env.GOOGLE_REDIRECT_URI),
+    /**
+     * Chave única, formato antigo. Continua valendo — é o que está no ambiente
+     * hoje, e renomeá-la invalidaria os refresh tokens já gravados. Usada
+     * quando `TOKEN_ENCRYPTION_KEYS` não está definida.
+     */
     tokenEncryptionKey: trimmed(process.env.TOKEN_ENCRYPTION_KEY),
+    /**
+     * Lista ordenada `id:base64,id:base64`, da chave ATIVA para a mais antiga.
+     * É o que permite rotacionar sem reconectar as contas do Google. Ver
+     * `chavesDeToken()` em src/lib/crypto/tokens.ts.
+     */
+    tokenEncryptionKeys: trimmed(process.env.TOKEN_ENCRYPTION_KEYS),
     cronSecret: trimmed(process.env.CRON_SECRET),
   };
 }

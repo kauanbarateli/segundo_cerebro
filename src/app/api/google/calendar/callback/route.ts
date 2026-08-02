@@ -86,7 +86,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Store the refresh token ENCRYPTED (never plaintext, never to the client).
-    const enc = encryptRefreshToken(tokens.refresh_token);
+    //
+    // O id da conta entra na cifragem como AAD, e por isso esta chamada acontece
+    // DEPOIS de a conta existir: o ciphertext fica amarrado à linha em que vai
+    // ser gravado. Movido para outra conta, ele deixa de decifrar. Ver
+    // src/lib/crypto/tokens.ts.
+    const enc = encryptRefreshToken(tokens.refresh_token, account.id as string);
     const { error: credErr } = await admin.from("google_oauth_credentials").upsert(
       {
         calendar_account_id: account.id,
@@ -94,6 +99,7 @@ export async function GET(request: NextRequest) {
         refresh_token_iv: toPgHex(enc.iv),
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
         crypto_version: enc.cryptoVersion,
+        key_id: enc.keyId,
       },
       { onConflict: "calendar_account_id" },
     );

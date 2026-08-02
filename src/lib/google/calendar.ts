@@ -49,18 +49,24 @@ interface GoogleCalendarListEntry {
 
 /** Reads + decrypts the refresh token for an account and returns a fresh access token. */
 async function getAccessToken(admin: SupabaseClient, calendarAccountId: string): Promise<string> {
+  // `crypto_version` e `key_id` entram no SELECT porque a LEITURA se orienta por
+  // eles: a versão decide se há AAD, o key_id escolhe a chave. Antes da E9 as
+  // duas colunas eram gravadas e nunca consultadas.
   const { data, error } = await admin
     .from("google_oauth_credentials")
-    .select("refresh_token_ciphertext, refresh_token_iv")
+    .select("refresh_token_ciphertext, refresh_token_iv, crypto_version, key_id")
     .eq("calendar_account_id", calendarAccountId)
     .single();
 
   if (error || !data) throw new Error("Credenciais não encontradas para a conta");
 
-  const refreshToken = decryptRefreshToken(
-    fromPgHex(data.refresh_token_ciphertext as string),
-    fromPgHex(data.refresh_token_iv as string),
-  );
+  const refreshToken = decryptRefreshToken({
+    ciphertext: fromPgHex(data.refresh_token_ciphertext as string),
+    iv: fromPgHex(data.refresh_token_iv as string),
+    cryptoVersion: (data.crypto_version as number | null) ?? null,
+    keyId: (data.key_id as string | null) ?? null,
+    calendarAccountId,
+  });
   const tokens = await refreshAccessToken(refreshToken);
   return tokens.access_token;
 }
