@@ -1,0 +1,75 @@
+name: CI
+
+# Roda no push da main e em todo pull request. Não roda em agendamento: a
+# checagem de vulnerabilidade aqui é sobre O QUE ESTE COMMIT INTRODUZ. Um
+# alerta que aparece sozinho às 3h da manhã, sem mudança de código, é ruído
+# num repositório de uma pessoa só — e o `npm audit` local resolve quando a
+# pergunta for "e hoje, como está?".
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela execução anterior do mesmo ramo: dois pushes seguidos não precisam
+# de duas rodadas completas, e a primeira já está obsoleta quando a segunda
+# começa.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # `node-version-file` em vez de um número escrito aqui: o .nvmrc é a
+      # fonte única da versão, e é o mesmo arquivo que o ambiente local lê.
+      # Duas declarações da versão divergem — e divergem em silêncio, com o CI
+      # passando numa versão que ninguém usa para desenvolver.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `npm ci` e não `npm install`: instala EXATAMENTE o package-lock.json e
+      # falha se ele estiver dessincronizado do package.json. É o que garante
+      # que o CI testa a mesma árvore de dependências que vai para produção —
+      # incluindo os `overrides` de postcss e sharp.
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx next lint
+
+      - name: Testes
+        run: npx vitest run
+
+      - name: Build
+        run: npx next build
+        env:
+          # O build renderiza páginas e precisa das variáveis públicas
+          # existirem; valores de fachada bastam, porque nada é chamado de
+          # verdade. Segredo REAL não entra aqui: um workflow que roda em pull
+          # request de terceiro exporia o que estivesse no ambiente.
+          NEXT_PUBLIC_SUPABASE_URL: https://exemplo.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: chave-de-fachada-para-o-build
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      # ÚLTIMO PASSO, e de propósito: uma vulnerabilidade nova numa dependência
+      # não deve esconder um erro de tipo ou um teste quebrado. Rodando por
+      # último, o log mostra primeiro o que é problema DO CÓDIGO.
+      #
+      # `--omit=dev` porque o que importa é o que VAI PARA PRODUÇÃO. O
+      # ferramental de desenvolvimento (eslint, vitest) não é servido a
+      # ninguém, e incluí-lo faria o CI falhar por um advisory de DoS num
+      # parser de glob que só roda na máquina de quem programa. `--audit-level`
+      # é a linha que faz o passo FALHAR: sem ele, o npm imprime o relatório e
+      # sai com zero.
+      - name: Vulnerabilidades de produção
+        run: npm audit --omit=dev --audit-level=high
