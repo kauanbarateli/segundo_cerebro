@@ -200,6 +200,58 @@ where url !~* '^https://';
 
 
 -- -----------------------------------------------------------------------------
+-- BLOCO 12 — A 0014 fechou o que a internet alcança? (rode DEPOIS de aplicá-la)
+--
+-- Três perguntas independentes. Todas as colunas devem voltar `true`.
+-- -----------------------------------------------------------------------------
+
+-- 12a — Buckets privados (SB-SEC-020).
+--
+-- Isto é o que o `public = excluded.public` da 0014 passou a garantir. Um
+-- bucket marcado como público por dois cliques no painel serve TODO objeto por
+-- URL direta, sem sessão e sem RLS: os avatares e o Drive inteiro viram
+-- conteúdo aberto. É a única linha desta verificação cujo `false` significa
+-- vazamento em andamento, não risco futuro.
+select id,
+       public          is false as privado_ok,
+       file_size_limit          as limite_bytes
+from storage.buckets
+where id in ('avatars', 'drive')
+order by id;
+
+-- 12b — Nenhum privilégio de `anon` em tabela ou view do schema (SB-SEC-025).
+--
+-- Esperado: ZERO linhas. Cada linha aqui é uma tabela que a chave anônima —
+-- que é pública, vai no pacote do navegador — consegue tocar. A RLS ainda
+-- barraria as linhas, mas o privilégio não deveria existir.
+select table_name, privilege_type
+from information_schema.role_table_grants
+where grantee = 'anon'
+  and table_schema = 'public'
+order by table_name, privilege_type;
+
+-- 12c — Funções: quem pode executar o quê.
+--
+-- Leia assim:
+--   anon_pode = true          -> FALHA. A função está aberta para a internet.
+--   authenticated_pode        -> deve ser `true` SOMENTE em
+--                                knowledge_extract_text e convert_capture_to_task.
+--
+-- ⚠️ `knowledge_extract_text` com `authenticated_pode = false` NÃO é um acerto:
+-- é o salvamento de página do Conhecimento quebrado. A trigger
+-- knowledge_pages_sync_content_text é `security invoker` e chama essa função no
+-- corpo, então o EXECUTE é checado contra `authenticated` a cada gravação.
+select p.proname                                             as funcao,
+       pg_get_function_identity_arguments(p.oid)             as argumentos,
+       has_function_privilege('anon',          p.oid, 'execute') as anon_pode,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_pode,
+       has_function_privilege('service_role',  p.oid, 'execute') as service_role_pode
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+order by p.proname;
+
+
+-- -----------------------------------------------------------------------------
 -- BLOCO 7 — Caça a índice redundante (higiene, roda quando quiser)
 --
 -- Lista pares de índices na mesma tabela cuja definição de colunas coincide.

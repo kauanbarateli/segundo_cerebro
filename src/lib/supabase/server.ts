@@ -3,16 +3,22 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { serverEnv } from "@/lib/env";
+import { cookieOptions } from "@/lib/supabase/cookie-options";
 
 /**
  * Server-side Supabase client bound to the request cookies. Runs as the
  * authenticated user (anon key + user JWT), so RLS still applies.
+ *
+ * `cookieOptions` é o mesmo objeto dos outros dois clientes — ver o arquivo
+ * dele para o motivo de os três terem de concordar, e para por que `httpOnly`
+ * não está lá.
  */
 export async function createClient() {
   const cookieStore = await cookies();
   const env = serverEnv();
 
   return createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
+    cookieOptions,
     cookies: {
       getAll() {
         return cookieStore.getAll();

@@ -349,6 +349,27 @@ export const linkInputSchema = z.object({
 });
 export type LinkInput = z.infer<typeof linkInputSchema>;
 
+/* ----------------------------------------------------------------- calendário */
+
+/**
+ * Corpo aceito por `POST /api/google/calendar/sync` no caminho da SESSÃO.
+ *
+ * `accountId` como uuid, e não string livre: ele vai direto para um
+ * `.eq("id", …)` no PostgREST. Sem a validação, qualquer texto vira parte de
+ * uma consulta cujo erro do banco volta ao cliente — o tipo de resposta que
+ * descreve o schema para quem está sondando. Com o uuid exigido, entrada
+ * malformada morre em 400 antes de tocar no banco.
+ *
+ * `.strict()` porque este corpo tem exatamente um campo opcional e nada mais:
+ * campo desconhecido aqui é engano de quem chamou (ou sondagem), e aceitar em
+ * silêncio esconderia os dois.
+ */
+export const calendarSyncBodySchema = z
+  .object({
+    accountId: z.string().uuid().optional(),
+  })
+  .strict();
+
 /* -------------------------------------------------------------------- drive */
 
 // Nome sem barra e sem os caracteres proibidos no Windows — evita surpresa ao

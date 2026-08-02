@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { publicEnv, isSupabaseConfigured } from "@/lib/env";
+import { cookieOptions } from "@/lib/supabase/cookie-options";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -56,7 +57,10 @@ export async function updateSession(request: NextRequest) {
     return response;
   }
 
+  // Este é o cliente que MAIS grava cookie — o refresh de sessão acontece aqui,
+  // a cada requisição. Ver src/lib/supabase/cookie-options.ts.
   const supabase = createServerClient(publicEnv.supabaseUrl, publicEnv.supabaseAnonKey, {
+    cookieOptions,
     cookies: {
       getAll() {
         return request.cookies.getAll();
