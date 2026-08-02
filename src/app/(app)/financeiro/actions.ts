@@ -12,6 +12,8 @@ import {
   financeInstallmentSchema,
   financeStatementPaymentSchema,
   financeBudgetSchema,
+  lerUuid,
+  ID_INVALIDO,
 } from "@/lib/validation";
 import {
   faturaDe,
@@ -379,6 +381,7 @@ export async function upsertAccount(input: unknown): Promise<ActionResult> {
 
 /** Arquiva em vez de excluir: apagar a conta levaria junto o histórico. */
 export async function archiveAccount(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase
@@ -395,6 +398,7 @@ export async function archiveAccount(id: string): Promise<ActionResult> {
 }
 
 export async function deleteAccount(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("finance_accounts").delete().eq("id", id);
@@ -451,6 +455,7 @@ export async function upsertCategory(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("finance_categories").delete().eq("id", id);
@@ -500,6 +505,7 @@ export async function upsertTag(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteTag(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("finance_tags").delete().eq("id", id);
@@ -633,6 +639,7 @@ export async function upsertTransaction(input: unknown): Promise<ActionResult> {
  *   ConfirmationDialog da FinanceView.
  */
 export async function deleteTransaction(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   // Valida ANTES do banco: um id fora do formato uuid faria o PostgREST devolver
   // erro cru de sintaxe de tipo (22P02), que não diz nada a quem lê o toast.
   if (!z.string().uuid().safeParse(id).success) {
@@ -979,6 +986,7 @@ export async function upsertBudget(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteBudget(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("finance_budgets").delete().eq("id", id);

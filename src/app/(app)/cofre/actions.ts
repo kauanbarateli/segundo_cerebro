@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { lerUuid, ID_INVALIDO } from "@/lib/validation";
 import type { VaultStatePayload } from "@/lib/action-types";
 
 /**
@@ -200,6 +201,7 @@ export async function upsertVaultItem(
 }
 
 export async function deleteVaultItem(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase

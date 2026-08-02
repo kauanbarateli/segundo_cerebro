@@ -10,6 +10,9 @@ import {
   socialLinkSchema,
   socialLinkUpdateSchema,
   socialLinkReorderSchema,
+  financeTransactionSchema,
+  lerUuid,
+  MAX_CENTAVOS,
 } from "./validation";
 
 const CAPTURE_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
@@ -322,5 +325,123 @@ describe("socialLinkReorderSchema", () => {
     expect(socialLinkReorderSchema.safeParse({ ids: ["abc"] }).success).toBe(false);
     const muitos = Array.from({ length: 9 }, (_, i) => `6ba7b81${i}-9dad-41d1-80b4-00c04fd430c8`);
     expect(socialLinkReorderSchema.safeParse({ ids: muitos }).success).toBe(false);
+  });
+});
+
+/* ============================================================== E8 — SB-SEC-014 */
+
+describe("optionalDateTime — validar ANTES de converter", () => {
+  /*
+    A regressão que este bloco tranca: a versão anterior era só um
+    `.transform(v => new Date(v).toISOString())`. `new Date("x")` devolve
+    Invalid Date sem lançar; quem lança é o `toISOString()` em cima dele. E
+    transform do Zod não captura exceção — ela atravessa o `safeParse`.
+
+    Resultado: `safeParse`, cujo contrato é "nunca lança", LANÇAVA. Em
+    `createTask` a chamada está antes do `try`, então virava 500 em vez de
+    "Dados inválidos" no toast.
+
+    `expect(...).not.toThrow()` é o coração daqui. Um teste que só conferisse
+    `success === false` passaria na versão quebrada? Não — ele explodiria antes
+    de chegar ao expect. Mas a mensagem seria "RangeError" e não diria qual é o
+    contrato violado. O `not.toThrow()` nomeia o defeito.
+  */
+  it("data ilegível vira erro de validação, NUNCA exceção", () => {
+    const entrada = { title: "Tarefa", dueAt: "x" };
+    expect(() => taskInputSchema.safeParse(entrada)).not.toThrow();
+
+    const r = taskInputSchema.safeParse(entrada);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.message).toBe("Data inválida");
+  });
+
+  it("cobre as outras duas datas da tarefa", () => {
+    for (const campo of ["scheduledStartAt", "scheduledEndAt"]) {
+      const entrada = { title: "T", [campo]: "não é data" };
+      expect(() => taskInputSchema.safeParse(entrada)).not.toThrow();
+      expect(taskInputSchema.safeParse(entrada).success).toBe(false);
+    }
+  });
+
+  it("recusa string longa demais antes de tentar interpretar", () => {
+    const r = taskInputSchema.safeParse({ title: "T", dueAt: "2".repeat(5000) });
+    expect(r.success).toBe(false);
+  });
+
+  it("continua aceitando o que o formulário manda de verdade", () => {
+    // `datetime-local` produz este formato, sem fuso.
+    const r = taskInputSchema.safeParse({ title: "T", dueAt: "2026-08-02T14:30" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.dueAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("campo vazio e campo ausente continuam virando null", () => {
+    const vazio = taskInputSchema.safeParse({ title: "T", dueAt: "" });
+    expect(vazio.success && vazio.data.dueAt).toBeNull();
+    const ausente = taskInputSchema.safeParse({ title: "T" });
+    expect(ausente.success && ausente.data.dueAt).toBeNull();
+  });
+});
+
+describe("tetos de texto", () => {
+  it("descrição de tarefa tem limite", () => {
+    expect(taskInputSchema.safeParse({ title: "T", description: "a".repeat(5_001) }).success).toBe(
+      false,
+    );
+    expect(taskInputSchema.safeParse({ title: "T", description: "a".repeat(5_000) }).success).toBe(
+      true,
+    );
+  });
+
+  it("título de captura tem limite", () => {
+    expect(captureInputSchema.safeParse({ title: "a".repeat(201) }).success).toBe(false);
+  });
+});
+
+describe("tetos dos inteiros financeiros", () => {
+  const base = {
+    accountId: ACCOUNT_ID,
+    kind: "expense" as const,
+    description: "Mercado",
+    occurredOn: "2026-08-02",
+  };
+
+  it("recusa valor acima do teto", () => {
+    const r = financeTransactionSchema.safeParse({ ...base, amountCents: MAX_CENTAVOS + 1 });
+    expect(r.success).toBe(false);
+  });
+
+  it("aceita exatamente o teto", () => {
+    expect(
+      financeTransactionSchema.safeParse({ ...base, amountCents: MAX_CENTAVOS }).success,
+    ).toBe(true);
+  });
+
+  it("recusa Number.MAX_SAFE_INTEGER — o valor que passava antes", () => {
+    expect(
+      financeTransactionSchema.safeParse({ ...base, amountCents: Number.MAX_SAFE_INTEGER }).success,
+    ).toBe(false);
+  });
+
+  it("saldo inicial pode ser negativo, mas não sem limite", () => {
+    const conta = { name: "Conta", kind: "checking" as const };
+    expect(
+      financeAccountSchema.safeParse({ ...conta, openingBalanceCents: -50_000 }).success,
+    ).toBe(true);
+    expect(
+      financeAccountSchema.safeParse({ ...conta, openingBalanceCents: -MAX_CENTAVOS - 1 }).success,
+    ).toBe(false);
+  });
+});
+
+describe("lerUuid", () => {
+  it("aceita uuid e recusa o resto", () => {
+    expect(lerUuid(ACCOUNT_ID)).toBe(ACCOUNT_ID);
+    expect(lerUuid("nao-e-uuid")).toBeNull();
+    expect(lerUuid("")).toBeNull();
+    expect(lerUuid(undefined)).toBeNull();
+    expect(lerUuid(123)).toBeNull();
+    // O caso que virava erro de cast do Postgres no toast do usuário.
+    expect(lerUuid("1; drop table tasks")).toBeNull();
   });
 });

@@ -7,6 +7,8 @@ import {
   driveRenameSchema,
   driveMoveSchema,
   driveFileRegisterSchema,
+  lerUuid,
+  ID_INVALIDO,
 } from "@/lib/validation";
 import type { ActionResult } from "@/lib/action-types";
 
@@ -144,6 +146,7 @@ export async function moveFolder(input: unknown): Promise<ActionResult> {
  * por arquivos órfãos e invisíveis.
  */
 export async function deleteFolder(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
 
@@ -386,6 +389,7 @@ export async function moveFile(input: unknown): Promise<ActionResult> {
 
 /** Lixeira: soft delete. Os bytes só somem no esvaziamento definitivo. */
 export async function trashFile(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase
@@ -401,6 +405,7 @@ export async function trashFile(id: string): Promise<ActionResult> {
 }
 
 export async function restoreFile(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase
@@ -424,6 +429,7 @@ export async function restoreFile(id: string): Promise<ActionResult> {
 }
 
 export async function deleteFilePermanently(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { data: file } = await supabase
@@ -445,6 +451,7 @@ export async function deleteFilePermanently(id: string): Promise<ActionResult> {
 }
 
 export async function toggleStar(id: string, starred: boolean): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("drive_files").update({ starred }).eq("id", id);
@@ -458,6 +465,7 @@ export async function toggleStar(id: string, starred: boolean): Promise<ActionRe
 
 /** URL assinada de curta duração para download/preview. */
 export async function getDownloadUrl(id: string): Promise<{ ok: boolean; url?: string; error?: string }> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { data: file } = await supabase

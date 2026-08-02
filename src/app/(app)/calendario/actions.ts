@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { lerUuid, ID_INVALIDO } from "@/lib/validation";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -17,6 +18,9 @@ export async function setSourceEnabled(
   sourceId: string,
   enabled: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
+  // Os dois tipos somem na compilação e esta função é um endpoint HTTP.
+  if (!lerUuid(sourceId)) return { ok: false, error: ID_INVALIDO };
+  if (typeof enabled !== "boolean") return { ok: false, error: "Valor inválido." };
   try {
     const supabase = await requireUser();
     const { error } = await supabase
@@ -37,6 +41,7 @@ export async function setAccountNickname(
   accountId: string,
   nickname: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!lerUuid(accountId)) return { ok: false, error: ID_INVALIDO };
   const parsed = nicknameSchema.safeParse(nickname);
   if (!parsed.success) return { ok: false, error: "Apelido inválido" };
   try {

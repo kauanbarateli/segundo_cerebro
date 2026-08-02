@@ -200,6 +200,9 @@ export async function updateNotificationPreferences(input: {
 export async function toggleFinanceHideValues(
   hide: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
+  // `boolean` é tipo de compilação; o valor chega pela rede. Sem esta checagem,
+  // uma string vai direto para a coluna e o Postgres recusa com erro de cast.
+  if (typeof hide !== "boolean") return { ok: false, error: "Valor inválido." };
   try {
     const { supabase, user } = await requireUser();
     const { error } = await supabase

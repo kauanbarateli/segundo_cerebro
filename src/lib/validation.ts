@@ -13,20 +13,118 @@ export const vaultItemTypeSchema = z.enum([
   "secure_note",
 ]);
 
-const optionalString = z
-  .string()
-  .trim()
-  .optional()
-  .transform((v) => (v && v.length > 0 ? v : null));
+/* ------------------------------------------------------- peças reutilizáveis */
 
+/**
+ * Identificador solto — para as actions que recebem `id: string` e mais nada.
+ *
+ * Server Action é ENDPOINT HTTP: o argumento chega pela rede e não tem relação
+ * nenhuma com o que a interface mandou. Sem validar, um id malformado não vira
+ * "0 linhas afetadas"; vira erro de cast do Postgres (`invalid input syntax for
+ * type uuid`), e a mensagem crua do banco sobe até o toast do usuário —
+ * descrevendo o schema para quem está sondando.
+ */
+export const uuidSchema = z.string().uuid();
+
+/** Devolve o uuid válido ou `null`. Ver `uuidSchema` para o motivo. */
+export function lerUuid(valor: unknown): string | null {
+  const r = uuidSchema.safeParse(valor);
+  return r.success ? r.data : null;
+}
+
+/** Mensagem única para id recusado: não distingue "inválido" de "não existe". */
+export const ID_INVALIDO = "Identificador inválido.";
+
+/**
+ * Texto opcional com TETO OBRIGATÓRIO.
+ *
+ * Era `z.string().trim().optional()`, sem limite nenhum — e valia para
+ * descrição de tarefa, título de captura, observação de lançamento e mais. Um
+ * cliente podia gravar megabytes num campo pensado para uma linha, e o custo
+ * aparecia depois: cada leitura da lista passa a arrastar o texto inteiro.
+ *
+ * O teto virou parâmetro em vez de um valor único porque os campos não se
+ * parecem: 200 caracteres para um título é folgado, para uma descrição é
+ * apertado. Um número só serviria mal aos dois.
+ */
+const textoOpcional = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Máximo de ${max} caracteres`)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null));
+
+/**
+ * Data e hora opcionais — VALIDADAS ANTES DE CONVERTER.
+ *
+ * =============================================================================
+ * O DEFEITO QUE ESTA ORDEM CORRIGE (SB-SEC-014)
+ * =============================================================================
+ * A versão anterior era só um `.transform()`:
+ *
+ *     .transform((v) => (v && v.length > 0 ? new Date(v).toISOString() : null))
+ *
+ * `new Date("x")` não lança — devolve Invalid Date. Quem lança é o
+ * `.toISOString()` em cima dele: `RangeError: Invalid time value`. E transform
+ * do Zod NÃO captura exceção: ela atravessa o `safeParse` inteiro.
+ *
+ * Ou seja, `safeParse` — a função cujo contrato é "nunca lança, devolve
+ * `{ success: false }`" — LANÇAVA. Em `createTask` a chamada está antes do
+ * `try`, então um `dueAt="x"` não virava "Dados inválidos" no toast: virava
+ * exceção não tratada, 500, e a tarefa não era criada sem ninguém entender por
+ * quê. Confirmado em execução.
+ *
+ * A correção é a ordem. `.refine()` roda ANTES do `.transform()` porque o Zod
+ * avalia a cadeia de dentro para fora, e o refine embrulha o tipo base enquanto
+ * o transform embrulha o refine. Quando a conversão acontece, a string já foi
+ * atestada como data legível — `toISOString()` não tem mais como falhar.
+ *
+ * `Date.parse` e não `new Date(...).getTime()` só por clareza: os dois devolvem
+ * NaN para entrada inválida, e é o NaN que o refine procura.
+ *
+ * O `.max(64)` é o outro lado: sem ele, uma string de dez megabytes chega até o
+ * parser de datas antes de qualquer recusa. Nenhuma data ISO passa de 40.
+ */
 const optionalDateTime = z
   .string()
+  .trim()
+  .max(64, "Data inválida")
   .optional()
+  .refine((v) => v == null || v.length === 0 || !Number.isNaN(Date.parse(v)), {
+    message: "Data inválida",
+  })
   .transform((v) => (v && v.length > 0 ? new Date(v).toISOString() : null));
+
+/**
+ * Valor em centavos, com TETO.
+ *
+ * `z.number().int().positive()` aceita até `Number.MAX_SAFE_INTEGER` — noventa
+ * trilhões de reais. A coluna é `bigint` e aguenta, mas o resto não: a soma da
+ * view de saldos, a barra de orçamento e toda formatação passam a exibir
+ * números que quebram o layout, e um único lançamento absurdo contamina
+ * silenciosamente todos os relatórios que o incluem.
+ *
+ * R$ 1 bilhão é folgado para finança pessoal por várias ordens de grandeza, e
+ * ainda deixa espaço para 10^8 lançamentos antes de a SOMA chegar perto do
+ * limite do `bigint` — que é o número que de fato importa aqui, já que o teto
+ * protege a linha e a soma é que estoura.
+ */
+export const MAX_CENTAVOS = 100_000_000_000; // R$ 1.000.000.000,00
+
+const centavos = (rotulo = "valor") =>
+  z
+    .number()
+    .int(`O ${rotulo} precisa ser um número inteiro de centavos`)
+    .max(MAX_CENTAVOS, `O ${rotulo} passa do limite aceito`)
+    .min(-MAX_CENTAVOS, `O ${rotulo} passa do limite aceito`);
+
+const centavosPositivos = (rotulo = "valor") =>
+  centavos(rotulo).positive(`Informe um ${rotulo} maior que zero`);
 
 export const taskInputSchema = z.object({
   title: z.string().trim().min(1, "Informe um título").max(200),
-  description: optionalString,
+  description: textoOpcional(5_000),
   categoryId: z
     .string()
     .uuid()
@@ -46,7 +144,7 @@ export type TaskInput = z.infer<typeof taskInputSchema>;
 
 export const captureInputSchema = z.object({
   type: captureTypeSchema.default("note"),
-  title: optionalString,
+  title: textoOpcional(200),
   content: z.string().trim().max(10_000).optional().default(""),
   categoryId: z
     .string()
@@ -66,7 +164,7 @@ export type CaptureInput = z.infer<typeof captureInputSchema>;
 export const captureUpdateSchema = z.object({
   id: z.string().uuid(),
   type: captureTypeSchema,
-  title: optionalString,
+  title: textoOpcional(200),
   content: z.string().trim().max(10_000).optional().default(""),
   categoryId: z
     .string()
@@ -156,18 +254,14 @@ export const financeAccountSchema = z
     id: z.string().uuid().optional(),
     name: z.string().trim().min(1, "Informe um nome").max(80),
     kind: z.enum(["checking", "savings", "credit_card", "cash", "investment", "other"]),
-    institution: optionalString,
-    openingBalanceCents: z.number().int(),
+    institution: textoOpcional(80),
+    // Pode ser negativo: conta que nasce no vermelho é caso real.
+    openingBalanceCents: centavos("saldo inicial"),
     colorKey: z.string().trim().max(20).default("stone"),
     // Cartão de crédito (0010). Opcionais no schema porque a esmagadora maioria
     // das contas não é cartão; o superRefine abaixo os torna obrigatórios quando
     // precisam ser.
-    creditLimitCents: z
-      .number()
-      .int()
-      .positive("O limite do cartão precisa ser maior que zero")
-      .nullable()
-      .optional(),
+    creditLimitCents: centavosPositivos("limite do cartão").nullable().optional(),
     statementClosingDay: diaDoMes("de fechamento"),
     paymentDueDay: diaDoMes("de vencimento"),
   })
@@ -227,11 +321,11 @@ export const financeTransactionSchema = z.object({
     .or(z.literal(""))
     .transform((v) => (v && v.length > 0 ? v : null)),
   kind: z.enum(["income", "expense"]),
-  amountCents: z.number().int().positive("Informe um valor maior que zero"),
+  amountCents: centavosPositivos(),
   description: z.string().trim().min(1, "Informe uma descrição").max(160),
-  payee: optionalString,
+  payee: textoOpcional(120),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
-  notes: optionalString,
+  notes: textoOpcional(1_000),
   isPaid: z.boolean().default(true),
   tagIds: z.array(z.string().uuid()).max(10).default([]),
 });
@@ -239,7 +333,7 @@ export const financeTransactionSchema = z.object({
 export const financeTransferSchema = z.object({
   fromAccountId: z.string().uuid("Escolha a conta de origem"),
   toAccountId: z.string().uuid("Escolha a conta de destino"),
-  amountCents: z.number().int().positive("Informe um valor maior que zero"),
+  amountCents: centavosPositivos(),
   description: z.string().trim().min(1).max(160),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -269,7 +363,7 @@ export const financeInstallmentSchema = z
       .trim()
       .min(1, "Informe uma descrição")
       .max(140, "Máximo de 140 caracteres (o número da parcela ainda entra na descrição)"),
-    totalAmountCents: z.number().int().positive("Informe um valor maior que zero"),
+    totalAmountCents: centavosPositivos("total da compra"),
     installments: z
       .number()
       .int("O número de parcelas precisa ser inteiro")
@@ -307,7 +401,7 @@ export const financeStatementPaymentSchema = z
     cardAccountId: z.string().uuid("Escolha o cartão"),
     fromAccountId: z.string().uuid("Escolha a conta de origem"),
     mesFatura: z.string().regex(/^\d{4}-\d{2}-01$/, "Mês da fatura inválido"),
-    amountCents: z.number().int().positive("Informe um valor maior que zero"),
+    amountCents: centavosPositivos(),
     occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
   })
   .refine((v) => v.cardAccountId !== v.fromAccountId, {
@@ -318,7 +412,7 @@ export const financeStatementPaymentSchema = z
 export const financeBudgetSchema = z.object({
   categoryId: z.string().uuid(),
   month: z.string().regex(/^\d{4}-\d{2}-01$/, "Mês inválido"),
-  limitCents: z.number().int().positive(),
+  limitCents: centavosPositivos("limite"),
 });
 
 /* ----------------------------------------------------------------- vínculos */

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { taskInputSchema } from "@/lib/validation";
+import { taskInputSchema, taskStatusSchema, lerUuid, ID_INVALIDO } from "@/lib/validation";
 import { bloqueioPorLimite } from "@/lib/rate-limit";
 import type { TaskStatus } from "@/lib/database.types";
 import type { ActionResult } from "@/lib/action-types";
@@ -64,6 +64,7 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateTask(id: string, formData: FormData): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   const parsed = taskInputSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
@@ -95,6 +96,7 @@ export async function updateTask(id: string, formData: FormData): Promise<Action
 }
 
 async function setStatus(id: string, status: TaskStatus): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("tasks").update({ status }).eq("id", id);
@@ -129,10 +131,28 @@ export async function moveTask(
   beforeId: string | null,
   afterId: string | null,
 ): Promise<ActionResult> {
+  /*
+    Os quatro argumentos chegam pela rede: o tipo `TaskStatus` some na
+    compilação e `beforeId`/`afterId` viram parte de um `.in(...)`.
+
+    Os vizinhos são validados por FILTRO e não por recusa — de propósito. Eles
+    são uma dica de posicionamento, não uma referência obrigatória: um vizinho
+    que sumiu (outra aba concluiu a tarefa no meio do arrasto) já era tratado
+    como ausente pelo cálculo abaixo. Recusar o movimento inteiro por causa de
+    um id ruim seria mais rígido do que o recurso precisa; ignorar o id ruim
+    cai no mesmo caminho que "não havia vizinho daquele lado".
+  */
+  if (!lerUuid(taskId)) return { ok: false, error: ID_INVALIDO };
+  if (!taskStatusSchema.safeParse(status).success) {
+    return { ok: false, error: "Coluna inválida." };
+  }
+
   try {
     const { supabase } = await requireUser();
 
-    const neighborIds = [beforeId, afterId].filter((v): v is string => Boolean(v));
+    const neighborIds = [beforeId, afterId].filter(
+      (v): v is string => typeof v === "string" && lerUuid(v) !== null,
+    );
     let prev: number | null = null;
     let next: number | null = null;
 
@@ -169,6 +189,7 @@ export async function moveTask(
 }
 
 export async function deleteTask(id: string): Promise<ActionResult> {
+  if (!lerUuid(id)) return { ok: false, error: ID_INVALIDO };
   try {
     const { supabase } = await requireUser();
     const { error } = await supabase.from("tasks").delete().eq("id", id);
