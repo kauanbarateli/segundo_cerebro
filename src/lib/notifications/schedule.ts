@@ -1,4 +1,5 @@
 import type { CalendarEvent } from "@/lib/database.types";
+import { analisarLinkExterno, type LinkExterno } from "@/lib/external-link";
 
 /**
  * Lógica pura de agendamento de lembretes — sem I/O, para ser testável e
@@ -70,10 +71,18 @@ export function describeLead(minutes: number): string {
   return `em ${hours === 1 ? "1 hora" : `${hours} horas`}`;
 }
 
-/** Extrai o link de videoconferência do blob cacheado do Google. */
-export function meetLinkOf(event: CalendarEvent): string | null {
+/**
+ * Extrai o link de videoconferência do blob cacheado do Google, JÁ VALIDADO.
+ *
+ * A validação mora aqui, e não em quem renderiza, porque este é o único ponto
+ * onde o `uri` sai do blob: filtrar na saída da fonte garante que nenhum
+ * chamador futuro receba a string crua sem perceber. Devolve `null` quando o
+ * link não é um https legítimo — ver src/lib/external-link.ts.
+ */
+export function meetLinkOf(event: CalendarEvent): LinkExterno | null {
   const data = event.conference_data as
     | { entryPoints?: { entryPointType?: string; uri?: string }[] }
     | null;
-  return data?.entryPoints?.find((e) => e.entryPointType === "video")?.uri ?? null;
+  const uri = data?.entryPoints?.find((e) => e.entryPointType === "video")?.uri;
+  return analisarLinkExterno(uri);
 }

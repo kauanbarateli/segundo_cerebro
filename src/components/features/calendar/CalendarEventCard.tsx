@@ -3,14 +3,22 @@ import { Icon } from "@/components/ui/Icons";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import type { CalendarEvent } from "@/lib/database.types";
 import { formatTime, minutesBetween, formatDuration, cn } from "@/lib/utils";
+import { analisarLinkExterno } from "@/lib/external-link";
 
-/** Extracts a Google Meet / conference link from the cached conference_data blob. */
-function meetLink(ev: CalendarEvent): string | null {
+/**
+ * Link de videoconferência do blob cacheado do Google, JÁ VALIDADO.
+ *
+ * `conference_data` é conteúdo de terceiro: quem te convida escolhe o `uri`.
+ * `analisarLinkExterno` devolve `null` para qualquer coisa que não seja um
+ * https legítimo, e só carimba "Google Meet" quando o host é exatamente
+ * `meet.google.com`. Ver src/lib/external-link.ts.
+ */
+function conferencia(ev: CalendarEvent) {
   const data = ev.conference_data as
     | { entryPoints?: { entryPointType?: string; uri?: string }[] }
     | null;
   const entry = data?.entryPoints?.find((e) => e.entryPointType === "video");
-  return entry?.uri ?? null;
+  return analisarLinkExterno(entry?.uri);
 }
 
 export function CalendarEventCard({
@@ -43,7 +51,7 @@ export function CalendarEventCard({
    */
   onOpen?: () => void;
 }) {
-  const link = meetLink(event);
+  const link = conferencia(event);
   const duration = formatDuration(minutesBetween(event.start_at, event.end_at));
   const cancelled = event.status === "cancelled";
 
@@ -106,13 +114,21 @@ export function CalendarEventCard({
           <div className="mt-2 flex flex-wrap items-center gap-3 text-legenda">
             {event.organizer && <span className="text-ink-subtle">Org.: {event.organizer}</span>}
             {link && (
+              /*
+                O rótulo VEM DO LINK, não do JSX. Quando o host não é
+                `meet.google.com`, o que aparece é o próprio domínio — a pessoa
+                decide clicar vendo para onde vai. Antes, qualquer endereço
+                pescado do convite era anunciado como "Google Meet".
+              */
               <a
-                href={link}
+                href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 font-medium text-ink hover:underline"
+                title={link.href}
               >
-                <Icon.Video width={13} height={13} /> Google Meet
+                <Icon.Video width={13} height={13} /> {link.rotulo}
+                {!link.ehGoogleMeet && <span className="sr-only"> (site externo)</span>}
               </a>
             )}
           </div>

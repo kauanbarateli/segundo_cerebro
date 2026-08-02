@@ -100,13 +100,21 @@ export function MeetingReminder({
               </span>
             </p>
             {link && (
+              /*
+                "Entrar no Meet" era texto fixo, para qualquer endereço que o
+                convite trouxesse. Esta faixa é o pior lugar possível para isso:
+                ela aparece sozinha no topo da tela, com urgência ("começa em 5
+                min"), e é exatamente sob pressa que ninguém confere o destino.
+                Agora o botão diz o domínio quando não é o Meet.
+              */
               <a
-                href={link}
+                href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
+                title={link.href}
                 className="shrink-0 rounded-sm bg-surface px-2.5 py-1 text-legenda font-medium text-ink hover:opacity-90"
               >
-                Entrar no Meet
+                {link.ehGoogleMeet ? "Entrar no Meet" : `Abrir ${link.hostname}`}
               </a>
             )}
             <button

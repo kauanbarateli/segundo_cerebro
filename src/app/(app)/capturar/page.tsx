@@ -32,6 +32,7 @@ export default async function CapturarPage() {
         categories={categories}
         related={related}
         linkCandidates={[...tarefas, ...eventos]}
+        userId={ctx.userId}
       />
     </>
   );

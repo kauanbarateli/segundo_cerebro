@@ -14,6 +14,12 @@ import type { Capture, CaptureType, Category } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
 import { formatDayLabel } from "@/lib/utils";
 import {
+  apagarRascunho,
+  gravarRascunho,
+  lerRascunho,
+  limparResiduoLegado,
+} from "@/lib/capture-draft";
+import {
   archiveCapture,
   convertCaptureToTask,
   createCapture,
@@ -32,8 +38,6 @@ function typeLabel(type: CaptureType): string {
   return TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
-const DRAFT_KEY = "sb-capture-draft";
-
 interface Draft {
   type: CaptureType;
   title: string;
@@ -48,6 +52,7 @@ export function CaptureView({
   categories,
   related,
   linkCandidates,
+  userId,
 }: {
   captures: Capture[];
   categories: Category[];
@@ -55,6 +60,12 @@ export function CaptureView({
   related: Map<string, RelatedItem[]>;
   /** Tarefas e eventos oferecidos no autocomplete. */
   linkCandidates: RelatedItem[];
+  /**
+   * Dono da sessão. Entra só para compor a chave do rascunho — ver
+   * `src/lib/capture-draft.ts`. Sem ele a chave é global e o rascunho de uma
+   * conta aparece no compositor da outra.
+   */
+  userId: string;
 }) {
   const { toast } = useToast();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -77,32 +88,40 @@ export function CaptureView({
   const [deleting, startDelete] = useTransition();
   const editButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Restore an in-progress draft so a reload never loses typed text.
+  // Restaura o rascunho em andamento para que um F5 nunca perca texto digitado.
+  //
+  // A leitura acontece DEPOIS da varredura de resíduo, e a ordem importa: a
+  // varredura apaga a chave global da versão antiga, então ler antes dela
+  // ressuscitaria em `sessionStorage` o rascunho que se está tentando eliminar
+  // de `localStorage`.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (raw) setDraft({ ...emptyDraft, ...(JSON.parse(raw) as Partial<Draft>) });
-    } catch {
-      /* ignore */
+    limparResiduoLegado();
+    const raw = lerRascunho(userId);
+    if (raw) {
+      try {
+        setDraft({ ...emptyDraft, ...(JSON.parse(raw) as Partial<Draft>) });
+      } catch {
+        /* rascunho corrompido: começa vazio em vez de derrubar a tela */
+      }
     }
     setRestored(true);
-  }, []);
+  }, [userId]);
 
-  // Debounced autosave of the draft.
+  // Autosave com atraso.
   useEffect(() => {
     if (!restored) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       if (draft.title || draft.content) {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        gravarRascunho(userId, JSON.stringify(draft));
       } else {
-        localStorage.removeItem(DRAFT_KEY);
+        apagarRascunho(userId);
       }
     }, 400);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [draft, restored]);
+  }, [draft, restored, userId]);
 
   function submit() {
     start(async () => {
@@ -115,7 +134,7 @@ export function CaptureView({
       if (r.ok) {
         toast("Enviado ao cérebro", "success");
         setDraft({ ...emptyDraft, type: draft.type });
-        localStorage.removeItem(DRAFT_KEY);
+        apagarRascunho(userId);
       } else {
         toast(r.error ?? "Erro", "error");
       }

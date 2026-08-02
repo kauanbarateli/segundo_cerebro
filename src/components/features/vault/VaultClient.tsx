@@ -17,6 +17,7 @@ import {
   type VaultMasterKeyMaterial,
 } from "@/lib/crypto/vault";
 import { GerarKit, RestaurarComKit } from "@/components/features/vault/RecoveryKit";
+import { analisarLinkExterno } from "@/lib/external-link";
 import {
   deleteVaultItem,
   getVaultState,
@@ -566,16 +567,33 @@ function UnlockedView({
                         <span className="text-meta">Usuário</span>
                       </IconBtn>
                     )}
-                    {item.data.url && (
-                      <a
-                        href={item.data.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-legenda text-ink-muted hover:text-ink hover:underline"
-                      >
-                        Abrir site
-                      </a>
-                    )}
+                    {/*
+                      "Abrir site" era texto fixo para qualquer coisa gravada no
+                      campo URL — inclusive `javascript:…`, que executaria script
+                      na origem DO COFRE, com a chave de dados viva na memória
+                      desta aba. Não é conteúdo de terceiro como o convite de
+                      agenda, mas o campo aceita colagem, e o custo de um engano
+                      aqui é o cofre inteiro.
+
+                      Agora o destino é mostrado. Link recusado por
+                      `analisarLinkExterno` (não-https, credencial embutida, host
+                      sem ponto) simplesmente não vira link.
+                    */}
+                    {(() => {
+                      const site = analisarLinkExterno(item.data.url);
+                      if (!site) return null;
+                      return (
+                        <a
+                          href={site.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={site.href}
+                          className="text-legenda text-ink-muted hover:text-ink hover:underline"
+                        >
+                          {site.hostname}
+                        </a>
+                      );
+                    })()}
                     <div className="ml-auto flex gap-1">
                       <IconBtn
                         label="Editar"

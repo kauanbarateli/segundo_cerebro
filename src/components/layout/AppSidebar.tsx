@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/Icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/(auth)/actions";
+import { limparRascunhosDeCaptura } from "@/lib/capture-draft";
 import type { ModuleDef } from "@/lib/modules";
 
 export function AppSidebar({
@@ -103,7 +104,20 @@ export function AppSidebar({
             <p className="truncate text-corpo font-medium text-ink">{displayName}</p>
             <p className="truncate text-legenda text-ink-subtle">{email}</p>
           </div>
-          <form action={signOut}>
+          {/*
+            `onSubmit` limpa o que é do NAVEGADOR antes de a Server Action
+            limpar o que é do servidor.
+
+            Precisa ser aqui e não dentro de `signOut`: a action roda no
+            servidor e não tem acesso nenhum ao `sessionStorage` da aba. Sem
+            esta linha, sair da conta apagava a sessão e deixava o rascunho de
+            captura para trás — o oposto do que "sair" significa para quem
+            clica. Ver src/lib/capture-draft.ts.
+
+            Não chama `preventDefault`, então a submissão segue normalmente e a
+            Server Action executa logo depois.
+          */}
+          <form action={signOut} onSubmit={() => limparRascunhosDeCaptura()}>
             <button
               type="submit"
               aria-label="Sair"

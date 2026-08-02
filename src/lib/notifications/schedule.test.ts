@@ -105,7 +105,7 @@ describe("describeLead", () => {
 });
 
 describe("meetLinkOf", () => {
-  it("extrai o link de vídeo do blob do Google", () => {
+  it("extrai o link de vídeo do blob do Google, já analisado", () => {
     const e = event({
       conference_data: {
         entryPoints: [
@@ -114,10 +114,40 @@ describe("meetLinkOf", () => {
         ],
       },
     });
-    expect(meetLinkOf(e)).toBe("https://meet.google.com/abc-defg-hij");
+    const link = meetLinkOf(e);
+    expect(link?.href).toBe("https://meet.google.com/abc-defg-hij");
+    expect(link?.ehGoogleMeet).toBe(true);
   });
 
   it("devolve null quando não há conferência", () => {
     expect(meetLinkOf(event({}))).toBeNull();
+  });
+
+  /*
+    SB-SEC-019. O convite de agenda é conteúdo de terceiro: quem sabe seu e-mail
+    cria um evento, te convida, e o `uri` que ele escolher é sincronizado. A
+    filtragem mora nesta função — o único ponto onde o valor sai do blob — para
+    que nenhum chamador receba a string crua sem perceber.
+  */
+  it("recusa link que não é https", () => {
+    const e = event({
+      conference_data: {
+        entryPoints: [{ entryPointType: "video", uri: "javascript:alert(1)" }],
+      },
+    });
+    expect(meetLinkOf(e)).toBeNull();
+  });
+
+  it("não carimba Google Meet num host falsificado", () => {
+    const e = event({
+      conference_data: {
+        entryPoints: [
+          { entryPointType: "video", uri: "https://meet.google.com.phishing.example/x" },
+        ],
+      },
+    });
+    const link = meetLinkOf(e);
+    expect(link?.ehGoogleMeet).toBe(false);
+    expect(link?.hostname).toBe("meet.google.com.phishing.example");
   });
 });
