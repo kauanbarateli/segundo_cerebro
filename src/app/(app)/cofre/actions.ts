@@ -100,6 +100,63 @@ export async function setupVault(
   }
 }
 
+/**
+ * Substitui o material da senha mestra — o passo final da recuperação por kit.
+ *
+ * O CENÁRIO: a senha mestra foi esquecida. O navegador desembrulhou a chave de
+ * dados a partir do kit (arquivo + código), reembrulhou essa MESMA chave sob uma
+ * senha nova e manda aqui o novo embrulho. Os itens não são tocados: continuam
+ * cifrados com a mesma chave de dados, então nada precisa ser reescrito.
+ *
+ * POR QUE É `update` E NÃO `upsert`: se não existe linha, não existe cofre para
+ * recuperar. Um upsert criaria um "cofre" novo cuja chave de dados não decifra
+ * item nenhum — a pessoa entraria numa tela vazia achando que recuperou.
+ *
+ * O QUE O SERVIDOR NÃO CONSEGUE VERIFICAR, e é importante ser explícito: ele não
+ * tem como saber se o material que chega veio mesmo de um kit legítimo. A chave
+ * de dados nunca passa por aqui — é esse o ponto do desenho zero-knowledge. Quem
+ * tiver a sessão pode sobrescrever o embrulho com material arbitrário e, com
+ * isso, trancar o dono para fora dos itens (que permaneceriam cifrados sob a
+ * chave antiga). Não é uma capacidade nova — a mesma sessão já apaga itens por
+ * `deleteVaultItem` —, mas é IRREVERSÍVEL, então fica registrada na auditoria
+ * com ação própria. `vault_master_keys` guarda `updated_at` por trigger, o que
+ * dá a data da última troca mesmo se a auditoria falhar.
+ */
+export async function replaceVaultMasterKey(
+  input: z.infer<typeof setupSchema>,
+): Promise<{ ok: boolean; error?: string }> {
+  const parsed = setupSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Material inválido" };
+  try {
+    const { supabase, user } = await requireUser();
+    const m = parsed.data;
+    const { data, error } = await supabase
+      .from("vault_master_keys")
+      .update({
+        wrapped_data_key: base64ToPgHex(m.wrappedDataKeyB64),
+        wrap_iv: base64ToPgHex(m.wrapIvB64),
+        kdf_salt: base64ToPgHex(m.kdfSaltB64),
+        kdf_algorithm: m.kdfAlgorithm,
+        kdf_parameters: m.kdfParameters,
+        crypto_version: m.cryptoVersion,
+      })
+      // A RLS já restringe a linha ao dono; o filtro explícito evita depender
+      // disso para não atualizar a tabela inteira caso a policy mude.
+      .eq("user_id", user.id)
+      .select("user_id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Nenhum cofre encontrado para esta conta." };
+
+    await logAudit("master_key_replaced");
+    revalidatePath("/cofre");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro" };
+  }
+}
+
 const itemSchema = z.object({
   id: z.string().uuid().optional(),
   itemType: z.enum(["login", "account", "document", "financial", "secure_note"]),

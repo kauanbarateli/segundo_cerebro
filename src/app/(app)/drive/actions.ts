@@ -221,6 +221,47 @@ async function discardOrphan(input: unknown): Promise<void> {
   }
 }
 
+/**
+ * Tamanho REAL do objeto, perguntado ao Storage.
+ *
+ * O `sizeBytes` que o cliente mandava era o `File.size` do navegador, e chegava
+ * aqui como número solto num corpo de Server Action: qualquer cliente podia
+ * enviar 40 MB e declarar 1 KB. Como `drive_usage` soma exatamente essa coluna,
+ * a barra de armazenamento passava a descrever uma realidade inventada — e é a
+ * barra que diz se ainda cabe alguma coisa no plano gratuito de 1 GB.
+ *
+ * Perguntar ao Storage resolve os DOIS problemas de uma vez, e o segundo é o mais
+ * sério: além de trazer o tamanho verdadeiro, a resposta prova que o objeto
+ * EXISTE. Antes, uma chamada direta a `registerFile` com um `storagePath`
+ * inventado (mas começando com o uuid do próprio usuário, que é a única coisa
+ * checada) criava uma linha apontando para o nada — arquivo fantasma na lista,
+ * que só falharia na hora de baixar.
+ *
+ * O `info()` é o caminho normal. O `list()` fica como reserva porque o endpoint
+ * `/object/info` não existe em versões mais antigas do storage-api, e um recurso
+ * de escrita não pode depender de um endpoint recente para funcionar.
+ */
+async function tamanhoRealNoStorage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storagePath: string,
+): Promise<number | null> {
+  const { data, error } = await supabase.storage.from(BUCKET).info(storagePath);
+  if (!error && typeof data?.size === "number") return data.size;
+
+  const barra = storagePath.lastIndexOf("/");
+  const pasta = barra === -1 ? "" : storagePath.slice(0, barra);
+  const nome = storagePath.slice(barra + 1);
+
+  // `search` do Storage é correspondência PARCIAL, não igualdade: pedir "abc"
+  // traz também "abcd". O `find` por nome exato é o que fecha isso.
+  const { data: itens } = await supabase.storage
+    .from(BUCKET)
+    .list(pasta, { search: nome, limit: 100 });
+  const achado = itens?.find((o) => o.name === nome);
+  const tamanho = (achado?.metadata as { size?: unknown } | null | undefined)?.size;
+  return typeof tamanho === "number" ? tamanho : null;
+}
+
 export async function registerFile(input: unknown): Promise<ActionResult> {
   const parsed = driveFileRegisterSchema.safeParse(input);
   if (!parsed.success) {
@@ -242,6 +283,22 @@ export async function registerFile(input: unknown): Promise<ActionResult> {
       return { ok: false, error: "Caminho inválido." };
     }
 
+    // FALHA FECHADA de propósito: sem conseguir medir, não registra.
+    // A alternativa seria cair de volta no número do cliente, que é exatamente o
+    // que esta checagem existe para não fazer. O objeto é removido junto — ele
+    // acabou de subir, não tem metadado nenhum apontando para ele, e deixá-lo no
+    // bucket seria lixo invisível ocupando cota para sempre. `remove` de um
+    // caminho inexistente não é erro, então o caso do objeto que nunca chegou
+    // passa por aqui sem tratamento especial.
+    const sizeBytes = await tamanhoRealNoStorage(supabase, i.storagePath);
+    if (sizeBytes === null) {
+      await supabase.storage.from(BUCKET).remove([i.storagePath]);
+      return {
+        ok: false,
+        error: "Não foi possível confirmar o envio no armazenamento. Tente de novo.",
+      };
+    }
+
     const { data, error } = await supabase
       .from("drive_files")
       .insert({
@@ -250,7 +307,8 @@ export async function registerFile(input: unknown): Promise<ActionResult> {
         name: i.name,
         storage_path: i.storagePath,
         mime_type: i.mimeType,
-        size_bytes: i.sizeBytes,
+        // Do Storage, nunca do cliente. Ver `tamanhoRealNoStorage`.
+        size_bytes: sizeBytes,
       })
       .select("id")
       .single();

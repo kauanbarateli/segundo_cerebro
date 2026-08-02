@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/states";
 import { Icon } from "@/components/ui/Icons";
 import { ConfirmationDialog } from "@/components/ui/ConfirmationDialog";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TaskForm } from "@/components/features/tasks/TaskForm";
@@ -353,6 +354,15 @@ export function TasksView({
   );
 }
 
+/**
+ * O menu de ações da linha.
+ *
+ * Era um `position: absolute` dentro do `<Card className="overflow-hidden">`
+ * desta tela, e por isso vinha CORTADO nas últimas linhas da tabela: o
+ * `overflow: hidden` do cartão recorta descendentes posicionados que passem da
+ * borda. Agora o painel é renderizado em `document.body` por portal — ver
+ * `ui/DropdownMenu.tsx` para o raciocínio completo.
+ */
 function RowMenu({
   onEdit,
   onArchive,
@@ -362,54 +372,16 @@ function RowMenu({
   onArchive: () => void;
   onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="relative inline-block">
-      <button
-        type="button"
-        aria-label="Ações da tarefa"
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-ink-subtle hover:bg-surface hover:text-ink"
-      >
-        <Icon.Dots width={16} height={16} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          {/* `animate-popover-in`: 4px vindos de cima, 120ms. Menor e mais
-              rápido que a entrada do modal de propósito — o menu nasce colado no
-              botão que o abriu, então a distância percorrida na tela também é
-              menor. Deslocamento de modal aqui pareceria exagero. */}
-          <div className="absolute right-0 z-20 mt-1 w-40 animate-popover-in overflow-hidden rounded-md border border-line bg-surface py-1 shadow-raised">
-            <MenuItem onClick={() => { setOpen(false); onEdit(); }}>Editar</MenuItem>
-            <MenuItem onClick={() => { setOpen(false); onArchive(); }}>Arquivar</MenuItem>
-            <MenuItem danger onClick={() => { setOpen(false); onDelete(); }}>Excluir</MenuItem>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function MenuItem({
-  children,
-  onClick,
-  danger,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "block w-full px-3 py-2 text-left text-corpo hover:bg-surface-muted",
-        danger ? "text-red-600 dark:text-red-400" : "text-ink",
-      )}
+    <DropdownMenu
+      label="Ações da tarefa"
+      items={[
+        { label: "Editar", onClick: onEdit },
+        { label: "Arquivar", onClick: onArchive },
+        { label: "Excluir", onClick: onDelete, danger: true },
+      ]}
     >
-      {children}
-    </button>
+      <Icon.Dots width={16} height={16} />
+    </DropdownMenu>
   );
 }

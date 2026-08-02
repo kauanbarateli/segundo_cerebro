@@ -19,6 +19,7 @@ export function CalendarEventCard({
   accountBadge,
   compact = false,
   linkCount = 0,
+  ended = false,
   onOpen,
 }: {
   event: CalendarEvent;
@@ -27,6 +28,15 @@ export function CalendarEventCard({
   compact?: boolean;
   /** Quantos vínculos este evento tem. Zero não desenha selo nenhum. */
   linkCount?: number;
+  /**
+   * Já terminou (usado na agenda do dia).
+   *
+   * Esmaece SEM riscar. O risco é vocabulário de cancelamento — "isto não vai
+   * acontecer" — e uma reunião que terminou aconteceu. A opacidade diz apenas
+   * que ela saiu do caminho: continua na lista porque o contexto do dia é útil,
+   * mas não compete com o que ainda está por vir.
+   */
+  ended?: boolean;
   /**
    * Abre o detalhe do evento. Opcional porque a página Início também usa este
    * card e lá não existe modal para abrir.
@@ -48,7 +58,9 @@ export function CalendarEventCard({
     <div
       className={cn(
         "flex gap-3 rounded-md border border-line bg-surface px-3.5 py-3",
-        cancelled && "opacity-60",
+        // Cancelado vence encerrado: os dois esmaecem igual, mas só o cancelado
+        // risca o título, e as classes não se somam de forma útil.
+        (cancelled || ended) && "opacity-60",
       )}
     >
       <div className="w-14 shrink-0 pt-0.5 text-corpo font-medium text-ink-muted">

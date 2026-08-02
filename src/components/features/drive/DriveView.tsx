@@ -166,11 +166,14 @@ export function DriveView({
           continue;
         }
 
+        // Sem `sizeBytes`: o servidor mede o objeto no Storage. O `file.size`
+        // daqui continua servindo para a recusa ANTES do envio (o `if` lá em
+        // cima), que é economia de banda, não controle — quem contorna o
+        // navegador esbarra no limite de 50 MB do próprio bucket.
         const r = await registerFile({
           name: file.name,
           storagePath: path,
           mimeType: file.type || null,
-          sizeBytes: file.size,
           folderId,
         });
 

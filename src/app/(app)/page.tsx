@@ -13,9 +13,9 @@ import {
   getCalendarAccounts,
   getCaptures,
   getCategories,
+  getEventsForToday,
   getSocialLinks,
   getTasks,
-  getUpcomingEvents,
 } from "@/lib/data";
 import type { SocialLink } from "@/lib/database.types";
 import {
@@ -41,7 +41,7 @@ export default async function HomePage() {
     getCaptures(),
     getCategories(),
     getCalendarAccounts(),
-    getUpcomingEvents(5),
+    getEventsForToday(),
     getSocialLinks(),
   ]);
 
@@ -67,6 +67,19 @@ export default async function HomePage() {
   const doneCount = tasks.filter((t) => t.status === "done").length;
   const meetingsCount = events.length;
 
+  /**
+   * Já terminou? Só para esmaecer — o evento continua na lista.
+   *
+   * Dia inteiro nunca "termina" no meio do dia: ele vale para o dia todo, então
+   * esmaecê-lo às 14h seria dizer que o feriado acabou. Sem `end_at` (evento sem
+   * duração declarada), o critério cai para o próprio início.
+   */
+  const jaTerminou = (ev: (typeof events)[number]): boolean => {
+    if (ev.all_day) return false;
+    const fim = ev.end_at ?? ev.start_at;
+    return fim != null && new Date(fim).getTime() < now.getTime();
+  };
+
   return (
     <>
       <PageHeader
@@ -80,7 +93,8 @@ export default async function HomePage() {
         <span className="text-corpo text-ink-subtle">
           {plural(openCount, "tarefa aberta", "tarefas abertas")}
           {" · "}
-          {plural(meetingsCount, "reunião à frente", "reuniões à frente")}
+          {/* "hoje", não "à frente": o número agora conta o dia, não o futuro. */}
+          {plural(meetingsCount, "reunião hoje", "reuniões hoje")}
         </span>
       </div>
 
@@ -206,12 +220,20 @@ export default async function HomePage() {
             </div>
           </Card>
 
-          {/* Próximos eventos */}
+          {/*
+            Agenda de HOJE, não "os próximos 5 eventos".
+            Antes o bloco chamava `getUpcomingEvents(5)`, que devolve os próximos
+            eventos a partir de agora sem recorte de dia — numa terça sem
+            compromissos ele exibia a reunião de quinta sob o título "Próximos
+            eventos", e a pessoa lia aquilo como a agenda do dia. O recorte agora
+            é o dia civil de São Paulo (ver `getEventsForToday`), e um dia vazio
+            aparece vazio em vez de tomar emprestado o dia seguinte.
+          */}
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="eyebrow">Agenda</p>
-                <p className="text-sm font-semibold text-ink">Próximos eventos</p>
+                <p className="text-sm font-semibold text-ink">Hoje</p>
               </div>
               <Link href="/calendario" className="text-corpo text-ink-muted hover:text-ink">
                 Ver tudo
@@ -219,7 +241,9 @@ export default async function HomePage() {
             </div>
             {events.length === 0 ? (
               <p className="py-4 text-center text-corpo text-ink-subtle">
-                Nenhum evento. Conecte uma conta no Calendário.
+                {accounts.length === 0
+                  ? "Nenhum evento. Conecte uma conta no Calendário."
+                  : "Sem eventos hoje."}
               </p>
             ) : (
               <div className="space-y-2">
@@ -230,6 +254,7 @@ export default async function HomePage() {
                       key={ev.id}
                       event={ev}
                       compact
+                      ended={jaTerminou(ev)}
                       accountBadge={acc?.display_name ?? (acc ? `Conta ${acc.slot}` : undefined)}
                     />
                   );
@@ -245,7 +270,7 @@ export default async function HomePage() {
               <Stat label="Tarefas abertas" value={openCount} />
               <Stat label="Concluídas" value={doneCount} />
               <Stat label="Capturas s/ organizar" value={captures.length} />
-              <Stat label="Próximas reuniões" value={meetingsCount} />
+              <Stat label="Reuniões hoje" value={meetingsCount} />
             </dl>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-legenda text-ink-subtle">

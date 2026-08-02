@@ -26,7 +26,7 @@ import type {
   KnowledgeSearchHit,
   SocialLink,
 } from "@/lib/database.types";
-import { startOfDay, endOfDay, formatDayLabel, formatTime } from "@/lib/utils";
+import { startOfDay, endOfDay, dayRangeInTimeZone, formatDayLabel, formatTime } from "@/lib/utils";
 import { resolveEnabled } from "@/lib/modules";
 import { montarArvore, normalizarDocumento } from "@/lib/knowledge";
 import type { RelatedItem, RelatedKind } from "@/lib/links";
@@ -283,6 +283,73 @@ export async function getEventsForCalendar(
   // exige reordenar. Ver `porInicio` sobre o NULLS LAST.
   return [...listaAtivos, ...((visiveis as CalendarEvent[] | null) ?? [])].sort(porInicio);
 }
+
+/**
+ * Dia inteiro PRIMEIRO, depois os eventos com hora em ordem cronológica.
+ *
+ * Evento de dia inteiro não tem `start_at` (a data mora em `start_date`), então
+ * o `order` do banco — que é NULLS LAST no ascendente — joga todos eles para o
+ * fim da lista. Um feriado ou uma viagem apareceriam DEPOIS da última reunião do
+ * dia, que é o oposto de como se lê uma agenda: o que vale para o dia todo é
+ * contexto e vem antes do que acontece às 14h.
+ */
+function porDiaInteiroPrimeiro(a: CalendarEvent, b: CalendarEvent): number {
+  if (a.all_day !== b.all_day) return a.all_day ? -1 : 1;
+  return porInicio(a, b);
+}
+
+/**
+ * Os eventos de HOJE — o bloco "Agenda" da tela inicial.
+ *
+ * Existe separada de `getUpcomingEvents` porque as duas respondem a perguntas
+ * diferentes. `getUpcomingEvents(5)` devolve os próximos cinco eventos A PARTIR
+ * DE AGORA, sem recorte de dia: numa terça sem compromissos ela mostra a reunião
+ * de quinta, e o bloco passa a mentir sobre o que é. Aqui o recorte é o dia
+ * civil, e um dia vazio aparece vazio.
+ *
+ * O FUSO É O PONTO DELICADO. Os limites saem de `dayRangeInTimeZone`, não de
+ * `startOfDay`: esta função roda no servidor, o servidor da Vercel roda em UTC, e
+ * `startOfDay` trabalha no fuso do processo. Ver o comentário dela em `utils.ts`
+ * — o defeito só apareceria depois das 21h, quando o dia UTC já virou e o de São
+ * Paulo não.
+ *
+ * DOIS TIPOS DE EVENTO, DUAS COMPARAÇÕES:
+ *   - com hora: `start_at` é `timestamptz` e compara com instantes UTC. O fim é
+ *     EXCLUSIVO (`lt`), então a meia-noite do dia seguinte não entra hoje.
+ *   - dia inteiro: `start_date` é `date`, sem fuso, e compara com a chave do dia.
+ *     `end_date` do Google é EXCLUSIVO — um evento só no dia 2 vem com
+ *     `start_date = 02` e `end_date = 03` —, por isso a condição é
+ *     `end_date > hoje` e não `>=`. Evento de vários dias cobre hoje quando
+ *     começou hoje ou antes e termina depois de hoje. Quando `end_date` é nulo,
+ *     sobra o caso de um único dia.
+ *
+ * A FORMA ANINHADA DO `or` repete a de `getEventsForCalendar`, e pelo mesmo
+ * motivo: encadear dois `.or()` põe dois parâmetros `or=` na URL e o resultado
+ * passa a depender de como o PostgREST combina parâmetros repetidos. Escrever
+ * `or=(and(or(intervalo),or(status)))` deixa a conjunção explícita.
+ *
+ * CANCELADOS FICAM DE FORA, sem a exceção de vínculo que a agenda cheia faz.
+ * Este bloco responde "o que eu tenho hoje"; reunião cancelada não é resposta
+ * para isso, e a tela inicial não tem para onde abrir o detalhe que explicaria
+ * o risco.
+ */
+export const getEventsForToday = cache(async (): Promise<CalendarEvent[]> => {
+  const supabase = await createClient();
+  const { dayKey, startIso, endIso } = dayRangeInTimeZone(new Date());
+
+  const comHora = `and(start_at.gte.${startIso},start_at.lt.${endIso})`;
+  const diaInteiro =
+    `and(start_date.lte.${dayKey},end_date.gt.${dayKey}),` +
+    `and(start_date.eq.${dayKey},end_date.is.null)`;
+
+  const { data } = await supabase
+    .from("calendar_events")
+    .select("*")
+    .or(`and(or(${comHora},${diaInteiro}),or(status.is.null,status.neq.cancelled))`)
+    .order("start_at", { ascending: true });
+
+  return ((data as CalendarEvent[] | null) ?? []).sort(porDiaInteiroPrimeiro);
+});
 
 /** Memoizado: o shell e a página Início pedem os próximos eventos no mesmo passe. */
 export const getUpcomingEvents = cache(async (limit = 6): Promise<CalendarEvent[]> => {

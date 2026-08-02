@@ -376,11 +376,24 @@ export const driveMoveSchema = z.object({
   targetFolderId: z.string().uuid().nullable(),
 });
 
+/**
+ * NÃO tem `sizeBytes`, e a ausência é o ponto.
+ *
+ * O campo existia e era gravado direto em `drive_files.size_bytes` — o número
+ * que `drive_usage` soma para desenhar a barra de armazenamento. Vindo do
+ * cliente, era um valor que o cliente escolhia: 40 MB enviados podiam ser
+ * declarados como 1 KB. Agora `registerFile` pergunta o tamanho ao Storage.
+ *
+ * Deixar o campo aqui como opcional-e-ignorado seria pior que removê-lo: o
+ * schema é o contrato que se lê para saber o que a ação aceita, e um campo que
+ * aparece no contrato mas não tem efeito é um convite a alguém religá-lo. Zod
+ * ignora chaves extras por padrão, então um cliente que ainda mande `sizeBytes`
+ * continua passando — o valor apenas não vai a lugar nenhum.
+ */
 export const driveFileRegisterSchema = z.object({
   name: safeName,
   storagePath: z.string().min(1),
   mimeType: z.string().max(160).nullable().default(null),
-  sizeBytes: z.number().int().nonnegative(),
   folderId: z.string().uuid().nullable().default(null),
 });
 

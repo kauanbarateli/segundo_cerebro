@@ -97,37 +97,56 @@ export interface VaultMasterKeyMaterial {
   cryptoVersion: number;
 }
 
-/** First-time setup: create a new data key and wrap it with the master password. */
-export async function createVault(masterPassword: string): Promise<{
-  material: VaultMasterKeyMaterial;
-  dataKey: CryptoKey;
-}> {
-  const subtle = getSubtle();
+/**
+ * Wraps an EXISTING data key under a passphrase, with a fresh salt and IV.
+ *
+ * This is the single primitive behind all three producers of key material:
+ * first-time setup (`createVault`), the recovery kit (`exportRecoveryKit`, which
+ * passes the recovery code as the passphrase) and password reset after a
+ * recovery (`rewrapDataKey` called directly). They differ ONLY in where the
+ * passphrase comes from — the wrapping itself must stay identical, because
+ * `unlockVault` is the single consumer of all of them.
+ *
+ * A fresh salt and IV per call is not optional: reusing a (key, IV) pair in
+ * AES-GCM leaks the XOR of the plaintexts, and here the plaintext is the data
+ * key itself.
+ */
+export async function rewrapDataKey(
+  passphrase: string,
+  dataKey: CryptoKey,
+): Promise<VaultMasterKeyMaterial> {
   const salt = randomBytes(16);
-  const wrappingKey = await deriveWrappingKey(masterPassword, salt, DEFAULT_KDF_PARAMETERS);
-
-  const dataKey = await subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
-    "encrypt",
-    "decrypt",
-  ]);
-
+  const wrappingKey = await deriveWrappingKey(passphrase, salt, DEFAULT_KDF_PARAMETERS);
   const wrapIv = randomBytes(12);
-  const wrapped = await subtle.wrapKey("raw", dataKey, wrappingKey, {
+  const wrapped = await getSubtle().wrapKey("raw", dataKey, wrappingKey, {
     name: "AES-GCM",
     iv: toBuf(wrapIv),
   });
 
   return {
-    material: {
-      wrappedDataKeyB64: bytesToBase64(new Uint8Array(wrapped)),
-      wrapIvB64: bytesToBase64(wrapIv),
-      kdfSaltB64: bytesToBase64(salt),
-      kdfAlgorithm: "argon2id",
-      kdfParameters: DEFAULT_KDF_PARAMETERS,
-      cryptoVersion: CRYPTO_VERSION,
-    },
-    dataKey,
+    wrappedDataKeyB64: bytesToBase64(new Uint8Array(wrapped)),
+    wrapIvB64: bytesToBase64(wrapIv),
+    kdfSaltB64: bytesToBase64(salt),
+    kdfAlgorithm: "argon2id",
+    kdfParameters: DEFAULT_KDF_PARAMETERS,
+    cryptoVersion: CRYPTO_VERSION,
   };
+}
+
+/** First-time setup: create a new data key and wrap it with the master password. */
+export async function createVault(masterPassword: string): Promise<{
+  material: VaultMasterKeyMaterial;
+  dataKey: CryptoKey;
+}> {
+  // `extractable: true` is REQUIRED, and only for wrapping: `wrapKey` cannot
+  // read a non-extractable key. It is what lets the same data key be re-wrapped
+  // under a recovery code and under a new master password later.
+  const dataKey = await getSubtle().generateKey({ name: "AES-GCM", length: 256 }, true, [
+    "encrypt",
+    "decrypt",
+  ]);
+
+  return { material: await rewrapDataKey(masterPassword, dataKey), dataKey };
 }
 
 /** Unlock: reproduce the wrapping key from the master password and unwrap the data key. */
@@ -186,35 +205,41 @@ export async function decryptItem<T = unknown>(
  * Export an encrypted recovery kit: the raw data key wrapped with a
  * high-entropy recovery code (shown to the user once). Losing BOTH the master
  * password AND this kit makes the data permanently unrecoverable.
+ *
+ * BOTH halves of the return value matter and they must be stored SEPARATELY:
+ * `kit` is the file the user downloads, `recoveryCode` is the passphrase that
+ * opens it. Neither half alone recovers anything — a caller that keeps the code
+ * and drops the kit (or the reverse) has built a promise it cannot keep. See
+ * `recovery-kit.ts` for the artifact format and the round-trip check that
+ * proves a given pair actually works.
  */
 export async function exportRecoveryKit(dataKey: CryptoKey): Promise<{
   recoveryCode: string;
   kit: VaultMasterKeyMaterial;
 }> {
-  const recoveryBytes = randomBytes(24);
-  const recoveryCode = bytesToBase64(recoveryBytes)
+  const recoveryCode = formatRecoveryCode(bytesToBase64(randomBytes(24)));
+  return { recoveryCode, kit: await rewrapDataKey(recoveryCode, dataKey) };
+}
+
+/**
+ * Canonical shape of a recovery code: alphanumerics only, in groups of four
+ * separated by hyphens ("aB3d-Kk9Z-…").
+ *
+ * The code is the Argon2id INPUT, so the string that is typed back on recovery
+ * has to be byte-identical to the string that was shown. Anything else derives
+ * a different key and the unwrap fails with a generic GCM error — which reads
+ * to the user as "my kit is corrupt", not "I typed it differently".
+ *
+ * Running every code through this same function on the way out AND on the way
+ * back in is what removes the ambiguity: hyphens, spaces and line breaks the
+ * user adds or omits are normalised away, and what is left is regrouped
+ * identically. Case is NOT normalised — the alphabet is base64, where `a` and
+ * `A` are different characters.
+ */
+export function formatRecoveryCode(raw: string): string {
+  return raw
     .replace(/[^A-Za-z0-9]/g, "")
     .slice(0, 28)
     .replace(/(.{4})/g, "$1-")
     .replace(/-$/, "");
-
-  const salt = randomBytes(16);
-  const wrappingKey = await deriveWrappingKey(recoveryCode, salt, DEFAULT_KDF_PARAMETERS);
-  const wrapIv = randomBytes(12);
-  const wrapped = await getSubtle().wrapKey("raw", dataKey, wrappingKey, {
-    name: "AES-GCM",
-    iv: toBuf(wrapIv),
-  });
-
-  return {
-    recoveryCode,
-    kit: {
-      wrappedDataKeyB64: bytesToBase64(new Uint8Array(wrapped)),
-      wrapIvB64: bytesToBase64(wrapIv),
-      kdfSaltB64: bytesToBase64(salt),
-      kdfAlgorithm: "argon2id",
-      kdfParameters: DEFAULT_KDF_PARAMETERS,
-      cryptoVersion: CRYPTO_VERSION,
-    },
-  };
 }

@@ -14,12 +14,9 @@ import {
   unlockVault,
   encryptItem,
   decryptItem,
-  // `exportRecoveryKit` NÃO é importado de propósito: a função existe e
-  // funciona, mas a interface não tinha onde guardar a metade do material que
-  // ela devolve, então o "kit" exibido não recuperava nada. Reimportar aqui só
-  // faz sentido junto com o fluxo completo de exportar arquivo + importar.
   type VaultMasterKeyMaterial,
 } from "@/lib/crypto/vault";
+import { GerarKit, RestaurarComKit } from "@/components/features/vault/RecoveryKit";
 import {
   deleteVaultItem,
   getVaultState,
@@ -164,7 +161,14 @@ function LockedView({
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recovery, setRecovery] = useState(false);
+  /**
+   * Etapa da tela de criação do cofre.
+   *   `senha`     — formulário de senha mestra (ou de desbloqueio)
+   *   `kit`       — logo após criar: oferecer e PROVAR o kit de recuperação
+   *   `sem-kit`   — o usuário optou por não gerar; a tela passa a dizer a verdade
+   *   `restaurar` — cofre existente, senha mestra perdida, recuperação por kit
+   */
+  const [etapa, setEtapa] = useState<"senha" | "kit" | "sem-kit" | "restaurar">("senha");
 
   /**
    * Chave de dados recém-criada, aguardando o usuário confirmar que guardou o
@@ -217,13 +221,12 @@ function LockedView({
         setBusy(false);
         return;
       }
-      // NÃO gera "kit de recuperação" aqui — ver o comentário da tela abaixo.
-      setRecovery(true);
       setPassword("");
       setConfirm("");
       toast("Cofre criado", "success");
       // Guarda em memória local do componente até o usuário confirmar.
       pendingKeyRef.current = dataKey;
+      setEtapa("kit");
     } catch {
       setError("Não foi possível criar o cofre.");
     } finally {
@@ -232,59 +235,114 @@ function LockedView({
   }
 
   /**
-   * Confirmação após criar o cofre.
-   *
-   * Esta tela mostrava um "kit de recuperação": um código de 28 caracteres, com
-   * a promessa de que ele recuperaria o cofre caso a senha mestra fosse
-   * esquecida. **A promessa era falsa.** `exportRecoveryKit()` devolve DUAS
-   * partes — o código E o material com a chave de dados reembrulhada (salt, IV,
-   * parâmetros). A interface exibia o código e descartava o material, que nunca
-   * era gravado nem em disco nem no servidor. O código sozinho não decifra
-   * nada: sem a outra metade não há o que desembrulhar.
-   *
-   * O efeito prático era pior que não ter recuperação nenhuma — alguém confiaria
-   * no código, deixaria a senha mestra de lado e perderia o cofre.
-   *
-   * Enquanto a recuperação de verdade não existir (exportar o material como
-   * arquivo + fluxo de importação, testado ponta a ponta num navegador limpo), a
-   * tela diz a verdade: a senha mestra é o único caminho.
+   * Consome a chave pendente e zera o ref no mesmo passo: depois daqui ela não
+   * existe mais fora do estado do cofre destravado.
    */
-  if (recovery) {
+  function entrarNoCofre() {
+    const key = pendingKeyRef.current;
+    pendingKeyRef.current = null;
+    if (key) void onUnlock(key);
+  }
+
+  /**
+   * Depois de criar o cofre: oferecer o kit de recuperação — e PROVÁ-LO.
+   *
+   * Esta tela já exibiu um "kit de recuperação" que era um código de 28
+   * caracteres e mais nada. **A promessa era falsa.** `exportRecoveryKit()`
+   * devolve DUAS partes — o código E o material com a chave de dados
+   * reembrulhada (sal, IV, parâmetros). A interface mostrava o código e
+   * descartava o material, que nunca era gravado em lugar nenhum. Código sem
+   * material não desembrulha coisa alguma; o efeito prático era pior que não ter
+   * recuperação, porque alguém confiaria no papel e trataria a senha mestra como
+   * descartável.
+   *
+   * Agora as duas metades existem: o material vira arquivo `.json` que o
+   * navegador baixa, e o `GerarKit` só declara que há recuperação depois de LER
+   * esse arquivo de volta do disco e conferir, byte a byte, que a chave que sai
+   * dele é a mesma que está viva na aba. A promessa aparece porque foi
+   * executada, não porque alguém afirmou que funcionava.
+   */
+  if (etapa === "kit" && pendingKeyRef.current) {
+    return (
+      <Card className="mx-auto max-w-lg p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-ink">
+            <Icon.Lock width={20} height={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-ink">Cofre criado</h2>
+            <p className="text-corpo text-ink-subtle">
+              Guarde a senha mestra num gerenciador de senhas. Depois, gere o kit de recuperação.
+            </p>
+          </div>
+        </div>
+        <GerarKit
+          dataKey={pendingKeyRef.current}
+          onConcluir={entrarNoCofre}
+          onPular={() => setEtapa("sem-kit")}
+          rotuloPular="Seguir sem kit"
+        />
+      </Card>
+    );
+  }
+
+  /**
+   * Saída sem kit. A tela volta a dizer a verdade — a mesma frase de antes,
+   * porque para quem não gera o kit ela continua sendo exata.
+   */
+  if (etapa === "sem-kit") {
     return (
       <Card className="mx-auto max-w-lg p-6 text-center">
         <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink">
           <Icon.Lock width={20} height={20} />
         </div>
-        <h2 className="text-lg font-semibold text-ink">Cofre criado</h2>
-        <p className="mt-1 text-corpo text-ink-muted">
-          Guarde a senha mestra em um gerenciador de senhas antes de continuar.
-        </p>
+        <h2 className="text-lg font-semibold text-ink">Sem kit de recuperação</h2>
 
         <div className="my-4 rounded-md border border-line bg-surface-muted px-4 py-3 text-left">
           <p className="text-corpo font-medium text-ink">
             Não existe recuperação. Esqueceu a senha, perdeu o cofre.
           </p>
           <p className="mt-1 text-legenda text-ink-subtle">
-            O cofre é cifrado no seu navegador com uma chave derivada da senha
-            mestra. Ela não é enviada nem guardada em lugar nenhum — nem aqui,
-            nem no servidor. É isso que impede qualquer outra pessoa de abrir o
-            cofre, e é isso que torna a perda definitiva.
+            O cofre é cifrado no seu navegador com uma chave derivada da senha mestra. Ela não é
+            enviada nem guardada em lugar nenhum — nem aqui, nem no servidor. É isso que impede
+            qualquer outra pessoa de abrir o cofre, e é isso que torna a perda definitiva. Você pode
+            gerar o kit depois, pelo painel do cofre destravado.
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            // Consome a chave e zera o ref no mesmo passo: depois deste clique
-            // ela não existe mais fora do estado do cofre destravado.
-            const key = pendingKeyRef.current;
-            pendingKeyRef.current = null;
-            if (key) void onUnlock(key);
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setEtapa("kit")}>
+            Gerar kit agora
+          </Button>
+          <Button variant="primary" size="sm" onClick={entrarNoCofre}>
+            Guardei a senha — abrir cofre
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (etapa === "restaurar") {
+    return (
+      <Card className="mx-auto max-w-lg p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-ink">
+            <Icon.Lock width={20} height={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-ink">Recuperar com o kit</h2>
+            <p className="text-corpo text-ink-subtle">
+              Para quando a senha mestra se perdeu.
+            </p>
+          </div>
+        </div>
+        <RestaurarComKit
+          onCancelar={() => setEtapa("senha")}
+          onRestaurado={async (key) => {
+            toast("Cofre recuperado", "success");
+            await onUnlock(key);
           }}
-        >
-          Guardei a senha — abrir cofre
-        </Button>
+        />
       </Card>
     );
   }
@@ -353,6 +411,21 @@ function LockedView({
         >
           {busy ? "Processando…" : hasMasterKey ? "Desbloquear cofre" : "Criar cofre"}
         </Button>
+
+        {/* O texto é condicional de propósito: "tenho o kit" não afirma que
+            existe um. Quem nunca gerou não encontra promessa nenhuma aqui —
+            encontra a tela de recuperação dizendo que precisa das duas metades,
+            que é a informação exata para essa pessoa. */}
+        {hasMasterKey && (
+          <button
+            type="button"
+            onClick={() => setEtapa("restaurar")}
+            className="block w-full text-center text-corpo text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-2"
+          >
+            Esqueci a senha mestra — tenho o kit de recuperação
+          </button>
+        )}
+
         <p className="text-center text-legenda text-ink-subtle">
           A descriptografia acontece somente no seu navegador (Argon2id + AES-256-GCM).
         </p>
@@ -382,6 +455,7 @@ function UnlockedView({
   const [editing, setEditing] = useState<DecryptedItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DecryptedItem | null>(null);
   const [reveal, setReveal] = useState<Record<string, boolean>>({});
+  const [kitOpen, setKitOpen] = useState(false);
   const [, start] = useTransition();
 
   const filtered = useMemo(() => {
@@ -538,7 +612,46 @@ function UnlockedView({
           <p className="text-3xl font-semibold text-ink">{items.length}</p>
           <p className="text-legenda text-ink-subtle">protegidos com AES-256-GCM</p>
         </Card>
+
+        {/*
+          Entrada do kit para quem JÁ TEM cofre.
+          Sem isto, o recurso só existiria para cofres criados depois desta
+          mudança — e o cofre que corre risco hoje é justamente o que já foi
+          criado sem kit nenhum. Aqui a chave de dados está viva na aba, que é a
+          única condição necessária para reembrulhá-la.
+        */}
+        <Card className="p-5">
+          <p className="eyebrow mb-2">Kit de recuperação</p>
+          <p className="text-corpo text-ink-muted">
+            Um arquivo <code className="text-legenda">.json</code> mais um código que, juntos, abrem
+            o cofre se a senha mestra se perder.
+          </p>
+          <p className="mt-2 text-legenda text-ink-subtle">
+            Gerar um kit novo <span className="font-medium text-ink-muted">não invalida</span> os
+            anteriores: cada kit embrulha a mesma chave de dados sob o próprio código. Apague os
+            arquivos antigos que não quiser mais por aí.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-3 w-full"
+            onClick={() => setKitOpen(true)}
+          >
+            <Icon.Download width={14} height={14} /> Gerar kit de recuperação
+          </Button>
+        </Card>
       </div>
+
+      {kitOpen && (
+        <Modal title="Kit de recuperação" onClose={() => setKitOpen(false)}>
+          <GerarKit
+            dataKey={dataKey}
+            onConcluir={() => setKitOpen(false)}
+            onPular={() => setKitOpen(false)}
+            rotuloPular="Fechar"
+          />
+        </Modal>
+      )}
 
       {formOpen && (
         <Modal
