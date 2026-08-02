@@ -12,7 +12,7 @@ async function politicaCom(url: string | undefined) {
   if (url === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   else process.env.NEXT_PUBLIC_SUPABASE_URL = url;
   const modulo = await import("./csp");
-  return modulo.politicaDeSegurancaDeConteudo();
+  return modulo.politicaDeSegurancaDeConteudo("NONCE-DE-TESTE");
 }
 
 /** Extrai os valores de uma diretiva da política já serializada. */
@@ -79,17 +79,95 @@ describe("politicaDeSegurancaDeConteudo", () => {
   });
 });
 
-describe("CABECALHO_CSP", () => {
-  it("está em MODO RELATÓRIO — trocar isto é a promoção, não um detalhe", async () => {
+describe("CABECALHO_CSP e CSP_EM_BLOQUEIO", () => {
+  it("está em MODO RELATÓRIO — virar a constante é a promoção, não um detalhe", async () => {
     vi.resetModules();
-    const { CABECALHO_CSP } = await import("./csp");
+    const { CABECALHO_CSP, CSP_EM_BLOQUEIO } = await import("./csp");
     /*
-      Se este caso quebrou, alguém promoveu a CSP para modo de bloqueio. Antes
-      de só atualizar a string aqui, confira a DÍVIDA 1 do cabeçalho de csp.ts:
-      enquanto `script-src` tiver 'unsafe-inline', promover não protege de XSS —
-      e enquanto o nonce não existir, remover o 'unsafe-inline' quebra TODA
-      página (o Next injeta script inline em todas elas).
+      Se este caso quebrou, alguém virou `CSP_EM_BLOQUEIO`. Isso é o objetivo —
+      mas só DEPOIS de percorrer a aplicação em produção com o DevTools aberto
+      e não ver nenhuma linha "[Report Only] Refused to ...". Ver o roteiro no
+      topo de csp.ts.
+
+      A CSP em bloqueio falha em silêncio: o script não roda, a tela fica
+      parcialmente morta, e nada chega ao servidor. Este teste existe para que
+      a virada seja uma decisão consciente, com o diff mostrando as duas linhas.
     */
+    expect(CSP_EM_BLOQUEIO).toBe(false);
     expect(CABECALHO_CSP).toBe("Content-Security-Policy-Report-Only");
+  });
+
+  it("o nome do cabeçalho é derivado da constante, não escrito duas vezes", async () => {
+    // O nome é lido na resposta E na requisição (de onde o Next tira o nonce).
+    // Derivar impede o estado meio-promovido, em que os dois divergem.
+    vi.resetModules();
+    const { CABECALHO_CSP, CSP_EM_BLOQUEIO } = await import("./csp");
+    expect(CABECALHO_CSP).toBe(
+      CSP_EM_BLOQUEIO ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only",
+    );
+  });
+});
+
+describe("nonce", () => {
+  it("script-src carrega o nonce da requisição e NÃO tem mais 'unsafe-inline'", async () => {
+    const politica = await politicaCom("https://abc.supabase.co");
+    const script = diretiva(politica, "script-src");
+
+    expect(script).toContain("'nonce-NONCE-DE-TESTE'");
+    // O buraco que a CSP existe para tapar. Se voltar, a política inteira vira
+    // decoração: um XSS que injete <script> passa.
+    expect(script).not.toContain("'unsafe-inline'");
+  });
+
+  it("gerarNonce devolve 128 bits imprevisíveis, diferentes a cada chamada", async () => {
+    vi.resetModules();
+    const { gerarNonce } = await import("./csp");
+
+    const amostras = new Set(Array.from({ length: 200 }, () => gerarNonce()));
+    // Nonce repetido é nonce adivinhável, e nonce adivinhável não protege nada.
+    expect(amostras.size).toBe(200);
+
+    const um = gerarNonce();
+    expect(Buffer.from(um, "base64")).toHaveLength(16);
+  });
+
+  it("style-src MANTÉM 'unsafe-inline' — é a DÍVIDA 2, e é consciente", async () => {
+    // Remover exigiria 'unsafe-hashes' + um hash por atributo `style={{...}}`,
+    // impraticável de manter. O risco residual é exfiltração por seletor, não
+    // execução. Este caso existe para a diferença não passar por descuido.
+    const politica = await politicaCom("https://abc.supabase.co");
+    expect(diretiva(politica, "style-src")).toContain("'unsafe-inline'");
+  });
+});
+
+describe("hash do script de tema", () => {
+  it("bate com o conteúdo REAL de themeInitScript", async () => {
+    /*
+      O hash é uma constante em csp.ts (o middleware roda no Edge, onde o
+      digest é assíncrono, e a política é montada de forma síncrona). Este caso
+      é o que impede a constante de envelhecer: ele recalcula a partir do
+      arquivo de verdade.
+
+      Se falhou, alguém editou `themeInitScript`. Copie o valor esperado para
+      HASH_DO_SCRIPT_DE_TEMA em src/lib/csp.ts. Um hash desatualizado não
+      quebra nada em Report-Only, mas depois da promoção apaga o tema antes da
+      primeira pintura e a tela pisca em branco a cada carregamento.
+    */
+    const { readFileSync } = await import("node:fs");
+    const { createHash } = await import("node:crypto");
+    const { HASH_DO_SCRIPT_DE_TEMA } = await import("./csp");
+
+    const fonte = readFileSync("src/components/theme/ThemeToggle.tsx", "utf8");
+    const encontrado = fonte.match(/export const themeInitScript = `([\s\S]*?)`;/);
+    expect(encontrado, "themeInitScript não foi encontrado no arquivo").not.toBeNull();
+
+    const esperado = `sha256-${createHash("sha256").update(encontrado![1]!, "utf8").digest("base64")}`;
+    expect(HASH_DO_SCRIPT_DE_TEMA).toBe(esperado);
+  });
+
+  it("entra em script-src entre aspas simples, como a CSP exige", async () => {
+    const { HASH_DO_SCRIPT_DE_TEMA } = await import("./csp");
+    const politica = await politicaCom("https://abc.supabase.co");
+    expect(diretiva(politica, "script-src")).toContain(`'${HASH_DO_SCRIPT_DE_TEMA}'`);
   });
 });

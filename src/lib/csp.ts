@@ -1,11 +1,44 @@
 import { publicEnv } from "@/lib/env";
 
 /**
- * Content-Security-Policy em MODO RELATÓRIO (plano v3, §M8-P0).
+ * ============================================================================
+ * 🔴 A CHAVE DA PROMOÇÃO — vire esta constante quando os relatórios estiverem
+ * limpos, e NÃO ANTES
+ * ============================================================================
+ * `false` → `Content-Security-Policy-Report-Only`: o navegador RELATA e não
+ *           bloqueia nada. É o estado atual.
+ * `true`  → `Content-Security-Policy`: passa a bloquear de verdade.
+ *
+ * O NONCE JÁ ESTÁ IMPLEMENTADO (E3): `'unsafe-inline'` saiu de `script-src`, e
+ * cada requisição carrega um nonce próprio. Ou seja, virar esta constante é a
+ * ÚNICA coisa que falta — e é justamente por isso que ela não foi virada aqui.
+ *
+ * POR QUE NÃO PROMOVER JUNTO COM A IMPLEMENTAÇÃO. Uma CSP em bloqueio falha do
+ * pior jeito possível: o script simplesmente não roda, a tela fica parcialmente
+ * morta, nenhum erro chega ao servidor e nenhum log da hospedagem registra
+ * nada. Só o console do navegador de quem está usando acusa. Se algum script
+ * inline escapou do nonce — uma dependência que injeta o seu, um caminho de
+ * renderização que ainda não foi exercitado —, promover às cegas quebra a
+ * aplicação em produção sem deixar rastro.
+ *
+ * O QUE FAZER ANTES DE VIRAR (é curto):
+ *   1. subir com `false` e usar a aplicação em produção: Início, Tarefas,
+ *      Calendário, Drive (subindo um arquivo), Cofre (destravando — é o que
+ *      exercita o WASM do Argon2id), Financeiro, Conhecimento, Configurações;
+ *   2. com o DevTools aberto, procurar linhas "[Report Only] Refused to ...";
+ *   3. zero violações em todas as telas → virar para `true` e repetir a
+ *      passagem, agora conferindo que nada parou de funcionar.
+ *
+ * Uma violação encontrada no passo 2 é uma diretiva a ajustar, não um motivo
+ * para voltar ao `'unsafe-inline'`.
+ */
+export const CSP_EM_BLOQUEIO = false;
+
+/**
+ * Content-Security-Policy (plano v3, §M8-P0; nonce na E3).
  *
  * ============================================================================
- * O QUE ESTE ARQUIVO **NÃO** FAZ — leia antes de achar que a aplicação está
- * protegida
+ * O QUE ESTE ARQUIVO **NÃO** FAZ enquanto `CSP_EM_BLOQUEIO` for `false`
  * ============================================================================
  * O cabeçalho emitido é `Content-Security-Policy-Report-Only`. Report-Only
  * NÃO BLOQUEIA NADA. Um script injetado por XSS continua executando
@@ -14,9 +47,9 @@ import { publicEnv } from "@/lib/env";
  *
  * Ou seja: subir isto é seguro (não tem como quebrar a aplicação) e é
  * INÚTIL como defesa. O valor está em descobrir, com a aplicação real
- * rodando, o que a política precisa liberar ANTES de trocar o nome do
- * cabeçalho para `Content-Security-Policy` — que é o passo que de fato
- * protege e o único que pode quebrar a tela de alguém.
+ * rodando, o que a política precisa liberar ANTES de virar a constante acima
+ * — que é o passo que de fato protege e o único que pode quebrar a tela de
+ * alguém.
  *
  * ============================================================================
  * POR QUE AQUI E NÃO EM next.config.mjs (onde moram os outros 5 cabeçalhos)
@@ -60,26 +93,29 @@ import { publicEnv } from "@/lib/env";
  * ============================================================================
  * DÍVIDAS CONHECIDAS (registradas para não serem descobertas na promoção)
  * ============================================================================
- * DÍVIDA 1 — `script-src` tem 'unsafe-inline', que é o buraco que uma CSP
- *   existe para tapar. Com ele, um XSS que injete `<script>...</script>`
- *   passa. Está aqui porque a aplicação TEM scripts inline hoje: o Next
- *   injeta o bootstrap e os dados de streaming (`self.__next_f.push`) inline
- *   em toda página, e src/app/layout.tsx injeta `themeInitScript` para
- *   aplicar o tema antes da primeira pintura. Sem 'unsafe-inline' o relatório
- *   viria cheio de violações nossas e afogaria o sinal que interessa.
+ * DÍVIDA 1 — PAGA na E3. `script-src` NÃO tem mais 'unsafe-inline'.
  *
- *   O CAMINHO DA PROMOÇÃO (não é um "algum dia", é o pré-requisito):
- *     a) gerar um nonce aleatório por requisição no middleware;
- *     b) repassá-lo no cabeçalho da REQUISIÇÃO — o Next lê o nonce do próprio
- *        cabeçalho de CSP que chega (`app-render` aceita tanto
+ *   Como ficou, e por que são dois mecanismos e não um:
+ *
+ *     a) NONCE, para os scripts do Next. O middleware sorteia 16 bytes por
+ *        requisição e escreve a política — já com `'nonce-...'` — no cabeçalho
+ *        da REQUISIÇÃO. O Next lê o nonce de lá (`app-render` aceita tanto
  *        `content-security-policy` quanto `content-security-policy-report-only`)
- *        e carimba os scripts DELE sozinho;
- *     c) carimbar o `themeInitScript` à mão — ele é nosso, o Next não sabe
- *        dele. Ou com o nonce (custa `headers()` no layout raiz, o que torna
- *        /login dinâmico) ou com um `'sha256-...'` do conteúdo exato, que
- *        continua valendo mesmo com nonce na política (hash e nonce convivem;
- *        quem some é o 'unsafe-inline');
- *     d) só então trocar o nome do cabeçalho.
+ *        e carimba sozinho o bootstrap e os scripts de streaming
+ *        (`self.__next_f.push`). Nonce por requisição é o que faz um script
+ *        injetado não conseguir se passar por legítimo: o atacante teria de
+ *        adivinhar um valor aleatório de 128 bits que muda a cada carregamento.
+ *
+ *     b) HASH, para o `themeInitScript` (src/app/layout.tsx). Ele é NOSSO — o
+ *        Next não sabe que existe e não o carimba. A alternativa seria ler o
+ *        nonce com `headers()` no layout raiz, mas isso tornaria DINÂMICA toda
+ *        rota da aplicação, inclusive a /login, que hoje é estática. Um hash
+ *        do conteúdo exato custa zero em runtime e não muda o modo de
+ *        renderização de nada.
+ *
+ *   Hash e nonce convivem na mesma diretiva sem se anular. O que some é o
+ *   'unsafe-inline': por especificação, o navegador o IGNORA quando há nonce
+ *   ou hash presente — então mantê-lo ali seria só ruído.
  *
  * DÍVIDA 2 — `style-src` tem 'unsafe-inline' e provavelmente vai ficar. O
  *   Next injeta `<style>` inline (CSS crítico e as variáveis de
@@ -125,14 +161,32 @@ function origensDoSupabase(): string[] {
 }
 
 /**
- * Monta a política.
+ * Hash do `themeInitScript` de src/components/theme/ThemeToggle.tsx.
  *
- * É chamada uma vez por requisição no middleware, mas o resultado é constante
- * dentro do processo — por isso o middleware guarda em módulo. Fica como
- * função (e não constante exportada) porque no dia do nonce ela vai receber o
- * nonce como parâmetro.
+ * É uma CONSTANTE e não um cálculo em tempo de execução por duas razões: o
+ * middleware roda no Edge, onde `crypto.subtle.digest` é assíncrono (e a
+ * política é montada de forma síncrona), e recalcular a cada requisição um
+ * valor que só muda quando alguém edita o script seria trabalho por nada.
+ *
+ * ⚠️ SE O SCRIPT DO TEMA MUDAR, ESTE VALOR PRECISA MUDAR JUNTO. Um hash
+ * desatualizado não quebra nada em Report-Only — só produz uma violação no
+ * relatório —, mas depois da promoção ele apaga o tema antes da primeira
+ * pintura e a tela pisca em branco a cada carregamento.
+ *
+ * Por isso existe `csp.test.ts`, que recalcula o hash a partir do arquivo real
+ * e falha apontando o valor novo. A constante não depende de ninguém lembrar.
  */
-export function politicaDeSegurancaDeConteudo(): string {
+export const HASH_DO_SCRIPT_DE_TEMA = "sha256-2k/4j58eKv/7VzpSAzNLMu5o1TxQ87d1uf5F9YXeOVk=";
+
+/**
+ * Monta a política para UMA requisição.
+ *
+ * Recebe o nonce porque ele é, por definição, diferente a cada requisição —
+ * por isso a política deixou de ser montada uma vez por processo e passou a
+ * ser montada a cada chamada. É o custo real do nonce: uma concatenação de
+ * strings por requisição, ao lado de um `getRandomValues` de 16 bytes.
+ */
+export function politicaDeSegurancaDeConteudo(nonce: string): string {
   const supabase = origensDoSupabase();
 
   /*
@@ -152,9 +206,14 @@ export function politicaDeSegurancaDeConteudo(): string {
     "default-src": ["'self'"],
 
     "script-src": [
+      // Cobre os CHUNKS do Next servidos de /_next/static — arquivos externos,
+      // que nonce não alcança (nonce vale para tags inline e para <script src>
+      // que o próprio Next carimba).
       "'self'",
-      // Ver DÍVIDA 1. Sai no dia do nonce.
-      "'unsafe-inline'",
+      // Os scripts inline do Next. Ver DÍVIDA 1(a).
+      `'nonce-${nonce}'`,
+      // O script de tema do layout raiz. Ver DÍVIDA 1(b).
+      `'${HASH_DO_SCRIPT_DE_TEMA}'`,
       /*
         O Cofre deriva a chave mestra com Argon2id via `hash-wasm`
         (src/lib/crypto/vault.ts), e isso roda no NAVEGADOR — é o que mantém a
@@ -237,9 +296,33 @@ export function politicaDeSegurancaDeConteudo(): string {
 }
 
 /**
- * Nome do cabeçalho, isolado numa constante porque a PROMOÇÃO para bloqueio é
- * literalmente trocar esta linha por "Content-Security-Policy" — depois de
- * pagar a DÍVIDA 1. Deixá-lo visível aqui é o que torna a mudança pequena o
- * bastante para ser revisada em uma linha.
+ * Nome do cabeçalho, DERIVADO de `CSP_EM_BLOQUEIO`.
+ *
+ * Antes era uma string literal e a promoção era editar esta linha. Agora é uma
+ * consequência da constante lá em cima, e a diferença importa: o nome do
+ * cabeçalho é lido em dois lugares (a resposta, que o navegador vê, e a
+ * requisição, de onde o Next extrai o nonce). Com duas edições manuais em vez
+ * de uma, o estado meio-promovido — resposta bloqueando, requisição ainda
+ * dizendo report-only — passaria despercebido.
  */
-export const CABECALHO_CSP = "Content-Security-Policy-Report-Only";
+export const CABECALHO_CSP = CSP_EM_BLOQUEIO
+  ? "Content-Security-Policy"
+  : "Content-Security-Policy-Report-Only";
+
+/**
+ * Sorteia o nonce da requisição: 16 bytes (128 bits) em base64.
+ *
+ * `crypto.getRandomValues` e nunca `Math.random()`. Um nonce previsível é um
+ * nonce inútil — o atacante que consegue adivinhá-lo carimba o próprio script
+ * e a CSP inteira vira decoração. É a mesma exigência de um token de sessão.
+ *
+ * `globalThis.crypto` existe tanto no runtime Edge (onde o middleware roda)
+ * quanto no Node moderno, então não há polyfill a carregar.
+ */
+export function gerarNonce(): string {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  // `btoa` sobre a string binária: disponível nos dois runtimes, e evita
+  // depender de `Buffer`, que não existe no Edge.
+  return btoa(String.fromCharCode(...bytes));
+}
