@@ -1,0 +1,334 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================================
+   Design tokens — monochrome. Light is default; `.dark` on <html> flips them.
+   Values are space-separated RGB channels so Tailwind's <alpha-value> works.
+   ========================================================================= */
+:root {
+  --sb-canvas: 244 244 241; /* #f4f4f1 */
+  --sb-surface: 255 255 255;
+  --sb-surface-muted: 249 249 247;
+  --sb-ink: 20 20 20; /* #141414 */
+  --sb-ink-muted: 92 92 88;
+  --sb-ink-subtle: 140 140 135;
+  --sb-line: 226 226 221; /* #e2e2dd */
+  --sb-line-strong: 208 208 202;
+  --sb-accent: 20 20 20;
+  --sb-accent-ink: 250 250 249;
+  color-scheme: light;
+}
+
+.dark {
+  --sb-canvas: 13 13 13; /* #0d0d0d */
+  --sb-surface: 24 24 24;
+  --sb-surface-muted: 31 31 31;
+  --sb-ink: 240 240 238;
+  --sb-ink-muted: 168 168 163;
+  --sb-ink-subtle: 118 118 114;
+  --sb-line: 42 42 42;
+  --sb-line-strong: 60 60 60;
+  --sb-accent: 244 244 242;
+  --sb-accent-ink: 18 18 18;
+  color-scheme: dark;
+}
+
+* {
+  border-color: rgb(var(--sb-line));
+}
+
+body {
+  background-color: rgb(var(--sb-canvas));
+  color: rgb(var(--sb-ink));
+  font-feature-settings: "cv01", "cv03", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Focus visibility for keyboard navigation (accessibility). */
+:focus-visible {
+  outline: 2px solid rgb(var(--sb-ink) / 0.55);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Eyebrow — small uppercase label used on page headers. */
+.eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--sb-ink-subtle));
+  font-weight: 500;
+}
+
+/* Thin scrollbars that match the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--sb-line-strong)) transparent;
+}
+
+/* PISO DE ACESSIBILIDADE — não remova, não enfraqueça.
+ *
+ * Este bloco é o que faz TODA a camada de movimento do sistema visual respeitar
+ * quem pediu menos animação no sistema operacional. As animações de entrada de
+ * modal, véu, toast, menu suspenso e item de lista (`animate-modal-in`,
+ * `animate-overlay-in`, `animate-toast-in`, `animate-popover-in`,
+ * `animate-list-in`, definidas em tailwind.config.ts) dependem exclusivamente
+ * dele: nenhuma delas consulta `matchMedia`, porque a regra do projeto é que
+ * movimento seja declarativo justamente para não haver como esquecer.
+ *
+ * `animation-duration` aqui é a LONGHAND com !important, e por isso vence a
+ * shorthand `animation` que os utilitários do Tailwind emitem. Com a duração em
+ * 0.001ms cada animação assenta no quadro 100% — o estado normal do elemento —
+ * de imediato.
+ *
+ * O que este bloco NÃO cobre, e que por isso é proibido no projeto:
+ *   - `animation-delay` (entrada escalonada de lista): o atraso sobrevive e
+ *     seguraria o elemento no estado inicial pelo tempo cheio.
+ *   - animação por JavaScript (rAF, Web Animations API, biblioteca de mola).
+ * Se algum dia um dos dois for necessário, o desligamento tem que ser tratado
+ * dentro deste @media, senão a acessibilidade regride em silêncio.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* =========================================================================
+   EDITOR DE CONHECIMENTO (TipTap/ProseMirror)
+
+   Mora aqui, e não num arquivo importado pelo editor, por dois motivos. O
+   primeiro é que um `import "./editor.css"` dentro do componente carregado sob
+   demanda faria o estilo chegar DEPOIS do primeiro quadro, e o texto apareceria
+   sem formatação por um instante. O segundo é que a área editável do ProseMirror
+   é DOM criado em tempo de execução, fora do alcance do Tailwind: as classes
+   utilitárias não existem para nós que o editor inventa ao digitar.
+
+   Custo de manter isto global: alguns bytes de CSS em rotas que não têm editor.
+   CSS não entra na conta de "First Load JS" e não é o que a Fase 1 corrigiu.
+   ========================================================================= */
+
+/* Altura reservada da área de edição. É O MESMO valor usado pelo esqueleto de
+   carregamento em `EditorLoader.tsx` — é o que impede a página de saltar quando
+   o chunk do editor chega. Mudou aqui, mudou lá. */
+.sb-editor-area {
+  min-height: 26rem;
+}
+
+.sb-editor-conteudo {
+  outline: none;
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgb(var(--sb-ink));
+}
+
+/* O contorno global de `:focus-visible` é suprimido AQUI de propósito.
+   Navegadores tratam elemento editável como sempre "visivelmente focado", então
+   a regra global desenharia uma moldura em volta de uma área do tamanho da tela
+   ao simples clique. Numa região de edição de texto o indicador de foco é o
+   CURSOR piscando, que é justamente o que o usuário procura — o mesmo raciocínio
+   que se aplica a um <textarea>. O foco continua visível na barra de ferramentas
+   e no campo de título, que são controles comuns. */
+.sb-editor-conteudo:focus,
+.sb-editor-conteudo:focus-visible {
+  outline: none;
+}
+
+.sb-editor-conteudo > * + * {
+  margin-top: 0.75em;
+}
+
+/* O preflight do Tailwind zera tamanho e peso de título e tira o marcador de
+   lista. Dentro do editor isso precisa voltar: são os nós que o usuário acabou
+   de criar e ele espera ver a diferença imediatamente. */
+.sb-editor-conteudo h1,
+.sb-editor-conteudo h2,
+.sb-editor-conteudo h3 {
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: rgb(var(--sb-ink));
+}
+.sb-editor-conteudo h1 {
+  font-size: 1.6em;
+  margin-top: 1.4em;
+}
+.sb-editor-conteudo h2 {
+  font-size: 1.3em;
+  margin-top: 1.3em;
+}
+.sb-editor-conteudo h3 {
+  font-size: 1.1em;
+  margin-top: 1.2em;
+}
+.sb-editor-conteudo h1:first-child,
+.sb-editor-conteudo h2:first-child,
+.sb-editor-conteudo h3:first-child {
+  margin-top: 0;
+}
+
+.sb-editor-conteudo ul,
+.sb-editor-conteudo ol {
+  padding-left: 1.5em;
+}
+.sb-editor-conteudo ul {
+  list-style: disc;
+}
+.sb-editor-conteudo ol {
+  list-style: decimal;
+}
+.sb-editor-conteudo li::marker {
+  color: rgb(var(--sb-ink-subtle));
+}
+.sb-editor-conteudo li > ul,
+.sb-editor-conteudo li > ol {
+  margin-top: 0.25em;
+}
+/* Parágrafo dentro de item de lista não leva espaçamento de bloco, senão cada
+   item vira um parágrafo solto e a lista perde a densidade visual. */
+.sb-editor-conteudo li p {
+  margin: 0;
+}
+
+.sb-editor-conteudo blockquote {
+  border-left: 2px solid rgb(var(--sb-line-strong));
+  padding-left: 1em;
+  color: rgb(var(--sb-ink-muted));
+}
+
+.sb-editor-conteudo hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--sb-line));
+  margin: 1.5em 0;
+}
+
+.sb-editor-conteudo a {
+  color: rgb(var(--sb-ink));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgb(var(--sb-line-strong));
+}
+
+/* Código embutido. */
+.sb-editor-conteudo code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  background-color: rgb(var(--sb-surface-muted));
+  border: 1px solid rgb(var(--sb-line));
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+/* Bloco de código. */
+.sb-editor-conteudo pre {
+  background-color: rgb(var(--sb-surface-muted));
+  border: 1px solid rgb(var(--sb-line));
+  border-radius: 6px;
+  padding: 0.9em 1em;
+  /* Linha longa rola DENTRO do bloco. Sem isto o bloco alarga o editor inteiro
+     e a página ganha rolagem horizontal. */
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+/* Dentro do <pre> o <code> perde a moldura do código embutido — ela já veio do
+   bloco, e as duas juntas desenham uma caixa dentro da outra. */
+.sb-editor-conteudo pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* -------------------------------------------------------------------------
+   DESTAQUE DE SINTAXE (classes .hljs-* produzidas pelo lowlight)
+
+   Tema MONOCROMÁTICO, derivado de --sb-ink / --sb-ink-muted / --sb-ink-subtle.
+   Nenhuma cor nova é introduzida: o aplicativo inteiro é monocromático e um
+   bloco de código arco-íris seria a única mancha colorida da interface. Como não
+   há matiz para separar as categorias, a separação vem de PESO, OPACIDADE e
+   ITÁLICO — três eixos suficientes para distinguir os quatro grupos que
+   realmente importam ao ler código:
+
+     1. estrutura (palavra-chave, tag, tipo)  -> ink, peso 600
+     2. identificador (nome de função, seção) -> ink, peso normal
+     3. dado (texto, número, atributo)        -> ink-muted
+     4. acessório (comentário, meta)          -> ink-subtle, itálico
+
+   Como tudo se apoia nas variáveis de tema, o bloco acompanha claro/escuro
+   sozinho. É também por isso que NÃO se importa um tema pronto do highlight.js
+   (por CDN ou por arquivo): ele traz paleta fixa, quebra no modo escuro e, no
+   caso do CDN, adiciona uma requisição a um terceiro em toda visita.
+   ------------------------------------------------------------------------- */
+.sb-editor-conteudo pre code .hljs-comment,
+.sb-editor-conteudo pre code .hljs-quote {
+  color: rgb(var(--sb-ink-subtle));
+  font-style: italic;
+}
+
+.sb-editor-conteudo pre code .hljs-meta,
+.sb-editor-conteudo pre code .hljs-meta .hljs-keyword,
+.sb-editor-conteudo pre code .hljs-punctuation,
+.sb-editor-conteudo pre code .hljs-operator {
+  color: rgb(var(--sb-ink-subtle));
+}
+
+.sb-editor-conteudo pre code .hljs-keyword,
+.sb-editor-conteudo pre code .hljs-selector-tag,
+.sb-editor-conteudo pre code .hljs-built_in,
+.sb-editor-conteudo pre code .hljs-literal,
+.sb-editor-conteudo pre code .hljs-type,
+.sb-editor-conteudo pre code .hljs-tag,
+.sb-editor-conteudo pre code .hljs-doctag,
+.sb-editor-conteudo pre code .hljs-name {
+  color: rgb(var(--sb-ink));
+  font-weight: 600;
+}
+
+.sb-editor-conteudo pre code .hljs-title,
+.sb-editor-conteudo pre code .hljs-section,
+.sb-editor-conteudo pre code .hljs-selector-id,
+.sb-editor-conteudo pre code .hljs-selector-class {
+  color: rgb(var(--sb-ink));
+}
+
+.sb-editor-conteudo pre code .hljs-string,
+.sb-editor-conteudo pre code .hljs-number,
+.sb-editor-conteudo pre code .hljs-regexp,
+.sb-editor-conteudo pre code .hljs-symbol,
+.sb-editor-conteudo pre code .hljs-bullet,
+.sb-editor-conteudo pre code .hljs-link,
+.sb-editor-conteudo pre code .hljs-attr,
+.sb-editor-conteudo pre code .hljs-attribute,
+.sb-editor-conteudo pre code .hljs-property,
+.sb-editor-conteudo pre code .hljs-params,
+.sb-editor-conteudo pre code .hljs-variable,
+.sb-editor-conteudo pre code .hljs-template-variable,
+.sb-editor-conteudo pre code .hljs-subst,
+.sb-editor-conteudo pre code .hljs-formula {
+  color: rgb(var(--sb-ink-muted));
+}
+
+.sb-editor-conteudo pre code .hljs-emphasis {
+  font-style: italic;
+}
+.sb-editor-conteudo pre code .hljs-strong {
+  font-weight: 700;
+}
+
+/* Diff: sem verde e vermelho, a marcação vai por fundo e por peso. */
+.sb-editor-conteudo pre code .hljs-addition {
+  background-color: rgb(var(--sb-ink) / 0.07);
+}
+.sb-editor-conteudo pre code .hljs-deletion {
+  background-color: rgb(var(--sb-ink) / 0.07);
+  text-decoration: line-through;
+  color: rgb(var(--sb-ink-subtle));
+}

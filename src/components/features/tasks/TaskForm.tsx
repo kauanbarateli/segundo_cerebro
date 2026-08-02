@@ -1,0 +1,176 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
+import type { Category, Task } from "@/lib/database.types";
+import { createTask, updateTask } from "@/app/(app)/tarefas/actions";
+
+const PRIORITIES = [
+  { value: "low", label: "Baixa" },
+  { value: "medium", label: "Média" },
+  { value: "high", label: "Alta" },
+  { value: "urgent", label: "Urgente" },
+];
+
+/** Converts a stored ISO datetime to the value a <input type=datetime-local> expects. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
+}
+
+export function TaskForm({
+  categories,
+  task,
+  onDone,
+  onCancel,
+}: {
+  categories: Category[];
+  task?: Task;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [allDay, setAllDay] = useState(task?.all_day ?? false);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const result = task ? await updateTask(task.id, formData) : await createTask(formData);
+      if (result.ok) {
+        toast(task ? "Tarefa atualizada" : "Tarefa criada", "success");
+        onDone();
+      } else {
+        setError(result.error ?? "Erro ao salvar");
+      }
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label htmlFor="title" className="mb-1.5 block text-corpo font-medium text-ink">
+          Título
+        </label>
+        <input
+          id="title"
+          name="title"
+          required
+          defaultValue={task?.title ?? ""}
+          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="description" className="mb-1.5 block text-corpo font-medium text-ink">
+          Descrição
+        </label>
+        <textarea
+          id="description"
+          name="description"
+          rows={3}
+          defaultValue={task?.description ?? ""}
+          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-2"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="categoryId" className="mb-1.5 block text-corpo font-medium text-ink">
+            Categoria
+          </label>
+          <select
+            id="categoryId"
+            name="categoryId"
+            defaultValue={task?.category_id ?? ""}
+            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          >
+            <option value="">Sem categoria</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="priority" className="mb-1.5 block text-corpo font-medium text-ink">
+            Prioridade
+          </label>
+          <select
+            id="priority"
+            name="priority"
+            defaultValue={task?.priority ?? "medium"}
+            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          >
+            {PRIORITIES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="dueAt" className="mb-1.5 block text-corpo font-medium text-ink">
+            Vencimento
+          </label>
+          <input
+            id="dueAt"
+            name="dueAt"
+            type="datetime-local"
+            defaultValue={toLocalInput(task?.due_at ?? null)}
+            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          />
+        </div>
+        <div>
+          <label htmlFor="scheduledStartAt" className="mb-1.5 block text-corpo font-medium text-ink">
+            Horário agendado
+          </label>
+          <input
+            id="scheduledStartAt"
+            name="scheduledStartAt"
+            type={allDay ? "date" : "datetime-local"}
+            defaultValue={toLocalInput(task?.scheduled_start_at ?? null)}
+            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          />
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-corpo text-ink-muted">
+        <input
+          type="checkbox"
+          name="allDay"
+          value="true"
+          checked={allDay}
+          onChange={(e) => setAllDay(e.target.checked)}
+          className="h-4 w-4 rounded border-line-strong"
+        />
+        Dia inteiro
+      </label>
+
+      {error && (
+        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel} type="button">
+          Cancelar
+        </Button>
+        <Button variant="primary" size="sm" type="submit" disabled={pending}>
+          {pending ? "Salvando…" : task ? "Salvar" : "Criar tarefa"}
+        </Button>
+      </div>
+    </form>
+  );
+}
