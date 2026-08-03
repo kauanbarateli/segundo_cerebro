@@ -7,16 +7,26 @@ import {
   PrivacyPanel,
   SocialLinksPanel,
 } from "@/components/features/settings/SettingsPanels";
-import { getAppContext, getSocialLinks } from "@/lib/data";
+import { IntegrationsPanel } from "@/components/features/settings/IntegrationsPanel";
+import {
+  getAppContext,
+  getClickUpConnection,
+  getClickUpVerificadoEm,
+  getSocialLinks,
+} from "@/lib/data";
 
 export default async function ConfiguracoesPage() {
   const ctx = await getAppContext();
   if (!ctx) redirect("/login");
 
-  // `getAppContext` é memoizado e já resolveu no `await` acima (o layout também
-  // o chama no mesmo passe), então não há nada com que paralelizar aqui: esta é
-  // a única leitura própria da página.
-  const socialLinks = await getSocialLinks();
+  // As três leituras próprias da página, em paralelo. Nenhuma depende das
+  // outras, e as do ClickUp são consultas locais ao Postgres — não há chamada à
+  // API deles aqui (ver `getClickUpConnection`).
+  const [socialLinks, clickup, clickupVerificadoEm] = await Promise.all([
+    getSocialLinks(),
+    getClickUpConnection(),
+    getClickUpVerificadoEm(),
+  ]);
 
   const prefs = ctx.preferences;
 
@@ -46,6 +56,8 @@ export default async function ConfiguracoesPage() {
             leadMinutes={prefs?.notification_lead_minutes ?? [15]}
             channel={prefs?.notification_channel ?? "in_app"}
           />
+          {/* `conexao` NUNCA carrega o token — ver ClickUpConnection. */}
+          <IntegrationsPanel conexao={clickup} verificadoEm={clickupVerificadoEm} />
         </div>
       </div>
     </>

@@ -443,6 +443,59 @@ export const linkInputSchema = z.object({
 });
 export type LinkInput = z.infer<typeof linkInputSchema>;
 
+/* ------------------------------------------------------------------- ClickUp */
+
+/**
+ * Token pessoal do ClickUp.
+ *
+ * O formato `pk_<numero>_<alfanumérico>` é o que a API emite. Validar antes de
+ * chamar tem um ganho concreto: um valor obviamente errado (colagem parcial,
+ * espaço no meio, o campo errado copiado) NEM VIRA REQUISIÇÃO. Sem isso, cada
+ * tentativa desastrada gasta uma ida ao ClickUp e volta como 401 genérico, que
+ * não distingue "colei errado" de "o token foi revogado".
+ *
+ * ⚠️ NÃO é validação de segurança. Um token com o formato certo e conteúdo
+ * inventado passa aqui e é recusado pelo ClickUp — que é o único que pode dizer
+ * se ele vale. A barreira de segurança é `identificar()` antes de gravar.
+ *
+ * O teto de 200 existe porque a string vai para um header HTTP: sem limite, um
+ * valor gigante viraria uma requisição malformada em vez de um erro claro.
+ */
+export const clickupTokenSchema = z
+  .string()
+  .trim()
+  .min(20, "O token parece curto demais. Confira se copiou inteiro.")
+  .max(200, "O token parece longo demais. Confira se copiou só o token.")
+  .regex(/^pk_[A-Za-z0-9_]+$/, 'O token do ClickUp começa com "pk_". Confira o que foi colado.');
+
+/**
+ * Id de tarefa/lista do ClickUp.
+ *
+ * Mesma regex de `capabilities.ts`, e a duplicação é DELIBERADA: aqui ela
+ * produz mensagem em português na borda da action; lá ela é a última linha de
+ * defesa antes da URL, e precisa existir mesmo que alguém chame `chamar()` de
+ * um caminho que não passou por Zod. Uma validação de formulário e uma
+ * fronteira de segurança podem coincidir sem que uma substitua a outra.
+ */
+export const clickupIdSchema = z
+  .string()
+  .trim()
+  .min(1, "Tarefa inválida.")
+  .max(64, "Tarefa inválida.")
+  .regex(/^[A-Za-z0-9_-]+$/, "Tarefa inválida.");
+
+export const clickupStatusSchema = z
+  .string()
+  .trim()
+  .min(1, "Escolha um status.")
+  .max(120, "Status inválido.");
+
+export const clickupComentarioSchema = z
+  .string()
+  .trim()
+  .min(1, "Escreva algo para comentar.")
+  .max(10_000, "Máximo de 10.000 caracteres.");
+
 /* ----------------------------------------------------------------- calendário */
 
 /**

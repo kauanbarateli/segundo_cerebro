@@ -25,9 +25,11 @@ import type {
   KnowledgePageSummary,
   KnowledgeSearchHit,
   SocialLink,
+  ClickUpConnection,
 } from "@/lib/database.types";
 import { startOfDay, endOfDay, dayRangeInTimeZone, formatDayLabel, formatTime } from "@/lib/utils";
 import { resolveEnabled } from "@/lib/modules";
+import { lerConexao, lerConta } from "@/lib/clickup/credentials";
 import { montarArvore, normalizarDocumento } from "@/lib/knowledge";
 import type { RelatedItem, RelatedKind } from "@/lib/links";
 
@@ -1222,3 +1224,39 @@ export async function searchKnowledge(
 
   return (data as KnowledgeSearchHit[] | null) ?? [];
 }
+
+/* ------------------------------------------------------------------ ClickUp */
+
+/**
+ * Estado da conexão com o ClickUp — leitura BARATA, só no Postgres.
+ *
+ * ⚠️ NÃO faz chamada de rede ao ClickUp, e essa é a decisão de arquitetura mais
+ * importante desta integração.
+ *
+ * `tarefas/page.tsx` roda um `Promise.all` com cinco leituras antes de
+ * renderizar. Enfiar uma chamada à API externa ali faria A SUA LISTA PESSOAL
+ * ESPERAR PELO CLICKUP — e num dia em que a API deles estiver lenta, `/tarefas`
+ * inteira fica lenta, inclusive para quem só quer ver as tarefas locais.
+ *
+ * Aqui só se responde "a aba deve aparecer?", com uma consulta a uma linha
+ * indexada por `user_id` (UNIQUE na 0016). Ela entra no `Promise.all` que já
+ * existe, então não custa ida e volta a mais. As tarefas do ClickUp são
+ * buscadas SOB DEMANDA, quando a aba é clicada — pior caso, uma aba dizendo
+ * "não foi possível carregar", e a lista pessoal nunca sabe que houve problema.
+ *
+ * Memoizada porque a página de Tarefas e a de Configurações podem pedir no
+ * mesmo passe de render.
+ */
+export const getClickUpConnection = cache(async (): Promise<ClickUpConnection | null> => {
+  const ctx = await getAppContext();
+  if (!ctx) return null;
+  return lerConexao(ctx.userId);
+});
+
+/** `last_checked_at` para a tela de Configurações dizer "verificado hoje 14:32". */
+export const getClickUpVerificadoEm = cache(async (): Promise<string | null> => {
+  const ctx = await getAppContext();
+  if (!ctx) return null;
+  const conta = await lerConta(ctx.userId);
+  return conta?.last_checked_at ?? null;
+});
