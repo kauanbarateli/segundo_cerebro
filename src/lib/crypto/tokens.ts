@@ -132,43 +132,69 @@ export function chavesDeToken(): ChaveDeToken[] {
 /** Id atribuído à chave que vem da variável antiga, de valor único. */
 export const ID_DA_CHAVE_LEGADA = "legado";
 
-/**
- * O AAD da v2.
+/* =========================================================================
+ * OS AAD — um namespace por integração
+ * =========================================================================
+ * Cada integração monta o seu AAD, e é a diferença entre eles que impede um
+ * segredo de uma migrar para a tabela da outra.
  *
- * Amarra o ciphertext à CONTA e à VERSÃO. A conta impede que a linha seja
- * movida; a versão impede que um ciphertext v2 seja reinterpretado sob um
- * formato v3 futuro, caso um dia exista — sem ela, uma mudança de formato que
- * mantivesse o mesmo tamanho passaria despercebida pela verificação da tag.
+ * A ALTERNATIVA QUE FOI RECUSADA: passar o id do ClickUp em
+ * `encryptRefreshToken(plaintext, calendarAccountId)`. Funcionaria hoje e
+ * criaria dois problemas — o nome do parâmetro passaria a mentir, num arquivo
+ * de criptografia onde a leitura precisa ser literal; e as duas integrações
+ * passariam a compartilhar o mesmo espaço de AAD, que é exatamente o que o AAD
+ * existe para separar. Um ciphertext do Google gravado na linha do ClickUp com
+ * o mesmo id decifraria.
  */
-function aad(calendarAccountId: string, versao: number): Buffer {
+
+/**
+ * Google Agenda — formato INALTERADO desde a 0015: `<id>:<versao>`, sem
+ * prefixo.
+ *
+ * ⚠️ NÃO ACRESCENTE PREFIXO AQUI. Existe refresh token gravado em produção com
+ * este AAD exato; mudá-lo torna todos ilegíveis de uma vez, e a recuperação é
+ * reconectar cada conta do Google à mão. A ausência de prefixo é dívida
+ * histórica, não descuido — e é barata: `clickup:` não pode colidir com um
+ * uuid, porque uuid não contém dois-pontos.
+ */
+function aadCalendario(calendarAccountId: string, versao: number): Buffer {
   return Buffer.from(`${calendarAccountId}:${versao}`, "utf8");
 }
 
-export interface EncryptedToken {
+/** ClickUp — namespace próprio desde a primeira linha gravada. */
+function aadClickUp(clickupAccountId: string, versao: number): Buffer {
+  return Buffer.from(`clickup:${clickupAccountId}:${versao}`, "utf8");
+}
+
+/** O que sai de uma cifragem, sem saber de que integração veio. */
+export interface SegredoCifrado {
   ciphertext: Buffer; // ciphertext || authTag
   iv: Buffer;
   cryptoVersion: number;
   keyId: string;
 }
 
+/** Nome histórico, mantido para os chamadores do Google. */
+export type EncryptedToken = SegredoCifrado;
+
+/* =========================================================================
+ * O NÚCLEO — genérico, recebe o AAD pronto
+ * ========================================================================= */
+
 /**
- * Cifra sempre no formato ATUAL, com a PRIMEIRA chave da lista.
+ * Cifra no formato ATUAL, com a PRIMEIRA chave da lista.
  *
- * `calendarAccountId` é obrigatório e não tem default de propósito: ele é o AAD,
- * e um valor omitido produziria um ciphertext que decifra em qualquer linha —
- * exatamente o defeito que a v2 existe para fechar. Deixar o parâmetro
- * obrigatório faz o compilador cobrar o chamador.
+ * `aadPronto` é obrigatório e não tem default: um AAD omitido produziria um
+ * ciphertext que decifra em qualquer linha de qualquer integração — exatamente
+ * o defeito que a v2 existe para fechar. Sem default, o compilador cobra.
  */
-export function encryptRefreshToken(
-  plaintext: string,
-  calendarAccountId: string,
-): EncryptedToken {
+export function cifrar(plaintext: string, aadPronto: Buffer): SegredoCifrado {
   const [ativa] = chavesDeToken();
   if (!ativa) throw new Error("Nenhuma chave de cifragem configurada");
 
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", ativa.bytes, iv);
-  cipher.setAAD(aad(calendarAccountId, CRYPTO_VERSION_ATUAL));
+  cipher.setAAD(aadPronto);
 
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return {
@@ -177,6 +203,24 @@ export function encryptRefreshToken(
     cryptoVersion: CRYPTO_VERSION_ATUAL,
     keyId: ativa.id,
   };
+}
+
+/**
+ * Cifra o refresh token do Google. Invólucro fino sobre `cifrar`.
+ *
+ * A assinatura é a MESMA de antes da extração, de propósito: nenhum chamador do
+ * Google muda de forma, então o refactor não pode ter invalidado dado nenhum.
+ */
+export function encryptRefreshToken(
+  plaintext: string,
+  calendarAccountId: string,
+): EncryptedToken {
+  return cifrar(plaintext, aadCalendario(calendarAccountId, CRYPTO_VERSION_ATUAL));
+}
+
+/** Cifra o token pessoal do ClickUp (0016). */
+export function cifrarTokenClickUp(token: string, clickupAccountId: string): SegredoCifrado {
+  return cifrar(token, aadClickUp(clickupAccountId, CRYPTO_VERSION_ATUAL));
 }
 
 function tentarDecifrar(
@@ -199,19 +243,23 @@ function tentarDecifrar(
   }
 }
 
-export interface LinhaCifrada {
+/** Material cifrado vindo do banco, sem saber de que integração é. */
+export interface MaterialCifrado {
   ciphertext: Buffer;
   iv: Buffer;
   /** Da coluna `crypto_version`. Ausente é tratado como legado. */
   cryptoVersion: number | null;
   /** Da coluna `key_id`. Nulo nas linhas anteriores à 0015. */
   keyId: string | null;
+}
+
+export interface LinhaCifrada extends MaterialCifrado {
   /** Dono da linha — o AAD da v2 é derivado dele. */
   calendarAccountId: string;
 }
 
 /**
- * Decifra ORIENTANDO-SE pela versão gravada na linha.
+ * Decifra tentando as chaves configuradas, com o AAD que o chamador entregar.
  *
  * A ordem das tentativas é: a chave apontada por `key_id` primeiro, as demais
  * depois. A segunda parte é a rede de segurança da rotação — se `key_id` vier
@@ -224,25 +272,55 @@ export interface LinhaCifrada {
  * uma tag válida é 2^-128. Não existe "quase decifrou" — ou a tag bate e o
  * texto é o original, ou a tentativa é rejeitada. O custo é uma operação
  * simétrica por chave, sobre alguns bytes.
+ *
+ * `aadPronto = null` significa formato LEGADO (v1, sem AAD). Quem decide isso é
+ * o invólucro da integração, porque só ele conhece a própria história — o
+ * ClickUp, por exemplo, nasceu na v2 e nunca passa `null`.
  */
-export function decryptRefreshToken(linha: LinhaCifrada): string {
-  const versao = linha.cryptoVersion ?? CRYPTO_VERSION_LEGADO;
-  const associado = versao >= CRYPTO_VERSION_ATUAL ? aad(linha.calendarAccountId, versao) : null;
-
+export function decifrar(material: MaterialCifrado, aadPronto: Buffer | null): string {
   const chaves = chavesDeToken();
-  const preferida = linha.keyId ? chaves.filter((c) => c.id === linha.keyId) : [];
-  const restantes = chaves.filter((c) => c.id !== linha.keyId);
+  const preferida = material.keyId ? chaves.filter((c) => c.id === material.keyId) : [];
+  const restantes = chaves.filter((c) => c.id !== material.keyId);
 
   for (const chave of [...preferida, ...restantes]) {
-    const texto = tentarDecifrar(chave, linha.ciphertext, linha.iv, associado);
+    const texto = tentarDecifrar(chave, material.ciphertext, material.iv, aadPronto);
     if (texto !== null) return texto;
   }
 
   throw new Error(
-    "Não foi possível decifrar o refresh token: nenhuma chave configurada abre esta linha. " +
-      "Confira TOKEN_ENCRYPTION_KEYS — se a chave antiga foi removida antes de todas as contas " +
-      "migrarem, é preciso reconectar a conta do Google.",
+    "Não foi possível decifrar o segredo: nenhuma chave configurada abre esta linha. " +
+      "Confira TOKEN_ENCRYPTION_KEYS — se a chave antiga foi removida antes de todas as " +
+      "linhas migrarem, é preciso reconectar a integração.",
   );
+}
+
+/**
+ * Decifra o refresh token do Google, ORIENTANDO-SE pela versão gravada na linha.
+ *
+ * v1 (legado) não tem AAD; v2 tem. É aqui que essa decisão mora, e não no
+ * núcleo: só este invólucro sabe que existiu um formato anterior no Google.
+ */
+export function decryptRefreshToken(linha: LinhaCifrada): string {
+  const versao = linha.cryptoVersion ?? CRYPTO_VERSION_LEGADO;
+  const associado =
+    versao >= CRYPTO_VERSION_ATUAL ? aadCalendario(linha.calendarAccountId, versao) : null;
+  return decifrar(linha, associado);
+}
+
+/**
+ * Decifra o token do ClickUp.
+ *
+ * NUNCA passa `null`: a tabela `clickup_credentials` nasceu depois da 0015, com
+ * `crypto_version` default 2, então não existe linha em formato legado. Aceitar
+ * `null` aqui abriria um caminho para decifrar sem AAD que nenhum dado precisa
+ * — e um caminho sem AAD é um caminho onde o ciphertext de outra linha serve.
+ */
+export function decifrarTokenClickUp(
+  material: MaterialCifrado,
+  clickupAccountId: string,
+): string {
+  const versao = material.cryptoVersion ?? CRYPTO_VERSION_ATUAL;
+  return decifrar(material, aadClickUp(clickupAccountId, versao));
 }
 
 /** Supabase bytea columns round-trip as `\x...` hex strings via the JS SDK. */

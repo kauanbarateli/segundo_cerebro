@@ -263,3 +263,85 @@ describe("configuração das chaves", () => {
     expect(() => chavesDeToken()).toThrow(/TOKEN_ENCRYPTION_KEYS/);
   });
 });
+
+/* ================================================ separação de namespace (0016) */
+
+describe("AAD por integração — Google e ClickUp não se misturam", () => {
+  /*
+    O teste que justifica a extração da Fase 2.1.
+
+    Sem ele, separar `aadCalendario` de `aadClickUp` seria um refactor com uma
+    promessa: os dois montam string, os dois passam por `setAAD`, e nada
+    demonstraria que a diferença tem efeito. Aqui a demonstração é direta —
+    cifrar de um lado e decifrar do outro TEM que falhar.
+
+    O cenário real que isso fecha: um bug de escrita (ou um restore de backup
+    trocado) que grave o ciphertext do Google na linha do ClickUp com o mesmo
+    id. Sem namespaces separados, ele decifraria — e o aplicativo mandaria um
+    refresh token do Google no header `Authorization` da API do ClickUp.
+  */
+  const MESMO_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+
+  it("o que foi cifrado para o Google NÃO decifra como ClickUp", async () => {
+    const { encryptRefreshToken, decifrarTokenClickUp } = await tokens();
+    const doGoogle = encryptRefreshToken("refresh-token-do-google", MESMO_ID);
+
+    expect(() =>
+      decifrarTokenClickUp(
+        {
+          ciphertext: doGoogle.ciphertext,
+          iv: doGoogle.iv,
+          cryptoVersion: doGoogle.cryptoVersion,
+          keyId: doGoogle.keyId,
+        },
+        MESMO_ID,
+      ),
+    ).toThrow();
+  });
+
+  it("o que foi cifrado para o ClickUp NÃO decifra como Google", async () => {
+    const { cifrarTokenClickUp, decryptRefreshToken } = await tokens();
+    const doClickUp = cifrarTokenClickUp("pk_123_TOKEN", MESMO_ID);
+
+    expect(() =>
+      decryptRefreshToken({
+        ciphertext: doClickUp.ciphertext,
+        iv: doClickUp.iv,
+        cryptoVersion: doClickUp.cryptoVersion,
+        keyId: doClickUp.keyId,
+        calendarAccountId: MESMO_ID,
+      }),
+    ).toThrow();
+  });
+
+  it("cada uma abre a sua, com a mesma chave e o mesmo id", async () => {
+    // Prova que a falha acima é do AAD e não de chave ou de formato: mesma
+    // chave, mesmo id, mesmos parâmetros — só o namespace difere.
+    const { cifrarTokenClickUp, decifrarTokenClickUp, encryptRefreshToken, decryptRefreshToken } =
+      await tokens();
+
+    const cu = cifrarTokenClickUp("pk_123_TOKEN", MESMO_ID);
+    expect(decifrarTokenClickUp({ ...cu }, MESMO_ID)).toBe("pk_123_TOKEN");
+
+    const g = encryptRefreshToken("refresh-do-google", MESMO_ID);
+    expect(decryptRefreshToken({ ...g, calendarAccountId: MESMO_ID })).toBe("refresh-do-google");
+  });
+
+  it("o token do ClickUp continua amarrado à SUA conta", async () => {
+    const { cifrarTokenClickUp, decifrarTokenClickUp } = await tokens();
+    const cu = cifrarTokenClickUp("pk_123_TOKEN", MESMO_ID);
+    expect(() =>
+      decifrarTokenClickUp({ ...cu }, "11111111-2222-4333-8444-555555555555"),
+    ).toThrow();
+  });
+
+  it("o núcleo genérico recusa AAD diferente do usado na cifragem", async () => {
+    const { cifrar, decifrar } = await tokens();
+    const segredo = cifrar("qualquer coisa", Buffer.from("namespace-a:1"));
+
+    expect(decifrar({ ...segredo }, Buffer.from("namespace-a:1"))).toBe("qualquer coisa");
+    expect(() => decifrar({ ...segredo }, Buffer.from("namespace-b:1"))).toThrow();
+    // E sem AAD nenhum também não abre: o v1 legado não é uma porta lateral.
+    expect(() => decifrar({ ...segredo }, null)).toThrow();
+  });
+});

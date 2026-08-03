@@ -498,3 +498,46 @@ export interface VaultItem {
   updated_at: string;
   deleted_at: string | null;
 }
+
+/* ------------------------------------------------------------------ ClickUp */
+
+export type ClickUpAccountStatus = "connected" | "invalid" | "error";
+
+/**
+ * Metadado da conexão (0016). NÃO contém segredo.
+ *
+ * O token vive em `clickup_credentials`, que a sessão do navegador não alcança
+ * — por isso não existe tipo para aquela tabela aqui: nada no cliente pode
+ * receber uma linha dela, e um tipo exportado convidaria a tentar.
+ */
+export interface ClickUpAccount {
+  id: string;
+  user_id: string;
+  clickup_user_id: string;
+  clickup_username: string | null;
+  clickup_email: string | null;
+  workspace_id: string;
+  workspace_name: string | null;
+  enabled: boolean;
+  space_ids: string[];
+  status: ClickUpAccountStatus;
+  last_error: string | null;
+  last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * O que a página de Tarefas precisa saber para decidir se a aba aparece.
+ *
+ * Deliberadamente MENOR que `ClickUpAccount`: é o que atravessa a fronteira
+ * servidor→cliente, e cada campo a mais aqui é um campo que passa a viajar no
+ * payload do RSC sem ninguém usar.
+ */
+export interface ClickUpConnection {
+  conectado: boolean;
+  ativo: boolean;
+  username: string | null;
+  workspaceName: string | null;
+  status: ClickUpAccountStatus;
+}

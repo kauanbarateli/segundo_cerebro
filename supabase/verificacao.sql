@@ -39,7 +39,19 @@ select
           where table_schema = 'public' and table_name = 'finance_accounts'
             and column_name = 'credit_limit_cents')   as "0010_cartoes",
   to_regclass('public.knowledge_pages')   is not null as "0011_conhecimento",
-  to_regclass('public.social_links')      is not null as "0012_redes";
+  to_regclass('public.social_links')      is not null as "0012_redes",
+  exists (select 1 from pg_proc
+          where pronamespace = 'public'::regnamespace
+            and proname = 'purge_audit_events')       as "0013_retencao",
+  -- A 0014 não cria objeto nenhum: ela só revoga. O sinal de que rodou é o
+  -- privilégio ter SUMIDO — daí a negação.
+  not has_table_privilege('anon', 'public.tasks', 'select')
+                                                      as "0014_fecha_anon",
+  exists (select 1 from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'google_oauth_credentials'
+            and column_name = 'key_id')               as "0015_key_id",
+  to_regclass('public.clickup_accounts')  is not null as "0016_clickup";
 
 
 -- -----------------------------------------------------------------------------
@@ -249,6 +261,43 @@ select p.proname                                             as funcao,
 from pg_proc p
 where p.pronamespace = 'public'::regnamespace
 order by p.proname;
+
+
+-- -----------------------------------------------------------------------------
+-- BLOCO 13 — ClickUp (0016): a tabela do token nasceu fechada?
+--
+-- ⚠️ O plano deste módulo chamava este bloco de "BLOCO 12". O 12 já existe (é o
+-- da 0014) e os números aqui são estáveis por decisão do topo do arquivo, então
+-- o do ClickUp é o 13. Se algum documento citar "BLOCO 12 — ClickUp", é este.
+--
+-- A pergunta que este bloco responde não é "a migration rodou?" — é "a tabela
+-- nova nasceu fechada?". Ela importa porque a 0014 fechou `anon` varrendo as
+-- tabelas que existiam NAQUELE momento: tabela criada depois não herda nada, e
+-- o padrão do Supabase é conceder. Uma 0016 sem os `revoke` desfaria parte da
+-- 0014 em silêncio.
+--
+-- Esperado: as cinco primeiras colunas `true`/com o número indicado, e as três
+-- últimas FALSE. Um `true` nas três últimas é o token do ClickUp — a chave da
+-- conta inteira no workspace da empresa — alcançável pela sessão do navegador.
+-- -----------------------------------------------------------------------------
+select
+  to_regclass('public.clickup_accounts')    is not null              as tabela_contas_ok,
+  to_regclass('public.clickup_credentials') is not null              as tabela_cred_ok,
+
+  (select relrowsecurity from pg_class
+    where oid = 'public.clickup_credentials'::regclass)              as rls_cred_ligada,
+
+  -- Deve ser 0. RLS ligada SEM policy é o que faz authenticated ler zero linhas.
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'clickup_credentials') as policies_cred,
+
+  -- Deve ser 4 (select, insert, update, delete).
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'clickup_accounts')    as policies_contas,
+
+  has_table_privilege('anon',          'public.clickup_credentials', 'select') as anon_le_cred,
+  has_table_privilege('authenticated', 'public.clickup_credentials', 'select') as auth_le_cred,
+  has_table_privilege('anon',          'public.clickup_accounts',    'select') as anon_le_contas;
 
 
 -- -----------------------------------------------------------------------------
