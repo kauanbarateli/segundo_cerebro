@@ -14,7 +14,8 @@ import { TaskForm } from "@/components/features/tasks/TaskForm";
 import { TaskBoard } from "@/components/features/tasks/TaskBoard";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
-import type { Category, Task, TaskPriority } from "@/lib/database.types";
+import { ClickUpPanel } from "@/components/features/tasks/ClickUpPanel";
+import type { Category, ClickUpConnection, Task, TaskPriority } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
 import { formatDayLabel, formatTime, cn } from "@/lib/utils";
 import { completeTask, reopenTask, deleteTask, archiveTask } from "@/app/(app)/tarefas/actions";
@@ -73,9 +74,18 @@ export function TasksView({
   initialView = "list",
   related,
   linkCandidates,
+  clickup,
 }: {
   tasks: Task[];
   categories: Category[];
+  /**
+   * ⚠️ NÃO inclui "clickup" de propósito.
+   *
+   * Vem de `preferences.default_task_view`, que tem um CHECK de dois valores no
+   * banco. Gravar "clickup" ali exigiria uma migration ampliando o CHECK — e a
+   * recomendação é não gravar mesmo assim: a aba do TRABALHO não deve ser a que
+   * abre por padrão numa aplicação pessoal.
+   */
   initialView?: "list" | "board";
   /**
    * Vínculos de TODAS as tarefas, carregados de uma vez pela página. Chega como
@@ -85,10 +95,21 @@ export function TasksView({
   related: Map<string, RelatedItem[]>;
   /** Capturas e eventos oferecidos no autocomplete. */
   linkCandidates: RelatedItem[];
+  /**
+   * Estado da conexão com o ClickUp. `null` = nunca conectou.
+   *
+   * Vem do Postgres, não da API do ClickUp — a página não espera por rede
+   * externa. Ver `getClickUpConnection` em data.ts.
+   */
+  clickup?: ClickUpConnection | null;
 }) {
   const { toast } = useToast();
   const [filter, setFilter] = useState<Filter>("all");
-  const [view, setView] = useState<"list" | "board">(initialView);
+  const [view, setView] = useState<"list" | "board" | "clickup">(initialView);
+
+  // A aba só existe quando há conexão ATIVA. Desligar no painel de
+  // Configurações a faz sumir sem apagar o token.
+  const mostrarClickUp = clickup?.ativo === true;
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
@@ -137,8 +158,22 @@ export function TasksView({
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {/* Arrastar em tela pequena é ruim: o quadro só aparece a partir de md. */}
-          <div className="hidden items-center gap-1 rounded-md border border-line-strong p-0.5 md:flex">
+          {/*
+            O GRUPO em si só aparecia a partir de `md`, porque as duas únicas
+            visões eram Lista e Quadro e o Quadro é desktop-only (arrastar em
+            tela pequena é ruim). Com o ClickUp, esconder o grupo inteiro no
+            celular tornaria a aba INALCANÇÁVEL ali — e ler tarefas do trabalho
+            no celular é justamente onde a integração mais serve.
+
+            Então a regra passou a ser por BOTÃO: o grupo aparece no celular
+            quando há ClickUp, e é o Quadro que fica escondido lá.
+          */}
+          <div
+            className={cn(
+              "items-center gap-1 rounded-md border border-line-strong p-0.5 md:flex",
+              mostrarClickUp ? "flex" : "hidden",
+            )}
+          >
             <button
               type="button"
               aria-label="Ver em lista"
@@ -157,12 +192,27 @@ export function TasksView({
               aria-pressed={view === "board"}
               onClick={() => setView("board")}
               className={cn(
-                "flex h-7 w-8 items-center justify-center rounded-sm transition-colors",
+                "hidden h-7 w-8 items-center justify-center rounded-sm transition-colors md:flex",
                 view === "board" ? "bg-accent text-accent-ink" : "text-ink-muted hover:text-ink",
               )}
             >
               <Icon.Board width={15} height={15} />
             </button>
+            {mostrarClickUp && (
+              <button
+                type="button"
+                aria-label="Ver tarefas do ClickUp"
+                aria-pressed={view === "clickup"}
+                onClick={() => setView("clickup")}
+                className={cn(
+                  "flex h-7 items-center gap-1.5 rounded-sm px-2 transition-colors",
+                  view === "clickup" ? "bg-accent text-accent-ink" : "text-ink-muted hover:text-ink",
+                )}
+              >
+                <Icon.Link width={14} height={14} />
+                <span className="text-meta font-medium">ClickUp</span>
+              </button>
+            )}
           </div>
           <Button variant="primary" size="sm" onClick={openCreate}>
             <Icon.Capture width={15} height={15} /> Nova tarefa
@@ -175,6 +225,13 @@ export function TasksView({
           <TaskBoard tasks={filtered} categories={categories} related={related} />
         </div>
       ) : null}
+
+      {/*
+        A aba do ClickUp busca ao montar, por Server Action. Ela é renderizada
+        só quando selecionada — e permanece montada enquanto estiver, o que é o
+        que faz o cache de 60 s dela sobreviver a ir e voltar para a Lista.
+      */}
+      {view === "clickup" && mostrarClickUp && <ClickUpPanel />}
 
       {view === "board" && (
         <div className="md:hidden">

@@ -61,6 +61,31 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: chave-de-fachada-para-o-build
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
+      # Prova 6.4 do plano do ClickUp, automatizada.
+      #
+      # Roda DEPOIS do build porque é o artefato construído que ela inspeciona —
+      # não o código-fonte. Typecheck, lint e testes não pegam vazamento de
+      # segredo para o pacote do navegador: foi exatamente uma varredura assim
+      # que pegou a regressão do `process.env[chave]` (acesso dinâmico que o
+      # Next não substitui no cliente), depois de tudo o mais passar.
+      #
+      # O que cada padrão significa se aparecer:
+      #   api.clickup.com   → algum componente de cliente fala com a API direto,
+      #                       o que quebra a invariante I2 e mandaria o token
+      #                       para o navegador para poder autenticar;
+      #   clickup_credentials / token_ciphertext → nome de tabela ou coluna de
+      #                       segredo alcançou o cliente, sinal de que uma
+      #                       consulta migrou de lugar;
+      #   pk_<20+>          → um token literal foi parar no código.
+      - name: Segredos não vazaram para o pacote do navegador
+        run: |
+          set -e
+          if grep -rlE 'api\.clickup\.com|clickup_credentials|token_ciphertext|TOKEN_ENCRYPTION|pk_[A-Za-z0-9]{20,}' .next/static/; then
+            echo "::error::Segredo ou chamada externa encontrada no pacote do navegador (arquivos acima)."
+            exit 1
+          fi
+          echo "OK: nada sensível em .next/static"
+
       # ÚLTIMO PASSO, e de propósito: uma vulnerabilidade nova numa dependência
       # não deve esconder um erro de tipo ou um teste quebrado. Rodando por
       # último, o log mostra primeiro o que é problema DO CÓDIGO.

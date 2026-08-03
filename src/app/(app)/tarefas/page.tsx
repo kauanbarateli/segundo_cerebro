@@ -4,6 +4,7 @@ import {
   getCaptureCandidates,
   getCategories,
   getEventCandidates,
+  getClickUpConnection,
   getRelatedItems,
   getTasks,
 } from "@/lib/data";
@@ -14,12 +15,16 @@ export default async function TarefasPage() {
   // Tudo numa onda só. Os vínculos entram AQUI, e não depois com os ids das
   // tarefas em mãos, justamente para não custar uma ida e volta em série a cada
   // navegação — ver a nota em `getRelatedItems`.
-  const [tasks, categories, related, capturas, eventos] = await Promise.all([
+  const [tasks, categories, related, capturas, eventos, clickup] = await Promise.all([
     getTasks(),
     getCategories(),
     getRelatedItems("task"),
     getCaptureCandidates(),
     getEventCandidates(),
+    // Consulta LOCAL (uma linha indexada por user_id), nao a API do ClickUp.
+    // Ver getClickUpConnection: por a chamada externa aqui faria a lista
+    // pessoal esperar pelo ClickUp a cada navegacao.
+    getClickUpConnection(),
   ]);
 
   return (
@@ -39,6 +44,7 @@ export default async function TarefasPage() {
         // (não existe tabela para isso). Por isso a lista de candidatos junta
         // exatamente os outros dois tipos.
         linkCandidates={[...capturas, ...eventos]}
+        clickup={clickup}
       />
     </>
   );
