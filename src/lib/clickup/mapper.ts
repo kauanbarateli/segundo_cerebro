@@ -170,3 +170,28 @@ export function porPrazo(a: TarefaClickUp, b: TarefaClickUp): number {
   if (b.prazo === null) return -1;
   return a.prazo < b.prazo ? -1 : 1;
 }
+
+/** As três fases, na ordem do fluxo. É a ordem das colunas do quadro. */
+export const FASES: FaseClickUp[] = ["afazer", "andamento", "concluido"];
+
+/**
+ * Agrupa para o quadro. Ver `ClickUpQuadro.tsx` para o porquê da fase.
+ *
+ * Devolve as TRÊS chaves sempre, mesmo vazias: a coluna que some quando fica
+ * sem cartão faz o quadro mudar de largura conforme o trabalho anda, e o
+ * "Concluído" vazio precisa aparecer para poder explicar por que está vazio.
+ *
+ * Dentro da coluna, o mesmo critério da lista (`porPrazo`).
+ * `status.orderindex` NÃO serve: ele ordena os status DENTRO de uma lista, e
+ * estas tarefas vêm de listas diferentes — o índice 1 de uma nada tem a ver com
+ * o 1 da outra.
+ */
+export function agruparPorFase(
+  tarefas: TarefaClickUp[],
+): Map<FaseClickUp, TarefaClickUp[]> {
+  const mapa = new Map<FaseClickUp, TarefaClickUp[]>();
+  for (const fase of FASES) mapa.set(fase, []);
+  for (const t of tarefas) mapa.get(t.fase)?.push(t);
+  for (const lista of mapa.values()) lista.sort(porPrazo);
+  return mapa;
+}

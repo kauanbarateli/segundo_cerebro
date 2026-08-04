@@ -4,22 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import {
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
   closestCorners,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Badge } from "@/components/ui/Badge";
+import { QuadroColuna, QuadroColunaVazia, QuadroGrade } from "@/components/ui/Quadro";
+import { useSensoresDeArrastar } from "@/components/ui/arrastar";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { useToast } from "@/components/ui/Toast";
 import { moveTask } from "@/app/(app)/tarefas/actions";
@@ -59,11 +52,9 @@ export function TaskBoard({
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
 
-  // O KeyboardSensor é o que mantém o quadro utilizável sem mouse.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // Os mesmos sensores da lista de módulos em Configurações — inclusive o
+  // KeyboardSensor, que é o que mantém o quadro utilizável sem mouse.
+  const sensors = useSensoresDeArrastar();
 
   const byColumn = useMemo(() => {
     const map = new Map<TaskStatus, Task[]>();
@@ -150,7 +141,7 @@ export function TaskBoard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="grid gap-4 md:grid-cols-3">
+      <QuadroGrade>
         {COLUMNS.map((col) => {
           const columnTasks = byColumn.get(col.status) ?? [];
           return (
@@ -174,14 +165,12 @@ export function TaskBoard({
                 ))}
               </SortableContext>
               {columnTasks.length === 0 && (
-                <p className="rounded-md border border-dashed border-line py-6 text-center text-legenda text-ink-subtle">
-                  Solte um card aqui
-                </p>
+                <QuadroColunaVazia>Solte um card aqui</QuadroColunaVazia>
               )}
             </Column>
           );
         })}
-      </div>
+      </QuadroGrade>
 
       <DragOverlay>
         {activeTask ? (
@@ -199,6 +188,13 @@ export function TaskBoard({
   );
 }
 
+/**
+ * A coluna com o arrasto ligado.
+ *
+ * O DESENHO mora em `ui/Quadro.tsx`, compartilhado com o quadro do ClickUp; o
+ * que fica aqui é só o que depende do dnd-kit. É por isso que aquele arquivo
+ * não importa a biblioteca: um quadro de leitura não deve carregá-la.
+ */
 function Column({
   id,
   label,
@@ -212,19 +208,9 @@ function Column({
 }) {
   const { setNodeRef, isOver } = useSortable({ id, data: { isColumn: true } });
   return (
-    <section
-      ref={setNodeRef}
-      className={cn(
-        "flex min-h-[200px] flex-col gap-2 rounded-lg border border-line bg-surface-muted p-3 transition-colors",
-        isOver && "border-line-strong bg-surface",
-      )}
-    >
-      <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-corpo font-semibold text-ink">{label}</h3>
-        <Badge>{count}</Badge>
-      </div>
+    <QuadroColuna titulo={label} contagem={count} refDeSolta={setNodeRef} destacada={isOver}>
       {children}
-    </section>
+    </QuadroColuna>
   );
 }
 

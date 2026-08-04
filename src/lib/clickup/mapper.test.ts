@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agruparPorFase,
   faseDoStatus,
   mapearComentario,
   mapearResponsaveis,
@@ -8,7 +9,30 @@ import {
   porPrazo,
   traduzirPrioridade,
 } from "./mapper";
-import type { TarefaClickUp } from "./types";
+import type { FaseClickUp, TarefaClickUp } from "./types";
+
+/** Uma tarefa já mapeada, para os testes que operam sobre o modelo da tela. */
+function tarefaDeTeste(
+  id: string,
+  prazo: string | null,
+  fase: FaseClickUp = "andamento",
+): TarefaClickUp {
+  return {
+    id,
+    nome: id,
+    descricao: null,
+    status: null,
+    statusCor: null,
+    fase,
+    statusOrdem: null,
+    prazo,
+    prioridade: null,
+    listaId: null,
+    listaNome: null,
+    url: null,
+    responsaveis: [],
+  };
+}
 
 describe("msParaIso — a armadilha das datas do ClickUp", () => {
   it("converte string de milissegundos", () => {
@@ -209,21 +233,7 @@ describe("mapearComentario", () => {
 });
 
 describe("porPrazo — sem prazo vai para o FIM", () => {
-  const t = (id: string, prazo: string | null): TarefaClickUp => ({
-    id,
-    nome: id,
-    descricao: null,
-    status: null,
-    statusCor: null,
-    fase: "andamento",
-    statusOrdem: null,
-    prazo,
-    prioridade: null,
-    listaId: null,
-    listaNome: null,
-    url: null,
-    responsaveis: [],
-  });
+  const t = (id: string, prazo: string | null): TarefaClickUp => tarefaDeTeste(id, prazo);
 
   it("ordena por prazo, com os sem data por último", () => {
     /*
@@ -243,5 +253,51 @@ describe("porPrazo — sem prazo vai para o FIM", () => {
       "sem-data",
       "outra-sem-data",
     ]);
+  });
+});
+
+describe("agruparPorFase — as colunas do quadro", () => {
+  it("devolve as TRÊS fases mesmo quando alguma está vazia", () => {
+    /*
+      A coluna que some ao ficar sem cartão faria o quadro mudar de largura
+      conforme o trabalho anda. E "Concluído" precisa existir vazio para poder
+      explicar POR QUE está vazio: `include_closed=false` é fixo na listagem, e
+      sem a explicação o quadro afirmaria "você não concluiu nada".
+    */
+    const mapa = agruparPorFase([tarefaDeTeste("a", null, "afazer")]);
+    expect([...mapa.keys()]).toEqual(["afazer", "andamento", "concluido"]);
+    expect(mapa.get("andamento")).toEqual([]);
+    expect(mapa.get("concluido")).toEqual([]);
+  });
+
+  it("ordena dentro da coluna por prazo, com os sem data por último", () => {
+    const mapa = agruparPorFase([
+      tarefaDeTeste("sem-data", null, "afazer"),
+      tarefaDeTeste("depois", "2026-08-10T00:00:00.000Z", "afazer"),
+      tarefaDeTeste("antes", "2026-08-01T00:00:00.000Z", "afazer"),
+    ]);
+    expect(mapa.get("afazer")?.map((t) => t.id)).toEqual(["antes", "depois", "sem-data"]);
+  });
+
+  it("cada tarefa vai para uma coluna só", () => {
+    const entrada = [
+      tarefaDeTeste("a", null, "afazer"),
+      tarefaDeTeste("b", null, "andamento"),
+      tarefaDeTeste("c", null, "concluido"),
+    ];
+    const mapa = agruparPorFase(entrada);
+    const total = [...mapa.values()].reduce((n, l) => n + l.length, 0);
+    expect(total).toBe(entrada.length);
+  });
+
+  it("não altera o array recebido", () => {
+    // `sort` é in-place: sem a cópia implícita do agrupamento, ordenar a coluna
+    // reordenaria a lista que a aba guarda em cache.
+    const entrada = [
+      tarefaDeTeste("depois", "2026-08-10T00:00:00.000Z", "afazer"),
+      tarefaDeTeste("antes", "2026-08-01T00:00:00.000Z", "afazer"),
+    ];
+    agruparPorFase(entrada);
+    expect(entrada.map((t) => t.id)).toEqual(["depois", "antes"]);
   });
 });

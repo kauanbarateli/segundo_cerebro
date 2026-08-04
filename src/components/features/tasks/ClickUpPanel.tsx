@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/states";
 import { Icon } from "@/components/ui/Icons";
 import { listarTarefasClickUp } from "@/app/(app)/tarefas/clickup-actions";
 import type { MotivoClickUp } from "@/lib/clickup/erros";
-import { FILTRO_VAZIO, filtrarTarefas, opcoesDeFiltro, type FiltroClickUp } from "@/lib/clickup/filtros";
+import {
+  FILTRO_VAZIO,
+  filtrarTarefas,
+  opcoesDeFiltro,
+  type FiltroClickUp,
+} from "@/lib/clickup/filtros";
 import type { TarefaClickUp } from "@/lib/clickup/types";
-import { formatDayLabel, formatTime, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { CartaoClickUp } from "@/components/features/tasks/CartaoClickUp";
 import { ClickUpFiltros } from "@/components/features/tasks/ClickUpFiltros";
+import { ClickUpQuadro } from "@/components/features/tasks/ClickUpQuadro";
 import { ClickUpTaskSheet } from "@/components/features/tasks/ClickUpTaskSheet";
-import { ResponsaveisClickUp } from "@/components/features/tasks/ResponsaveisClickUp";
 
 /**
  * A aba ClickUp.
@@ -43,6 +48,10 @@ export function ClickUpPanel() {
   const [erro, setErro] = useState<{ texto: string; motivo?: MotivoClickUp } | null>(null);
   const [aberta, setAberta] = useState<TarefaClickUp | null>(null);
   const [filtro, setFiltro] = useState<FiltroClickUp>(FILTRO_VAZIO);
+  // Lista por padrão: é a visão que responde "o que vence primeiro", e essa é a
+  // pergunta que se leva ao abrir a aba. O quadro responde "onde está cada
+  // coisa", que é uma segunda pergunta.
+  const [visao, setVisao] = useState<"lista" | "quadro">("lista");
 
   // O cache vive em ref, não em estado: ele não deve provocar render nenhum, e
   // sobrevive à troca de aba porque o componente permanece montado.
@@ -163,13 +172,52 @@ export function ClickUpPanel() {
 
   return (
     <div className="p-4">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-legenda text-ink-subtle">
           {tarefas.length} {tarefas.length === 1 ? "tarefa" : "tarefas"} onde você é responsável
         </p>
-        <Button variant="ghost" size="sm" onClick={() => void buscar(true)}>
-          <Icon.Refresh width={14} height={14} /> Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {/*
+            O seletor lista/quadro fica AQUI, dentro do painel, e não como uma
+            quarta aba lá em cima. As abas de `TasksView` escolhem QUAL conjunto
+            de tarefas se está vendo (as pessoais, as do ClickUp); isto escolhe
+            COMO ver o conjunto já escolhido. Misturar os dois níveis faria uma
+            fileira de quatro botões em que dois pertencem a perguntas
+            diferentes.
+
+            Sem `hidden md:*`: o quadro do ClickUp é de leitura e as colunas
+            empilham no celular. Ver o cabeçalho de `ClickUpQuadro`.
+          */}
+          <div className="flex items-center gap-1 rounded-md border border-line-strong p-0.5">
+            <button
+              type="button"
+              aria-label="Ver o ClickUp em lista"
+              aria-pressed={visao === "lista"}
+              onClick={() => setVisao("lista")}
+              className={cn(
+                "flex h-7 w-8 items-center justify-center rounded-sm transition-colors",
+                visao === "lista" ? "bg-accent text-accent-ink" : "text-ink-muted hover:text-ink",
+              )}
+            >
+              <Icon.List width={15} height={15} />
+            </button>
+            <button
+              type="button"
+              aria-label="Ver o ClickUp em quadro"
+              aria-pressed={visao === "quadro"}
+              onClick={() => setVisao("quadro")}
+              className={cn(
+                "flex h-7 w-8 items-center justify-center rounded-sm transition-colors",
+                visao === "quadro" ? "bg-accent text-accent-ink" : "text-ink-muted hover:text-ink",
+              )}
+            >
+              <Icon.Board width={15} height={15} />
+            </button>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => void buscar(true)}>
+            <Icon.Refresh width={14} height={14} /> Atualizar
+          </Button>
+        </div>
       </div>
 
       {truncado && (
@@ -204,72 +252,16 @@ export function ClickUpPanel() {
             </p>
           )}
         </div>
+      ) : visao === "quadro" ? (
+        <ClickUpQuadro tarefas={visiveis} aoAbrir={setAberta} />
       ) : (
-      <ul className="space-y-2">
-        {visiveis.map((t) => {
-          const vencida = t.prazo != null && new Date(t.prazo).getTime() < agora;
-          return (
+        <ul className="space-y-2">
+          {visiveis.map((t) => (
             <li key={t.id}>
-              <div className="rounded-md border border-line bg-surface px-3.5 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAberta(t)}
-                    className="min-w-0 flex-1 rounded-sm text-left text-sm font-medium text-ink hover:underline focus-visible:outline-2"
-                  >
-                    {t.nome}
-                  </button>
-                  {t.status && (
-                    <span
-                      className="shrink-0 rounded-full px-2 py-0.5 text-meta font-medium"
-                      style={
-                        // A cor vem da API — cada Space define a sua paleta.
-                        // `borderColor`/`color` em vez de fundo sólido para não
-                        // brigar com o tema claro/escuro do aplicativo.
-                        t.statusCor
-                          ? { color: t.statusCor, border: `1px solid ${t.statusCor}` }
-                          : undefined
-                      }
-                    >
-                      {t.status}
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-ink-subtle">
-                  {t.listaNome && (
-                    <span className="inline-flex items-center gap-1">
-                      <Icon.Folder width={12} height={12} /> {t.listaNome}
-                    </span>
-                  )}
-                  {t.prazo && (
-                    <span className={cn("inline-flex items-center gap-1", vencida && "text-red-500")}>
-                      <Icon.Clock width={12} height={12} />
-                      {formatDayLabel(t.prazo)} {formatTime(t.prazo)}
-                      {vencida && " · vencida"}
-                    </span>
-                  )}
-                  {t.prioridade && <Badge tone="outline">{t.prioridade}</Badge>}
-                  <ResponsaveisClickUp pessoas={t.responsaveis} className="max-w-[16rem]" />
-                  {t.url && (
-                    /* O link vem da API; `external-link.ts` não é usado aqui
-                       porque o destino é fixo e conhecido (app.clickup.com), e
-                       o `rel` cobre o tabnabbing. */
-                    <a
-                      href={t.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-ink-muted hover:text-ink hover:underline"
-                    >
-                      Abrir no ClickUp
-                    </a>
-                  )}
-                </div>
-              </div>
+              <CartaoClickUp tarefa={t} aoAbrir={() => setAberta(t)} agora={agora} />
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
       )}
 
       {aberta && (

@@ -2,23 +2,15 @@
 
 import { useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
-  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useSensoresDeArrastar } from "@/components/ui/arrastar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PillButton } from "@/components/ui/Badge";
@@ -465,12 +457,10 @@ export function SocialLinksPanel({ links }: { links: SocialLink[] }) {
 
   const cheio = items.length >= LIMITE_DE_LINKS;
 
-  const sensors = useSensors(
-    // A distância mínima evita que um clique no botão de remover, dentro da
-    // linha, seja interpretado como início de arrasto.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // Os mesmos sensores do Kanban, agora de um lugar só. A distância mínima de
+  // ativação — que evita que um clique no botão de remover, dentro da linha,
+  // vire início de arrasto — está documentada lá.
+  const sensors = useSensoresDeArrastar();
 
   function rotuloDe(id: string): string {
     return items.find((i) => i.id === id)?.label ?? "link";
