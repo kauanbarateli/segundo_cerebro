@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/states";
 import { TaskCheckbox } from "@/components/features/tasks/TasksView";
 import { CalendarEventCard } from "@/components/features/calendar/CalendarEventCard";
 import { SocialLinkIcon } from "@/components/features/social/SocialLinkIcon";
+import { rotuloDaConta, tomDaConta } from "@/lib/calendar-colors";
 import {
   getAppContext,
   getCalendarAccounts,
@@ -255,7 +256,13 @@ export default async function HomePage() {
                       event={ev}
                       compact
                       ended={jaTerminou(ev)}
-                      accountBadge={acc?.display_name ?? (acc ? `Conta ${acc.slot}` : undefined)}
+                      accountBadge={rotuloDaConta(acc)}
+                      // O mesmo código de cores do Calendário. Sem isto, o
+                      // Início seria a única tela em que as duas contas
+                      // parecem a mesma coisa — e é a tela que se abre
+                      // primeiro. Com uma conta só, `null` mantém o visual
+                      // anterior; ver `tomDaConta`.
+                      tom={accounts.length > 1 ? tomDaConta(acc?.slot) : null}
                     />
                   );
                 })}

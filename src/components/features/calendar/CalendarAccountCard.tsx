@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/Icons";
 import { ConfirmationDialog } from "@/components/ui/ConfirmationDialog";
 import { useToast } from "@/components/ui/Toast";
 import type { CalendarAccount, CalendarSource } from "@/lib/database.types";
+import { tomDaConta } from "@/lib/calendar-colors";
 import { formatDayLabel, formatTime } from "@/lib/utils";
 import { setAccountNickname, setSourceEnabled } from "@/app/(app)/calendario/actions";
 
@@ -90,8 +91,20 @@ export function CalendarAccountCard({
           <Icon.Google width={16} height={16} />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-ink">
-            {account.display_name ?? `Conta ${slot}`}
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
+            {/*
+              A LEGENDA. É aqui que se dá o apelido à conta, então é aqui que a
+              cor precisa ser vista ao lado do nome — sem isso, o ponto teal na
+              agenda seria uma convenção que ninguém ensinou.
+
+              `aria-hidden` porque o nome ao lado já diz tudo o que este ponto
+              diz. Anunciá-lo acrescentaria ruído sem acrescentar informação.
+            */}
+            <span
+              aria-hidden
+              className={`h-2 w-2 shrink-0 rounded-full ${tomDaConta(slot)?.ponto ?? ""}`}
+            />
+            <span className="truncate">{account.display_name ?? `Conta ${slot}`}</span>
           </p>
           <p className="truncate text-legenda text-ink-subtle">{account.email}</p>
         </div>

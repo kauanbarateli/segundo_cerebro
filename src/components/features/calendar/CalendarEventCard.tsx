@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icons";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import type { CalendarEvent } from "@/lib/database.types";
+import type { TomDaConta } from "@/lib/calendar-colors";
 import { formatTime, minutesBetween, formatDuration, cn } from "@/lib/utils";
 import { analisarLinkExterno } from "@/lib/external-link";
 
@@ -25,6 +26,7 @@ export function CalendarEventCard({
   event,
   accountLabel,
   accountBadge,
+  tom,
   compact = false,
   linkCount = 0,
   ended = false,
@@ -33,6 +35,12 @@ export function CalendarEventCard({
   event: CalendarEvent;
   accountLabel?: string;
   accountBadge?: string;
+  /**
+   * A cor da conta. SEMPRE opcional, e sempre acompanhada de `accountBadge` —
+   * ver `lib/calendar-colors.ts`. Um cartão colorido sem o distintivo seria o
+   * caso que a regra "nunca só por cor" existe para impedir.
+   */
+  tom?: TomDaConta | null;
   compact?: boolean;
   /** Quantos vínculos este evento tem. Zero não desenha selo nenhum. */
   linkCount?: number;
@@ -66,6 +74,10 @@ export function CalendarEventCard({
     <div
       className={cn(
         "flex gap-3 rounded-md border border-line bg-surface px-3.5 py-3",
+        // O trilho vem DEPOIS de `border-line` porque é `border-l-*`: a classe
+        // mais específica do lado esquerdo vence, e as outras três bordas ficam
+        // como estavam.
+        tom?.trilho,
         // Cancelado vence encerrado: os dois esmaecem igual, mas só o cancelado
         // risca o título, e as classes não se somam de forma útil.
         (cancelled || ended) && "opacity-60",
@@ -93,7 +105,12 @@ export function CalendarEventCard({
           ) : (
             <p className={classeTitulo}>{titulo}</p>
           )}
-          {accountBadge && <Badge tone="outline">{accountBadge}</Badge>}
+          {accountBadge && (
+            <Badge tone="outline" className="shrink-0">
+              {tom && <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", tom.ponto)} />}
+              {accountBadge}
+            </Badge>
+          )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-ink-subtle">
           {duration && (

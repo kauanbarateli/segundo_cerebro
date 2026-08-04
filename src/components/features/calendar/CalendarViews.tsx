@@ -11,6 +11,7 @@ import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
 import type { CalendarAccount, CalendarEvent, CalendarSource, CalendarView } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
+import { rotuloDaConta, tomDaConta, type TomDaConta } from "@/lib/calendar-colors";
 import { cn, formatTime, startOfDay } from "@/lib/utils";
 
 /** Views disponíveis nesta versão (Lista foi removida). */
@@ -122,8 +123,21 @@ export function CalendarViews({
   const detail = events.find((e) => e.id === detailId) ?? null;
 
   function badgeFor(ev: CalendarEvent): string | undefined {
-    const acc = accountById.get(ev.calendar_account_id);
-    return acc?.display_name ?? (acc ? `Conta ${acc.slot}` : undefined);
+    return rotuloDaConta(accountById.get(ev.calendar_account_id));
+  }
+
+  /**
+   * O tom da conta do evento — irmão de `badgeFor`, e sempre usado JUNTO com
+   * ele.
+   *
+   * ⚠️ Com UMA conta só não há o que distinguir, e a coloração vira ruído: uma
+   * agenda inteira pintada de teal não informa nada. `null` faz cada ponto de
+   * aplicação cair no visual anterior, sem caso especial em nenhum deles.
+   */
+  const colorir = accounts.length > 1;
+  function tomFor(ev: CalendarEvent) {
+    if (!colorir) return null;
+    return tomDaConta(accountById.get(ev.calendar_account_id)?.slot);
   }
 
   function navigate(dir: -1 | 0 | 1) {
@@ -172,15 +186,30 @@ export function CalendarViews({
           <PillButton active={accountFilter === "all"} onClick={() => setAccountFilter("all")}>
             Todas as contas
           </PillButton>
-          {accounts.map((a) => (
-            <PillButton
-              key={a.id}
-              active={accountFilter === a.id}
-              onClick={() => setAccountFilter(a.id)}
-            >
-              {a.display_name ?? `Conta ${a.slot}`}
-            </PillButton>
-          ))}
+          {/*
+            ESTA FILEIRA É A LEGENDA. As pills de filtro já traziam o nome de
+            cada conta; com o ponto colorido ao lado, elas passam a ensinar o
+            código de cores sem que nada novo apareça na tela. Uma legenda
+            separada seria um segundo lugar dizendo a mesma coisa.
+          */}
+          {accounts.map((a) => {
+            const tom = colorir ? tomDaConta(a.slot) : null;
+            return (
+              <PillButton
+                key={a.id}
+                active={accountFilter === a.id}
+                onClick={() => setAccountFilter(a.id)}
+              >
+                {tom && (
+                  <span
+                    aria-hidden
+                    className={cn("h-2 w-2 shrink-0 rounded-full", tom.ponto)}
+                  />
+                )}
+                {rotuloDaConta(a)}
+              </PillButton>
+            );
+          })}
         </div>
       )}
 
@@ -189,6 +218,7 @@ export function CalendarViews({
           <DayList
             events={visibleEvents.filter((e) => sameDay(eventDate(e), anchor))}
             badgeFor={badgeFor}
+            tomFor={tomFor}
             onOpen={setDetailId}
             linkCountOf={contarVinculos}
           />
@@ -197,6 +227,7 @@ export function CalendarViews({
           <WeekView
             events={visibleEvents}
             badgeFor={badgeFor}
+            tomFor={tomFor}
             anchor={anchor}
             onOpen={setDetailId}
             linkCountOf={contarVinculos}
@@ -206,6 +237,11 @@ export function CalendarViews({
           <MonthView
             events={visibleEvents}
             anchor={anchor}
+            // A única assinatura que muda de verdade: o mês não tinha rótulo de
+            // conta nenhum, então precisa dos dois para poder dizer de quem é
+            // cada faixa. Ver o comentário dentro do componente.
+            badgeFor={badgeFor}
+            tomFor={tomFor}
             onPick={(d) => {
               setAnchor(d);
               setView("day");
@@ -240,7 +276,7 @@ export function CalendarViews({
             </Button>
           }
         >
-          <CalendarEventCard event={detail} accountBadge={badgeFor(detail)} />
+          <CalendarEventCard event={detail} accountBadge={badgeFor(detail)} tom={tomFor(detail)} />
           <RelatedSection
             className="mt-4"
             entity={{ kind: "event", id: detail.id }}
@@ -253,14 +289,19 @@ export function CalendarViews({
   );
 }
 
+/** Assinatura comum a todas as visões: rótulo e tom saem sempre juntos. */
+type TomDeEvento = (e: CalendarEvent) => TomDaConta | null;
+
 function DayList({
   events,
   badgeFor,
+  tomFor,
   onOpen,
   linkCountOf,
 }: {
   events: CalendarEvent[];
   badgeFor: (e: CalendarEvent) => string | undefined;
+  tomFor: TomDeEvento;
   onOpen: (id: string) => void;
   linkCountOf: (id: string) => number;
 }) {
@@ -272,6 +313,7 @@ function DayList({
           key={e.id}
           event={e}
           accountBadge={badgeFor(e)}
+          tom={tomFor(e)}
           linkCount={linkCountOf(e.id)}
           onOpen={() => onOpen(e.id)}
         />
@@ -288,11 +330,13 @@ function DayList({
 function WeekEventChip({
   event,
   accountLabel,
+  tom,
   linkCount,
   onOpen,
 }: {
   event: CalendarEvent;
   accountLabel?: string;
+  tom: TomDaConta | null;
   linkCount: number;
   onOpen: () => void;
 }) {
@@ -311,7 +355,10 @@ function WeekEventChip({
     <button
       type="button"
       onClick={onOpen}
-      className="w-full rounded-sm border border-line bg-surface px-2 py-1.5 text-left hover:bg-surface-muted focus-visible:outline-2"
+      className={cn(
+        "w-full rounded-sm border border-line bg-surface px-2 py-1.5 text-left hover:bg-surface-muted focus-visible:outline-2",
+        tom?.trilho,
+      )}
       title={`${time} · ${event.summary ?? "(sem título)"}${accountLabel ? ` · ${accountLabel}` : ""}`}
     >
       <span className="block text-meta font-medium leading-tight text-ink-muted">{time}</span>
@@ -320,7 +367,12 @@ function WeekEventChip({
       </span>
       {accountLabel && (
         <span className="mt-1 flex items-center gap-1 text-micro leading-none text-ink-subtle">
-          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-subtle" />
+          {/* Este ponto já existia — e era SEMPRE cinza, em todas as contas.
+              Ele desenhava um marcador que não marcava nada. */}
+          <span
+            aria-hidden
+            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tom?.ponto ?? "bg-ink-subtle")}
+          />
           <span className="truncate">{accountLabel}</span>
         </span>
       )}
@@ -342,12 +394,14 @@ function WeekEventChip({
 function WeekView({
   events,
   badgeFor,
+  tomFor,
   anchor,
   onOpen,
   linkCountOf,
 }: {
   events: CalendarEvent[];
   badgeFor: (e: CalendarEvent) => string | undefined;
+  tomFor: TomDeEvento;
   anchor: Date;
   onOpen: (id: string) => void;
   linkCountOf: (id: string) => number;
@@ -386,6 +440,7 @@ function WeekView({
                       key={e.id}
                       event={e}
                       accountLabel={badgeFor(e)}
+                      tom={tomFor(e)}
                       linkCount={linkCountOf(e.id)}
                       onOpen={() => onOpen(e.id)}
                     />
@@ -422,6 +477,7 @@ function WeekView({
                     event={e}
                     compact
                     accountBadge={badgeFor(e)}
+                    tom={tomFor(e)}
                     linkCount={linkCountOf(e.id)}
                     onOpen={() => onOpen(e.id)}
                   />
@@ -435,13 +491,29 @@ function WeekView({
   );
 }
 
+/**
+ * ⚠️ A VISÃO QUE MAIS EXIGE CUIDADO COM A COR.
+ *
+ * É a única do calendário sem rótulo de conta nenhum: a célula do mês só tem
+ * espaço para o título do evento, cortado. Pintar a faixa aqui e parar por aí
+ * faria do mês o ÚNICO lugar do aplicativo onde a cor é o único diferenciador —
+ * exatamente o que a regra "nunca só por cor" existe para impedir.
+ *
+ * Por isso o nome da conta entra de duas formas que não ocupam espaço: no
+ * `title` (ponteiro parado) e num `sr-only` (leitor de tela). O texto está lá
+ * para quem precisar dele; só não está desenhado.
+ */
 function MonthView({
   events,
   anchor,
+  badgeFor,
+  tomFor,
   onPick,
 }: {
   events: CalendarEvent[];
   anchor: Date;
+  badgeFor: (e: CalendarEvent) => string | undefined;
+  tomFor: TomDeEvento;
   onPick: (d: Date) => void;
 }) {
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -480,14 +552,23 @@ function MonthView({
                   {day.getDate()}
                 </span>
                 <div className="mt-1 space-y-0.5">
-                  {dayEvents.slice(0, 2).map((e) => (
-                    <div
-                      key={e.id}
-                      className="truncate rounded-sm bg-surface-muted px-1 py-0.5 text-micro text-ink-muted"
-                    >
-                      {e.summary ?? "(sem título)"}
-                    </div>
-                  ))}
+                  {dayEvents.slice(0, 2).map((e) => {
+                    const titulo = e.summary ?? "(sem título)";
+                    const conta = badgeFor(e);
+                    return (
+                      <div
+                        key={e.id}
+                        className={cn(
+                          "truncate rounded-sm bg-surface-muted px-1 py-0.5 text-micro text-ink-muted",
+                          tomFor(e)?.trilho,
+                        )}
+                        title={conta ? `${titulo} · ${conta}` : titulo}
+                      >
+                        {titulo}
+                        {conta && <span className="sr-only"> — {conta}</span>}
+                      </div>
+                    );
+                  })}
                   {dayEvents.length > 2 && (
                     <div className="px-1 text-micro text-ink-subtle">+{dayEvents.length - 2}</div>
                   )}
