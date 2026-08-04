@@ -158,6 +158,33 @@ Estes passos cobrem o que só a execução real mostra.
 > Os três últimos são os que importam. O penúltimo prova a I1; o último prova a
 > I3, que é a única coisa entre este aplicativo e a tarefa de outra pessoa.
 
+### ⚠️ A fase do quadro é uma heurística — e precisa de um dado real
+
+O ClickUp marca como `open` **apenas o primeiro status de cada lista**; todos os
+intermediários são `custom`. Numa lista
+`backlog(open) → a fazer(custom) → fazendo(custom) → concluído(closed)`, o
+"a fazer" é `custom` — e caía em "Em andamento".
+
+A classificação agora vem da **posição** do status dentro da lista dele
+(`faseNaLista`): tipo final → concluído; o primeiro status → a fazer; a fila se
+estende enquanto o nome bater **por igualdade** com o vocabulário
+(`a fazer`, `to do`, `backlog`, `pendente`, `aberto`, `aguardando`…); o resto é
+andamento.
+
+- [ ] 🔧 **Fazer um `GET /list/{id}` real e colar o JSON dos `statuses` no
+      comentário de `faseNaLista`.** A afirmação "só o primeiro vem como `open`"
+      é consistente com o bug e com os comentários do módulo, mas ninguém
+      chamou a API. Sem esse dado, a próxima pessoa refaz esta análise do zero.
+- [ ] 🔧 Conferir se os nomes de fila do seu workspace estão no vocabulário. Cada
+      entrada ali é uma afirmação: "um status com este nome exato nunca é
+      trabalho em curso".
+
+> **Se a coluna parecer errada, use o filtro de lista.** Com uma lista só, o
+> quadro troca as três colunas de fase pelos status literais na ordem do
+> ClickUp — sem heurística nenhuma, certo por construção. E o `title` da pill de
+> status sempre diz em que a classificação se baseou ("2º de 5 status em Sprint
+> Backlog"), ou avisa que foi estimada.
+
 ### ⚠️ O que ainda não foi observado contra a API real
 
 A integração **nunca falou com o ClickUp de verdade**. Todo `client.ts` e

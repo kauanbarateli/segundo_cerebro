@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icons";
 import { ResponsaveisClickUp } from "@/components/features/tasks/ResponsaveisClickUp";
-import type { TarefaClickUp } from "@/lib/clickup/types";
+import type { FaseClickUp, TarefaClickUp } from "@/lib/clickup/types";
 import { cn, formatDayLabel, formatTime } from "@/lib/utils";
 
 /**
@@ -18,6 +18,22 @@ import { cn, formatDayLabel, formatTime } from "@/lib/utils";
  * largura, a lista de origem e os co-responsáveis empurram o prazo para uma
  * terceira linha e o cartão vira um parágrafo. Numa linha inteira, cabem.
  */
+const FASE_POR_EXTENSO: Record<FaseClickUp, string> = {
+  afazer: "A fazer",
+  andamento: "Em andamento",
+  concluido: "Concluído",
+};
+
+/** A frase do `title` da pill de status. Ver o uso, logo abaixo. */
+function explicarClassificacao(t: TarefaClickUp): string {
+  const fase = FASE_POR_EXTENSO[t.fase];
+  if (t.statusPosicao === null || t.statusTotal === null) {
+    return `${t.status} · ${fase} — estimado; os status desta lista não foram consultados`;
+  }
+  const onde = t.listaNome ? ` em "${t.listaNome}"` : "";
+  return `${t.status} · ${fase} — ${t.statusPosicao}º de ${t.statusTotal} status${onde}`;
+}
+
 export function CartaoClickUp({
   tarefa,
   aoAbrir,
@@ -80,6 +96,20 @@ export function CartaoClickUp({
         </button>
         {tarefa.status && (
           <span
+            /*
+              ⚠️ O `title` NÃO É ENFEITE — é o que torna a coluna conferível.
+
+              A fase vem de uma HEURÍSTICA sobre a posição do status dentro da
+              lista de origem (ver `faseNaLista`). Uma heurística que classifica
+              em silêncio troca um erro sistemático — que se percebe e se
+              conserta — por um erro raro e invisível, que ninguém nota até
+              tomar uma decisão errada por causa dele.
+
+              Com a base à mão, "por que esta tarefa está nesta coluna?" tem
+              resposta sem abrir o código. E quando a lista não pôde ser
+              consultada, a frase diz isso em vez de fingir apuração.
+            */
+            title={explicarClassificacao(tarefa)}
             className="shrink-0 rounded-full px-2 py-0.5 text-meta font-medium"
             style={
               // A cor vem da API — cada Space define a sua paleta.

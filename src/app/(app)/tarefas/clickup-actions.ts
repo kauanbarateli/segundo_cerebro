@@ -8,10 +8,16 @@ import {
   mudarStatus,
   statusDaLista,
 } from "@/lib/clickup/client";
+import { gravarStatusEmCache, resolverStatusDasListas } from "@/lib/clickup/cache-de-status";
 import { anotarResultado, lerCredencial } from "@/lib/clickup/credentials";
 import { fraseDoErro, motivoDoErro, type MotivoClickUp } from "@/lib/clickup/erros";
 import { garantirResponsavel } from "@/lib/clickup/guard";
-import { mapearComentario, mapearTarefa, porPrazo } from "@/lib/clickup/mapper";
+import {
+  classificarPelaLista,
+  mapearComentario,
+  mapearTarefa,
+  porPrazo,
+} from "@/lib/clickup/mapper";
 import type {
   ComentarioClickUp,
   StatusPossivel,
@@ -94,12 +100,35 @@ export async function listarTarefasClickUp(): Promise<ListagemClickUp> {
 
     await anotarResultado(user.id, "connected", null);
 
+    // O `clickupUserId` vai ao mapper só para marcar `souEu` nos responsáveis.
+    // Ele NÃO atravessa para o cliente: quem chega lá é um booleano por pessoa,
+    // que é o que a tela precisa para escrever "você".
+    const mapeadas = tarefas.map((t) => mapearTarefa(t, credencial.clickupUserId));
+
+    /*
+      A FASE É RESOLVIDA AQUI, NO SERVIDOR — e não no cliente.
+
+      Classificar pela posição do status exige os status da LISTA de origem, e
+      buscá-los é `GET /list/{id}`, que precisa do token. Fazer isso no
+      navegador quebraria a invariante I1 antes de qualquer outra consideração.
+
+      O payload NÃO cresce por causa disto: `fase` já existia, e o que se
+      acrescenta são dois números pequenos por tarefa (`statusPosicao` e
+      `statusTotal`) que a tela usa para MOSTRAR a base da classificação.
+
+      O cache é o que torna isto barato — ver `cache-de-status.ts`. Sem ele,
+      esta linha introduziria um 429 que hoje não existe.
+    */
+    const listIds = mapeadas.map((t) => t.listaId).filter((id): id is string => id !== null);
+    const { porLista } = await resolverStatusDasListas(listIds, (listId) =>
+      statusDaLista(credencial.token, listId),
+    );
+
     return {
       ok: true,
-      // O `clickupUserId` vai ao mapper só para marcar `souEu` nos responsáveis.
-      // Ele NÃO atravessa para o cliente: quem chega lá é um booleano por
-      // pessoa, que é o que a tela precisa para escrever "você".
-      tarefas: tarefas.map((t) => mapearTarefa(t, credencial.clickupUserId)).sort(porPrazo),
+      tarefas: mapeadas
+        .map((t) => (t.listaId ? classificarPelaLista(t, porLista.get(t.listaId)) : t))
+        .sort(porPrazo),
       truncado,
     };
   } catch (e) {
@@ -179,9 +208,24 @@ export async function detalharTarefaClickUp(taskId: unknown): Promise<DetalheCli
       tarefa.listaId ? statusDaLista(credencial.token, tarefa.listaId) : Promise.resolve([]),
     ]);
 
+    /*
+      Esta busca é SEMPRE fresca, nunca do cache: ela popula o seletor de status
+      e é validada contra o servidor na hora de gravar. Um status criado há
+      cinco minutos precisa aparecer — ler de um cache de uma hora faria a tela
+      recusar uma escolha que o ClickUp aceitaria.
+
+      Mas a resposta que veio ALIMENTA o cache: é grátis, e deixa o quadro mais
+      quente sem nenhuma chamada a mais.
+    */
+    if (tarefa.listaId && statusPossiveis.length > 0) {
+      gravarStatusEmCache(tarefa.listaId, statusPossiveis);
+    }
+
     return {
       ok: true,
-      tarefa,
+      // O detalhe também classifica: abrir uma tarefa e ver no cabeçalho uma
+      // fase diferente da coluna em que ela estava seria pior que não mostrar.
+      tarefa: classificarPelaLista(tarefa, statusPossiveis),
       comentarios: comentarios.map(mapearComentario),
       statusPossiveis,
     };

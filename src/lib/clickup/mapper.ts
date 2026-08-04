@@ -10,6 +10,7 @@ import type {
   TarefaCrua,
   UsuarioCru,
 } from "@/lib/clickup/types";
+import { semAcento } from "@/lib/knowledge";
 
 /**
  * Resposta crua do ClickUp → modelo da interface.
@@ -66,29 +67,162 @@ export function traduzirPrioridade(
   }
 }
 
+/** `closed` e `done` significam a mesma coisa aqui — ver `faseDoStatus`. */
+function ehTipoFinal(tipo: string | null | undefined): boolean {
+  const t = tipo?.toLowerCase();
+  return t === "closed" || t === "done";
+}
+
 /**
- * `status.type` → fase.
+ * `status.type` → fase. O CAMINHO DE RESERVA, quando a lista de origem não pôde
+ * ser resolvida. A classificação boa é `faseNaLista`, logo abaixo.
  *
- * O `default` cobrindo "andamento" não é descuido: é a leitura certa do
- * conjunto. `open` é sempre o primeiro status da lista e `closed`/`done` são os
- * finais; TUDO o que fica no meio o ClickUp chama de `custom`, e é justamente
- * "em andamento". Um tipo novo que aparecesse amanhã também estaria no meio.
+ * ⚠️ O `default` já foi "andamento", e essa era a causa raiz de um bug real: o
+ * ClickUp marca como `open` APENAS O PRIMEIRO status de cada lista, e chama de
+ * `custom` todos os intermediários. Numa lista
+ * `backlog(open) → a fazer(custom) → fazendo(custom) → concluído(closed)`, o
+ * "a fazer" é `custom` e caía em "Em andamento" — a coluna errada, para toda
+ * tarefa que não estivesse no primeiro status.
  *
- * ⚠️ `done` está aqui por precaução, não por observação. A integração nunca
- * falou com a API real; a documentação usa `closed`, e alguns workspaces
- * relatam `done`. Tratar os dois como concluído erra para o lado seguro — o
- * contrário jogaria tarefa concluída na coluna "em andamento".
+ * Agora o padrão é "a fazer", e o motivo é qual afirmação erra menos: com
+ * `include_closed=false` a tarefa comprovadamente NÃO está concluída, e "está
+ * na fila" é a afirmação menos comprometedora que sobra. Dizer "em andamento"
+ * sobre algo que ninguém começou é pior — inventa trabalho.
+ *
+ * `done` está aqui por precaução, não por observação: a documentação usa
+ * `closed` e alguns workspaces relatam `done`. Tratar os dois como concluído
+ * erra para o lado seguro.
  */
 export function faseDoStatus(tipo: string | null | undefined): FaseClickUp {
-  switch (tipo?.toLowerCase()) {
-    case "open":
-      return "afazer";
-    case "closed":
-    case "done":
-      return "concluido";
-    default:
-      return "andamento";
+  if (ehTipoFinal(tipo)) return "concluido";
+  return "afazer";
+}
+
+/**
+ * ============================================================================
+ * VOCABULÁRIO DE FILA — e por que a comparação é por IGUALDADE
+ * ============================================================================
+ * Estes nomes marcam status que ainda são "não comecei". Servem para achar até
+ * onde vai a fila quando a lista tem mais de um status inicial.
+ *
+ * ⚠️ IGUALDADE NORMALIZADA, NUNCA `includes`. Com substring, "pendente de
+ * deploy" — que é trabalho em andamento esperando alguém — voltaria para a
+ * fila, e "backlog técnico" também. O erro seria justamente na direção que
+ * este conserto veio corrigir.
+ *
+ * Acrescentar um nome aqui é uma AFIRMAÇÃO sobre o seu workspace, não um ajuste
+ * estético. Cada entrada diz "um status com este nome exato nunca é trabalho em
+ * curso".
+ */
+const VOCABULARIO_DE_FILA = new Set([
+  "a fazer",
+  "afazer",
+  "to do",
+  "todo",
+  "backlog",
+  "pendente",
+  "pendentes",
+  "aberto",
+  "aberta",
+  "aguardando",
+  "open",
+  "nao iniciado",
+  "nao iniciada",
+]);
+
+/** A base da classificação, para a tela poder mostrá-la. */
+export interface ClassificacaoDeFase {
+  fase: FaseClickUp;
+  /** 1-based dentro dos status da lista. */
+  posicao: number;
+  total: number;
+}
+
+/**
+ * ============================================================================
+ * A FASE PELA POSIÇÃO DO STATUS DENTRO DA LISTA DELE
+ * ============================================================================
+ * `status.type` sozinho não classifica porque o ClickUp só marca UM status como
+ * `open` por lista. O que resta de confiável é a ORDEM: os status de uma lista
+ * vêm ordenados por `orderindex`, do começo do fluxo para o fim.
+ *
+ * A regra, nesta ordem:
+ *
+ *   1. tipo final (`closed`/`done`) → concluído. Direto, sem heurística;
+ *   2. o PRIMEIRO status é sempre "a fazer" — é o `open` do ClickUp;
+ *   3. a fila pode ir além do primeiro: caminha-se para frente enquanto o nome
+ *      bater EXATAMENTE com o vocabulário de fila. O último que bate é a
+ *      fronteira;
+ *   4. tudo depois da fronteira é "em andamento".
+ *
+ * O passo 3 é a única parte heurística, e é contígua de propósito: um "a fazer"
+ * perdido no meio de status de execução não puxa a fronteira até lá.
+ *
+ * ⚠️ DEVOLVE `null` QUANDO NÃO SABE — status não encontrado na lista, ou lista
+ * vazia. Quem chama cai em `faseDoStatus`. Um palpite silencioso aqui seria
+ * indistinguível de uma classificação apurada, e a tela não teria como avisar.
+ *
+ * ⚠️ E NÃO FOI VERIFICADA CONTRA A API REAL. A afirmação "só o primeiro status
+ * vem como `open`" é consistente com o bug observado e com os comentários do
+ * módulo, mas ninguém colou aqui o JSON de um `GET /list/{id}` de verdade. Ver
+ * o roteiro em docs/clickup.md — é o passo que falta.
+ */
+export function faseNaLista(
+  statusDaTarefa: string | null,
+  statusesDaLista: StatusPossivel[] | undefined,
+): ClassificacaoDeFase | null {
+  if (!statusDaTarefa || !statusesDaLista || statusesDaLista.length === 0) return null;
+
+  const alvo = normalizar(statusDaTarefa);
+  const indice = statusesDaLista.findIndex((s) => normalizar(s.status) === alvo);
+  if (indice < 0) return null;
+
+  const total = statusesDaLista.length;
+  const posicao = indice + 1;
+
+  if (ehTipoFinal(statusesDaLista[indice]?.type)) {
+    return { fase: "concluido", posicao, total };
   }
+
+  // Onde a fila termina. Começa em 0 porque o primeiro status é sempre fila.
+  let fronteira = 0;
+  for (let i = 1; i < total; i++) {
+    const s = statusesDaLista[i];
+    if (!s || ehTipoFinal(s.type)) break;
+    if (!VOCABULARIO_DE_FILA.has(normalizar(s.status))) break;
+    fronteira = i;
+  }
+
+  return { fase: indice <= fronteira ? "afazer" : "andamento", posicao, total };
+}
+
+/**
+ * Minúsculas, sem acento, sem espaço nas pontas.
+ *
+ * `semAcento` vem do módulo Conhecimento porque é lá que essa função pura mora
+ * desde que a busca precisou dela — o mesmo caminho que `TasksView` já usa. Uma
+ * segunda implementação de "normalizar texto" é como duas telas passam a achar
+ * coisas diferentes com o mesmo termo.
+ */
+function normalizar(texto: string): string {
+  return semAcento(texto.trim());
+}
+
+/**
+ * Aplica a classificação por lista a uma tarefa já mapeada.
+ *
+ * Segundo passo, e não parâmetro de `mapearTarefa`, por uma razão de ordem: os
+ * status da lista só podem ser buscados DEPOIS de saber quais listas apareceram
+ * no lote, e isso só se sabe depois de ter as tarefas. Enfiar isso no mapper
+ * obrigaria a mapear duas vezes ou a passar um mapa que ainda não existe.
+ */
+export function classificarPelaLista(
+  tarefa: TarefaClickUp,
+  statusesDaLista: StatusPossivel[] | undefined,
+): TarefaClickUp {
+  const c = faseNaLista(tarefa.status, statusesDaLista);
+  if (!c) return tarefa;
+  return { ...tarefa, fase: c.fase, statusPosicao: c.posicao, statusTotal: c.total };
 }
 
 /**
@@ -127,8 +261,12 @@ export function mapearTarefa(crua: TarefaCrua, meuId?: string | number | null): 
     descricao: crua.text_content ?? crua.description ?? null,
     status: crua.status?.status ?? null,
     statusCor: crua.status?.color ?? null,
+    // Fase de RESERVA. `listarTarefasClickUp` reclassifica com os status da
+    // lista de origem logo depois — ver `classificarPelaLista`.
     fase: faseDoStatus(crua.status?.type),
     statusOrdem: typeof crua.status?.orderindex === "number" ? crua.status.orderindex : null,
+    statusPosicao: null,
+    statusTotal: null,
     prazo: msParaIso(crua.due_date),
     prioridade: traduzirPrioridade(crua.priority),
     listaId: crua.list?.id ?? null,
@@ -153,6 +291,10 @@ export function mapearStatus(cru: StatusCru, indice: number): StatusPossivel {
     status: cru.status,
     cor: cru.color ?? null,
     ordem: typeof cru.orderindex === "number" ? cru.orderindex : indice,
+    // Deixou de ser descartado: `faseNaLista` precisa saber qual status é o
+    // final da lista, e o `<select>` do detalhe ganha de brinde a informação de
+    // que aquele status conclui a tarefa.
+    type: cru.type ?? null,
   };
 }
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   agruparPorFase,
   aninharTarefas,
+  classificarPelaLista,
+  faseNaLista,
   faseDoStatus,
   mapearComentario,
   mapearResponsaveis,
@@ -10,7 +12,7 @@ import {
   porPrazo,
   traduzirPrioridade,
 } from "./mapper";
-import type { FaseClickUp, TarefaClickUp } from "./types";
+import type { FaseClickUp, StatusPossivel, TarefaClickUp } from "./types";
 
 /** Uma tarefa já mapeada, para os testes que operam sobre o modelo da tela. */
 function tarefaDeTeste(
@@ -26,6 +28,8 @@ function tarefaDeTeste(
     statusCor: null,
     fase,
     statusOrdem: null,
+    statusPosicao: null,
+    statusTotal: null,
     prazo,
     prioridade: null,
     listaId: null,
@@ -115,8 +119,13 @@ describe("mapearTarefa", () => {
       descricao: "texto puro", // prefere text_content ao markdown
       status: "in progress",
       statusCor: "#00f",
-      fase: "andamento",
+      // Fase de RESERVA, e ela é grosseira de propósito: o mapper não conhece
+      // os status da lista de origem. `listarTarefasClickUp` reclassifica logo
+      // depois, com `classificarPelaLista`.
+      fase: "afazer",
       statusOrdem: 1,
+      statusPosicao: null,
+      statusTotal: null,
       prazo: new Date(1754092800000).toISOString(),
       prioridade: "alta",
       listaId: "l1",
@@ -172,31 +181,166 @@ describe("mapearTarefa", () => {
     expect(tarefa.prioridade).toBeNull();
     expect(tarefa.listaId).toBeNull();
     expect(tarefa.responsaveis).toEqual([]);
-    // Sem `status.type`, a fase cai em "andamento" — ver `faseDoStatus`.
-    expect(tarefa.fase).toBe("andamento");
+    // Sem `status.type`, a fase de reserva é "a fazer" — ver `faseDoStatus`.
+    expect(tarefa.fase).toBe("afazer");
     expect(tarefa.statusOrdem).toBeNull();
+    // E a base da classificação fica NULA, que é como a tela sabe que aquilo
+    // ali é palpite e não apuração.
+    expect(tarefa.statusPosicao).toBeNull();
+    expect(tarefa.statusTotal).toBeNull();
   });
 });
 
-describe("faseDoStatus — o único agrupamento estável entre listas", () => {
-  it("open vira 'a fazer'; closed e done viram 'concluído'", () => {
-    expect(faseDoStatus("open")).toBe("afazer");
+describe("faseDoStatus — o caminho de RESERVA", () => {
+  /*
+    ⚠️ ESTE BLOCO FOI REESCRITO, NÃO AMPLIADO.
+
+    A versão anterior afirmava `custom → andamento` e `null → andamento`, e
+    aquelas asserções travavam a CAUSA RAIZ de um bug real como se fosse
+    contrato: o ClickUp marca como `open` apenas o PRIMEIRO status de cada
+    lista, então numa lista `backlog(open) → a fazer(custom) → fazendo(custom)`
+    o "a fazer" caía em "Em andamento".
+
+    Ampliar o bloco teria deixado o defeito vivo ao lado do conserto.
+  */
+
+  it("tipo final continua sendo concluído — a única parte que não é palpite", () => {
     expect(faseDoStatus("closed")).toBe("concluido");
     // `done` é precaução: a documentação usa `closed`, mas alguns workspaces
     // relatam `done`. Errar para "concluído" é o lado seguro.
     expect(faseDoStatus("done")).toBe("concluido");
-  });
-
-  it("tudo o que fica no MEIO é andamento — inclusive o que ainda não existe", () => {
-    expect(faseDoStatus("custom")).toBe("andamento");
-    expect(faseDoStatus("um_tipo_que_o_clickup_inventar")).toBe("andamento");
-    expect(faseDoStatus(null)).toBe("andamento");
-    expect(faseDoStatus(undefined)).toBe("andamento");
-  });
-
-  it("não depende de maiúsculas", () => {
-    expect(faseDoStatus("OPEN")).toBe("afazer");
     expect(faseDoStatus("Closed")).toBe("concluido");
+  });
+
+  it("`custom` NÃO é mais andamento — era exatamente o bug", () => {
+    // Todo status intermediário do ClickUp é `custom`, inclusive os que são
+    // pura fila. Classificá-los como andamento errava para toda tarefa que não
+    // estivesse no primeiro status da lista.
+    expect(faseDoStatus("custom")).toBe("afazer");
+  });
+
+  it("sem tipo, o padrão é 'a fazer' — a afirmação menos comprometedora", () => {
+    // Com `include_closed=false`, a tarefa comprovadamente não está concluída.
+    // Dizer "em andamento" sobre algo que ninguém começou inventa trabalho.
+    expect(faseDoStatus("open")).toBe("afazer");
+    expect(faseDoStatus("um_tipo_que_o_clickup_inventar")).toBe("afazer");
+    expect(faseDoStatus(null)).toBe("afazer");
+    expect(faseDoStatus(undefined)).toBe("afazer");
+  });
+});
+
+describe("faseNaLista — a fase pela POSIÇÃO do status", () => {
+  /** Os status de uma lista, como `statusDaLista` os devolve (já ordenados). */
+  function lista(...nomes: [string, string][]): StatusPossivel[] {
+    return nomes.map(([status, type], i) => ({ status, type, cor: null, ordem: i }));
+  }
+
+  /** A lista do bug relatado: DOIS status iniciais, e só o primeiro é `open`. */
+  const LISTA_DO_BUG = lista(
+    ["backlog", "open"],
+    ["a fazer", "custom"],
+    ["fazendo", "custom"],
+    ["concluído", "closed"],
+  );
+
+  it("O CASO DO BUG: 'a fazer' é custom e MESMO ASSIM cai em 'a fazer'", () => {
+    expect(faseNaLista("a fazer", LISTA_DO_BUG)?.fase).toBe("afazer");
+  });
+
+  it("o primeiro status é sempre fila, qualquer que seja o nome", () => {
+    expect(faseNaLista("backlog", LISTA_DO_BUG)?.fase).toBe("afazer");
+    const esquisita = lista(["xyz", "open"], ["fazendo", "custom"]);
+    expect(faseNaLista("xyz", esquisita)?.fase).toBe("afazer");
+  });
+
+  it("depois da fronteira é andamento", () => {
+    expect(faseNaLista("fazendo", LISTA_DO_BUG)?.fase).toBe("andamento");
+  });
+
+  it("tipo final vence tudo", () => {
+    expect(faseNaLista("concluído", LISTA_DO_BUG)?.fase).toBe("concluido");
+  });
+
+  it("⚠️ a comparação é por IGUALDADE, nunca por substring", () => {
+    /*
+      "pendente de deploy" é trabalho em andamento esperando alguém. Com
+      `includes`, ele bateria com "pendente" e voltaria para a fila — o erro
+      exatamente na direção que este conserto veio corrigir.
+    */
+    const l = lista(
+      ["backlog", "open"],
+      ["pendente de deploy", "custom"],
+      ["concluído", "closed"],
+    );
+    expect(faseNaLista("pendente de deploy", l)?.fase).toBe("andamento");
+  });
+
+  it("a fronteira é CONTÍGUA — um 'a fazer' perdido no meio não a puxa", () => {
+    const l = lista(
+      ["backlog", "open"],
+      ["fazendo", "custom"],
+      ["a fazer", "custom"], // fora de lugar, e de propósito
+      ["concluído", "closed"],
+    );
+    expect(faseNaLista("fazendo", l)?.fase).toBe("andamento");
+    expect(faseNaLista("a fazer", l)?.fase).toBe("andamento");
+  });
+
+  it("ignora acento e caixa", () => {
+    const l = lista(["Backlog", "open"], ["A FAZER", "custom"], ["Fazendo", "custom"]);
+    expect(faseNaLista("a fazer", l)?.fase).toBe("afazer");
+    expect(faseNaLista("nao iniciada", lista(["Não iniciada", "open"]))?.fase).toBe("afazer");
+  });
+
+  it("devolve a POSIÇÃO e o TOTAL — é o que torna a classificação conferível", () => {
+    // Sem estes números, a tela não teria como mostrar em que a classificação
+    // se baseou, e uma heurística invisível não dá para corrigir.
+    expect(faseNaLista("a fazer", LISTA_DO_BUG)).toEqual({
+      fase: "afazer",
+      posicao: 2,
+      total: 4,
+    });
+  });
+
+  it("devolve NULL quando não sabe, em vez de chutar", () => {
+    // Quem chama cai em `faseDoStatus`, e a tela avisa que a classificação é
+    // palpite. Um chute silencioso aqui seria indistinguível de uma apuração.
+    expect(faseNaLista("status que não está na lista", LISTA_DO_BUG)).toBeNull();
+    expect(faseNaLista("a fazer", [])).toBeNull();
+    expect(faseNaLista("a fazer", undefined)).toBeNull();
+    expect(faseNaLista(null, LISTA_DO_BUG)).toBeNull();
+  });
+
+  it("a fila pode ter mais de dois status", () => {
+    const l = lista(
+      ["backlog", "open"],
+      ["aguardando", "custom"],
+      ["a fazer", "custom"],
+      ["fazendo", "custom"],
+    );
+    expect(faseNaLista("aguardando", l)?.fase).toBe("afazer");
+    expect(faseNaLista("a fazer", l)?.fase).toBe("afazer");
+    expect(faseNaLista("fazendo", l)?.fase).toBe("andamento");
+  });
+});
+
+describe("classificarPelaLista", () => {
+  it("sobrescreve a fase de reserva e carimba a base", () => {
+    const antes = { ...tarefaDeTeste("t", null), status: "fazendo" };
+    expect(antes.fase).toBe("andamento");
+    const depois = classificarPelaLista(antes, [
+      { status: "backlog", type: "open", cor: null, ordem: 0 },
+      { status: "fazendo", type: "custom", cor: null, ordem: 1 },
+    ]);
+    expect(depois.fase).toBe("andamento");
+    expect(depois.statusPosicao).toBe(2);
+    expect(depois.statusTotal).toBe(2);
+  });
+
+  it("sem conseguir classificar, devolve a tarefa INTACTA", () => {
+    const antes = { ...tarefaDeTeste("t", null), status: "fazendo" };
+    expect(classificarPelaLista(antes, undefined)).toBe(antes);
+    expect(classificarPelaLista(antes, []).statusPosicao).toBeNull();
   });
 });
 

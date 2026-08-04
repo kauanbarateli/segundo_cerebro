@@ -133,6 +133,23 @@ export interface TarefaClickUp {
   fase: FaseClickUp;
   /** `status.orderindex` — a ordem do status DENTRO da lista de origem. */
   statusOrdem: number | null;
+  /**
+   * A BASE DA CLASSIFICAÇÃO, para a tela poder mostrá-la.
+   *
+   * `statusPosicao` é 1-based dentro dos status da lista de origem;
+   * `statusTotal`, quantos são. Juntos viram "2º de 5 status em Sprint Backlog"
+   * no `title` da pill.
+   *
+   * ⚠️ Não é enfeite. A regra de fase é HEURÍSTICA — ver `faseNaLista` — e uma
+   * heurística que classifica em silêncio troca um erro sistemático (que se
+   * percebe) por um erro raro e invisível (que não). Estes dois números são o
+   * que torna a classificação conferível sem abrir o código.
+   *
+   * `null` nos dois quando a lista não pôde ser resolvida: aí a tela diz que a
+   * classificação é palpite, em vez de mostrar um número inventado.
+   */
+  statusPosicao: number | null;
+  statusTotal: number | null;
   /** ISO 8601, ou null. A conversão de milissegundos mora em `mapper.ts`. */
   prazo: string | null;
   prioridade: PrioridadeClickUp;
@@ -155,6 +172,12 @@ export interface StatusPossivel {
   status: string;
   cor: string | null;
   ordem: number;
+  /**
+   * `open` | `custom` | `closed` (às vezes `done`). Deixou de ser descartado
+   * porque `faseNaLista` precisa saber onde a lista TERMINA para classificar o
+   * meio — sem o tipo, o último status seria indistinguível de um intermediário.
+   */
+  type: string | null;
 }
 
 /** Perfil devolvido por `identificar` + o workspace escolhido. */

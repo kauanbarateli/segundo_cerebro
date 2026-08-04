@@ -265,7 +265,15 @@ export function ClickUpPanel() {
           )}
         </div>
       ) : visao === "quadro" ? (
-        <ClickUpQuadro tarefas={visiveis} aoAbrir={setAberta} />
+        <ClickUpQuadro
+          tarefas={visiveis}
+          aoAbrir={setAberta}
+          // Com o filtro de lista ativo, o quadro troca as três colunas de fase
+          // pelos status literais daquela lista, na ordem do ClickUp. Aí não há
+          // heurística nenhuma e a coluna está certa por construção — é o modo
+          // a usar quando a classificação por fase parecer errada.
+          listaUnica={filtro.listaId !== null}
+        />
       ) : (
         <ul className="space-y-2">
           {linhas.map(({ tarefa, nivel, orfa }) => (

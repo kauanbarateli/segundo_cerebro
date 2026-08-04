@@ -13,6 +13,8 @@ function tarefa(parcial: Partial<TarefaClickUp> & { id: string }): TarefaClickUp
     statusCor: null,
     fase: "andamento",
     statusOrdem: null,
+    statusPosicao: null,
+    statusTotal: null,
     prazo: null,
     prioridade: null,
     listaId: null,
