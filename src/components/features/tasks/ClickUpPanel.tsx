@@ -13,6 +13,7 @@ import {
   opcoesDeFiltro,
   type FiltroClickUp,
 } from "@/lib/clickup/filtros";
+import { aninharTarefas } from "@/lib/clickup/mapper";
 import type { TarefaClickUp } from "@/lib/clickup/types";
 import { cn } from "@/lib/utils";
 import { CartaoClickUp } from "@/components/features/tasks/CartaoClickUp";
@@ -100,6 +101,17 @@ export function ClickUpPanel() {
     () => filtrarTarefas(tarefas, filtro, Date.now()),
     [tarefas, filtro],
   );
+  /*
+    O aninhamento é aplicado DEPOIS do filtro, sobre o que sobrou. É o que faz
+    filtrar por "Vencidas" e perder a mãe funcionar sem caso especial: a filha
+    vira órfã pela mesma regra que cobre a subtarefa cujo pai é de um colega.
+
+    Só na LISTA. No quadro não há aninhamento: as colunas agrupam por fase, e
+    mãe e filha caem em colunas diferentes com frequência — desenhar um recuo
+    ali afirmaria uma hierarquia dentro de uma coluna que ela não tem. A marca
+    "sub" no cartão continua, e é ela que carrega a informação.
+  */
+  const linhas = useMemo(() => aninharTarefas(visiveis), [visiveis]);
 
   /* ------------------------------------------------------------ carregando */
 
@@ -256,9 +268,21 @@ export function ClickUpPanel() {
         <ClickUpQuadro tarefas={visiveis} aoAbrir={setAberta} />
       ) : (
         <ul className="space-y-2">
-          {visiveis.map((t) => (
-            <li key={t.id}>
-              <CartaoClickUp tarefa={t} aoAbrir={() => setAberta(t)} agora={agora} />
+          {linhas.map(({ tarefa, nivel, orfa }) => (
+            <li
+              key={tarefa.id}
+              // Recuo por estilo, e não por classe: `ml-${n}` do Tailwind precisa
+              // ser literal no código para o compilador encontrar a classe, e
+              // uma escada de casos para um número pequeno é pior que 20 px.
+              style={nivel > 0 ? { marginLeft: nivel * 20 } : undefined}
+            >
+              <CartaoClickUp
+                tarefa={tarefa}
+                aoAbrir={() => setAberta(tarefa)}
+                agora={agora}
+                subtarefa={tarefa.paiId !== null}
+                orfa={orfa}
+              />
             </li>
           ))}
         </ul>

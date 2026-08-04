@@ -43,6 +43,23 @@ export interface TarefaCrua {
   space?: { id: string } | null;
   url?: string | null;
   archived?: boolean | null;
+  /**
+   * Id da tarefa PAI, ou `null` na tarefa de topo.
+   *
+   * `subtasks=true` já era mandado na listagem, mas sem este campo as subtasks
+   * chegavam ACHATADAS — indistinguíveis das tarefas de topo, e sem nada por
+   * onde aninhar.
+   *
+   * ⚠️ Só voltam as subtasks em que VOCÊ é responsável: a API aplica o
+   * `assignees[]` também a elas. Então o pai de uma subtarefa sua pode não estar
+   * no lote (é de um colega), e o contrário também — daí o tratamento de órfã em
+   * `aninharTarefas`.
+   *
+   * `top_level_parent` NÃO é declarado, apesar de a API mandá-lo. Ele daria o id
+   * da raiz, e id sem nome não desenha nada; declarar campo que ninguém lê
+   * contraria o critério do topo deste arquivo.
+   */
+  parent?: string | null;
 }
 
 export interface ComentarioCru {
@@ -123,6 +140,8 @@ export interface TarefaClickUp {
   listaNome: string | null;
   url: string | null;
   responsaveis: ResponsavelClickUp[];
+  /** Id da tarefa pai, quando esta é uma subtarefa. Ver `TarefaCrua.parent`. */
+  paiId: string | null;
 }
 
 export interface ComentarioClickUp {

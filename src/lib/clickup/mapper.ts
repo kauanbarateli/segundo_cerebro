@@ -135,6 +135,7 @@ export function mapearTarefa(crua: TarefaCrua, meuId?: string | number | null): 
     listaNome: crua.list?.name ?? null,
     url: crua.url ?? null,
     responsaveis: mapearResponsaveis(crua.assignees, meuId),
+    paiId: crua.parent ? String(crua.parent) : null,
   };
 }
 
@@ -169,6 +170,82 @@ export function porPrazo(a: TarefaClickUp, b: TarefaClickUp): number {
   if (a.prazo === null) return 1;
   if (b.prazo === null) return -1;
   return a.prazo < b.prazo ? -1 : 1;
+}
+
+/** Uma linha da lista já aninhada. Ver `aninharTarefas`. */
+export interface LinhaClickUp {
+  tarefa: TarefaClickUp;
+  /** 0 = topo da lista exibida. Vira recuo na tela. */
+  nivel: number;
+  /** É subtarefa, mas o pai não veio no lote. */
+  orfa: boolean;
+}
+
+/** Proteção contra recursão: 5 níveis é muito mais do que qualquer uso real. */
+const PROFUNDIDADE_MAXIMA = 5;
+
+/**
+ * Aninha as subtarefas sob as suas mães, achatando numa lista com `nivel`.
+ *
+ * ============================================================================
+ * ⚠️ A ÓRFÃ É O CASO NORMAL AQUI, NÃO A EXCEÇÃO
+ * ============================================================================
+ * A API aplica o filtro `assignees[]` TAMBÉM às subtasks. Então o lote traz as
+ * subtarefas em que você é responsável — e a mãe delas, se for de um colega,
+ * simplesmente não vem. Uma subtarefa cujo `paiId` aponta para fora do lote não
+ * é dado corrompido: é o resultado esperado de "só as minhas".
+ *
+ * Órfã sobe para o topo (senão sumiria da tela) mas continua MARCADA como
+ * subtarefa. Esconder que ela faz parte de algo maior seria perder a única
+ * informação que a distingue.
+ *
+ * O mesmo vale ao filtrar: filtrar por "Vencidas" pode tirar a mãe e deixar a
+ * filha. A filha vira órfã pela mesma regra, sem caso especial.
+ *
+ * ============================================================================
+ * NADA PODE SUMIR
+ * ============================================================================
+ * A varredura final devolve ao topo qualquer tarefa que a travessia não tenha
+ * alcançado — o que só acontece com um ciclo no `parent`. É a diferença entre
+ * "o quadro está estranho" e "a tarefa desapareceu do aplicativo".
+ */
+export function aninharTarefas(tarefas: TarefaClickUp[]): LinhaClickUp[] {
+  const porId = new Map(tarefas.map((t) => [t.id, t]));
+  const filhas = new Map<string, TarefaClickUp[]>();
+
+  for (const t of tarefas) {
+    // Só conta como filha se a MÃE ESTIVER NO LOTE. É o que separa aninhar de
+    // esconder.
+    if (t.paiId !== null && porId.has(t.paiId)) {
+      const lista = filhas.get(t.paiId);
+      if (lista) lista.push(t);
+      else filhas.set(t.paiId, [t]);
+    }
+  }
+
+  const linhas: LinhaClickUp[] = [];
+  const visitadas = new Set<string>();
+
+  function descer(tarefa: TarefaClickUp, nivel: number, orfa: boolean) {
+    if (visitadas.has(tarefa.id)) return;
+    visitadas.add(tarefa.id);
+    linhas.push({ tarefa, nivel, orfa });
+    if (nivel + 1 >= PROFUNDIDADE_MAXIMA) return;
+    for (const filha of filhas.get(tarefa.id) ?? []) descer(filha, nivel + 1, false);
+  }
+
+  // A ordem de entrada é preservada no topo: quem chama já ordenou por prazo.
+  for (const t of tarefas) {
+    const temMaeNoLote = t.paiId !== null && porId.has(t.paiId);
+    if (temMaeNoLote) continue;
+    descer(t, 0, t.paiId !== null);
+  }
+
+  for (const t of tarefas) {
+    if (!visitadas.has(t.id)) linhas.push({ tarefa: t, nivel: 0, orfa: t.paiId !== null });
+  }
+
+  return linhas;
 }
 
 /** As três fases, na ordem do fluxo. É a ordem das colunas do quadro. */

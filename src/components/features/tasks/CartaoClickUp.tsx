@@ -22,11 +22,17 @@ export function CartaoClickUp({
   tarefa,
   aoAbrir,
   compacto = false,
+  subtarefa = false,
+  orfa = false,
   agora,
 }: {
   tarefa: TarefaClickUp;
   aoAbrir: () => void;
   compacto?: boolean;
+  /** Tem mãe. Ganha a marca, aninhada ou não. */
+  subtarefa?: boolean;
+  /** Tem mãe, mas ela não veio no lote — ver `aninharTarefas`. */
+  orfa?: boolean;
   /**
    * O "agora" do render, vindo de fora.
    *
@@ -46,6 +52,30 @@ export function CartaoClickUp({
           onClick={aoAbrir}
           className="min-w-0 flex-1 rounded-sm text-left text-sm font-medium text-ink hover:underline focus-visible:outline-2"
         >
+          {subtarefa && (
+            /*
+              A marca aparece MESMO quando o cartão já está recuado sob a mãe.
+
+              Recuo sozinho não sobrevive a nada: no quadro não há aninhamento
+              (mãe e filha caem em colunas diferentes por fase), e no celular a
+              coluna é estreita demais para o recuo ser legível. E quem usa
+              leitor de tela não ouve margem — ouve texto.
+
+              `title` diferente quando é órfã: ali o recuo não existe mesmo, e a
+              pergunta imediata é "subtarefa de quê?". A resposta honesta é que
+              a mãe não veio, e por quê.
+            */
+            <span
+              title={
+                orfa
+                  ? "Subtarefa. A tarefa mãe não aparece aqui porque você não é responsável por ela."
+                  : "Subtarefa"
+              }
+              className="mr-1.5 rounded-sm border border-line px-1 py-0.5 align-middle text-meta font-normal text-ink-subtle"
+            >
+              sub
+            </span>
+          )}
           {tarefa.nome}
         </button>
         {tarefa.status && (

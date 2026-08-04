@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agruparPorFase,
+  aninharTarefas,
   faseDoStatus,
   mapearComentario,
   mapearResponsaveis,
@@ -31,6 +32,7 @@ function tarefaDeTeste(
     listaNome: null,
     url: null,
     responsaveis: [],
+    paiId: null,
   };
 }
 
@@ -124,7 +126,20 @@ describe("mapearTarefa", () => {
         { id: "1", nome: "Eu", souEu: true },
         { id: "2", nome: "Colega", souEu: false },
       ],
+      paiId: null,
     });
+  });
+
+  it("`parent` vira `paiId`, sempre como string", () => {
+    // Como os ids de usuário, o `parent` chega ora como número, ora como texto.
+    // Um `paiId` numérico nunca casaria com o `id` (string) da mãe no `Map` de
+    // `aninharTarefas`, e toda subtarefa viraria órfã em silêncio.
+    expect(mapearTarefa({ id: "f", name: "filha", parent: "abc" }).paiId).toBe("abc");
+    expect(
+      mapearTarefa({ id: "f", name: "filha", parent: 123 as unknown as string }).paiId,
+    ).toBe("123");
+    expect(mapearTarefa({ id: "t", name: "topo", parent: null }).paiId).toBeNull();
+    expect(mapearTarefa({ id: "t", name: "topo" }).paiId).toBeNull();
   });
 
   it("os responsáveis atravessam, mas o E-MAIL do colega não", () => {
@@ -299,5 +314,83 @@ describe("agruparPorFase — as colunas do quadro", () => {
     ];
     agruparPorFase(entrada);
     expect(entrada.map((t) => t.id)).toEqual(["depois", "antes"]);
+  });
+});
+
+describe("aninharTarefas — subtasks v1", () => {
+  const comPai = (id: string, paiId: string | null): TarefaClickUp => ({
+    ...tarefaDeTeste(id, null),
+    paiId,
+  });
+
+  const forma = (linhas: ReturnType<typeof aninharTarefas>) =>
+    linhas.map((l) => `${"-".repeat(l.nivel)}${l.tarefa.id}${l.orfa ? "(órfã)" : ""}`);
+
+  it("põe a filha logo abaixo da mãe, recuada", () => {
+    expect(forma(aninharTarefas([comPai("mae", null), comPai("filha", "mae")]))).toEqual([
+      "mae",
+      "-filha",
+    ]);
+  });
+
+  it("a filha vai para junto da mãe mesmo vindo antes dela na entrada", () => {
+    expect(forma(aninharTarefas([comPai("filha", "mae"), comPai("mae", null)]))).toEqual([
+      "mae",
+      "-filha",
+    ]);
+  });
+
+  it("ÓRFÃ sobe para o topo, mas continua marcada", () => {
+    /*
+      É o caso NORMAL, não a exceção: a API aplica `assignees[]` também às
+      subtasks, então a subtarefa que é sua chega sem a mãe, que é de um colega.
+      Escondê-la faria a tarefa sumir do aplicativo; desmarcá-la esconderia a
+      única informação que a distingue.
+    */
+    expect(forma(aninharTarefas([comPai("filha", "mae-de-colega")]))).toEqual([
+      "filha(órfã)",
+    ]);
+  });
+
+  it("aninha em mais de um nível", () => {
+    const linhas = aninharTarefas([
+      comPai("a", null),
+      comPai("b", "a"),
+      comPai("c", "b"),
+    ]);
+    expect(forma(linhas)).toEqual(["a", "-b", "--c"]);
+  });
+
+  it("preserva a ordem de entrada no topo — quem chama já ordenou por prazo", () => {
+    const linhas = aninharTarefas([
+      comPai("primeira", null),
+      comPai("segunda", null),
+      comPai("filha-da-primeira", "primeira"),
+    ]);
+    expect(forma(linhas)).toEqual(["primeira", "-filha-da-primeira", "segunda"]);
+  });
+
+  it("um ciclo no `parent` não trava nem some com a tarefa", () => {
+    // Um payload malformado não pode apagar tarefa da tela nem pendurar a aba.
+    const linhas = aninharTarefas([comPai("a", "b"), comPai("b", "a")]);
+    expect(linhas).toHaveLength(2);
+    expect(linhas.map((l) => l.tarefa.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("toda tarefa aparece EXATAMENTE uma vez", () => {
+    const entrada = [
+      comPai("a", null),
+      comPai("b", "a"),
+      comPai("c", "a"),
+      comPai("d", "orfa"),
+      comPai("e", null),
+    ];
+    const linhas = aninharTarefas(entrada);
+    expect(linhas).toHaveLength(entrada.length);
+    expect(new Set(linhas.map((l) => l.tarefa.id)).size).toBe(entrada.length);
+  });
+
+  it("lista vazia devolve lista vazia", () => {
+    expect(aninharTarefas([])).toEqual([]);
   });
 });

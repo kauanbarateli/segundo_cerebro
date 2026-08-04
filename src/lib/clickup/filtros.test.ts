@@ -19,6 +19,7 @@ function tarefa(parcial: Partial<TarefaClickUp> & { id: string }): TarefaClickUp
     listaNome: null,
     url: null,
     responsaveis: [],
+    paiId: null,
     ...parcial,
   };
 }

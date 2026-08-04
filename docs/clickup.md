@@ -17,6 +17,14 @@ que o token permita tudo.
 São oito operações de API no total (`/user`, `/team`, `/team/{id}/task`,
 `/task/{id}`, `/list/{id}`, `/task/{id}/comment` ×2, `PUT /task/{id}`).
 
+A aba tem duas visões — **lista** e **quadro** —, filtra por prazo, lista,
+status, prioridade e responsável, mostra **quem mais está** em cada tarefa e
+**aninha as subtarefas**. Nada disso acrescentou operação nem chamada de rede:
+`assignees`, `status.type`, `status.orderindex` e `parent` já vinham na mesma
+resposta e estavam sendo descartados no mapper. Os filtros operam sobre o cache
+de 60 s que já está em memória — mudar filtro **não** fala com a API, porque a
+cota é da sua conta dentro do workspace da empresa.
+
 ### O que ele **não consegue** fazer
 
 Não "não faz" — **não consegue**, porque o caminho não existe no código:
@@ -94,8 +102,17 @@ src/lib/clickup/
   client.ts            as 8 funções, cada uma montando o próprio corpo
   guard.ts          ⭐ garantirResponsavel() — a invariante I3
   credentials.ts       ler/gravar o token cifrado (admin client)
-  mapper.ts            resposta crua → modelo da UI (datas em ms!)
+  mapper.ts            resposta crua → modelo da UI (datas em ms!),
+                       fase do status e aninhamento de subtarefas
+  filtros.ts           os filtros da aba — puros, e no cliente
   types.ts / erros.ts
+
+src/components/features/tasks/
+  ClickUpPanel.tsx     a aba: busca, cache de 60 s, lista ou quadro
+  ClickUpFiltros.tsx   a barra de filtros
+  ClickUpQuadro.tsx    o quadro por fase, SEM arrastar (leia o cabeçalho)
+  CartaoClickUp.tsx    o cartão, compartilhado pelas duas visões
+  ClickUpTaskSheet.tsx o detalhe: status, descrição, comentários
 
 src/app/(app)/configuracoes/clickup-actions.ts   conectar, testar, desconectar
 src/app/(app)/tarefas/clickup-actions.ts         listar, detalhar, status, comentar
@@ -141,6 +158,33 @@ Estes passos cobrem o que só a execução real mostra.
 > Os três últimos são os que importam. O penúltimo prova a I1; o último prova a
 > I3, que é a única coisa entre este aplicativo e a tarefa de outra pessoa.
 
+### ⚠️ O que ainda não foi observado contra a API real
+
+A integração **nunca falou com o ClickUp de verdade**. Todo `client.ts` e
+`capabilities.ts` é testado com `fetch` interceptado: isso prova o que **sai**
+(rota, método, corpo, cabeçalho), não que a resposta tem o formato que
+`types.ts` declara. Quatro perguntas que só a primeira conexão responde — e
+duas delas mudam o que vale a pena construir depois:
+
+- [ ] **A listagem traz `description` / `text_content`?** `types.ts` afirma que
+      não (`"Só vem em GET /task/{id}"`), mas o exemplo oficial de resposta de
+      `GET /team/{id}/task` inclui os dois. Se vier, o resumo no cartão é de
+      graça; se não vier, exigiria um GET por tarefa e a saída honesta é buscar
+      sob demanda.
+- [ ] **Uma subtarefa sua com mãe de colega aparece?** É a hipótese sobre a qual
+      o tratamento de "órfã" foi construído — e ela é inferência, não algo
+      escrito na documentação.
+- [ ] **Uma subtarefa de colega dentro de uma tarefa sua aparece?** Se aparecer,
+      abri-la será recusado por `garantirResponsavel`, e a interface estaria
+      oferecendo algo que a action nega.
+- [ ] **`assignees[].id` vem número ou string?** O código já trata os dois
+      (`String()` dos dois lados, em `guard.ts` e no mapper), então qualquer
+      resposta serve — mas vale saber qual é.
+
+> Também vale conferir se algum status seu é do tipo `done`: a coluna
+> "Concluído" do quadro só recebe cartão nesse caso, porque a listagem pede
+> `include_closed=false`.
+
 ---
 
 ## Fora de escopo, por escrito
@@ -157,3 +201,7 @@ Registrado para que "não implementamos" seja distinguível de "esquecemos":
 | Webhooks | Só faz sentido com push, que não existe |
 | Persistir tarefas ou comentários | Dados de terceiros em banco pessoal |
 | Fundir com a tabela `tasks` | Contaminaria "Cérebro em ordem" e acoplaria as falhas |
+| **Arrastar no quadro** | Três bloqueios estruturais — leia o cabeçalho de `ClickUpQuadro.tsx`. O resumo: não existe ordenação expressável, cada movimento custa 3 chamadas contra um limite de 10/min, e a coluna de uma lista não é destino válido para o card de outra |
+| **Ver subtarefas de colegas** | Exigiria afrouxar `garantirResponsavel`, que é usada pelas TRÊS actions — relaxar para leitura relaxaria escrita junto. Hoje se vê o que a API devolve: as subtarefas onde você é responsável |
+| Filtrar por "Concluídas" | `include_closed=false` é fixo; o filtro devolveria lista vazia sempre |
+| Escolher espaços (`space_ids`) | A coluna existe e a listagem já a respeita; falta só a tela. Só vale se a lista vier poluída |

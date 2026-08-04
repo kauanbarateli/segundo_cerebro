@@ -110,6 +110,10 @@ export function ClickUpQuadro({
                   aoAbrir={() => aoAbrir(t)}
                   agora={agora}
                   compacto
+                  // Sem aninhamento aqui: mãe e filha caem em colunas diferentes
+                  // sempre que estiverem em fases diferentes, que é o caso
+                  // comum. A marca no cartão carrega a informação sozinha.
+                  subtarefa={t.paiId !== null}
                 />
               ))
             )}
