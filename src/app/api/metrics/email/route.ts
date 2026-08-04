@@ -10,7 +10,9 @@ import {
   semanaAnterior,
   type ContagensDaSemana,
   type JanelaSemanal,
+  type LinhaDoResumo,
 } from "@/lib/metrics";
+import { resumirHabitos, type Habito, type PausaHabito } from "@/lib/habits";
 
 export const dynamic = "force-dynamic";
 
@@ -188,6 +190,88 @@ async function contarDaSemana(
   };
 }
 
+/**
+ * A linha de Hábitos do resumo.
+ *
+ * ⚠️ CONSOME O MESMO `src/lib/habits.ts` QUE A TELA. É o ponto todo daquele
+ * módulo ser puro e não importar `server-only`: duas implementações da mesma
+ * conta é como um dia a tela diz 18, o e-mail diz 19, e ninguém sabe qual está
+ * certo.
+ *
+ * Devolve `[]` quando não há hábito nenhum — a linha simplesmente não aparece,
+ * em vez de dizer "Hábitos: 0 de 0".
+ */
+async function linhaDeHabitos(
+  admin: Admin,
+  userId: string,
+  janela: JanelaSemanal,
+): Promise<LinhaDoResumo[]> {
+  const [habitos, marcacoes, pausas] = await Promise.all([
+    admin
+      .from("habits")
+      .select("id, name, schedule_kind, weekdays, weekly_target, started_on, archived_at")
+      .eq("user_id", userId)
+      .is("archived_at", null),
+    admin
+      .from("habit_entries")
+      .select("habit_id, done_on")
+      .eq("user_id", userId)
+      .gte("done_on", janela.inicio)
+      .lte("done_on", janela.fim),
+    admin
+      .from("habit_pauses")
+      .select("habit_id, starts_on, ends_on")
+      .eq("user_id", userId)
+      .or(`ends_on.is.null,ends_on.gte.${janela.inicio}`),
+  ]);
+
+  const regras = (habitos.data ?? []) as Habito[];
+  if (regras.length === 0) return [];
+
+  const feitos = new Map<string, Set<string>>();
+  for (const m of marcacoes.data ?? []) {
+    const conjunto = feitos.get(m.habit_id) ?? new Set<string>();
+    conjunto.add(m.done_on);
+    feitos.set(m.habit_id, conjunto);
+  }
+
+  /*
+    O "hoje" passado é o ÚLTIMO DIA DA JANELA, não a data real.
+
+    A semana resumida já fechou, então nenhum dia dela está "em aberto" — e
+    `resumirHabitos` usa `hoje` justamente para não contar o dia corrente como
+    falha. Passar a data de verdade (segunda-feira) faria a função tratar a
+    semana inteira como passado, o que é o certo, mas por acidente. Passar o
+    domingo diz a mesma coisa de propósito.
+  */
+  const resumo = resumirHabitos(
+    regras,
+    feitos,
+    janela.inicio,
+    janela.fim,
+    janela.fim,
+    (pausas.data ?? []) as PausaHabito[],
+  );
+
+  const melhor = resumo.porHabito
+    .filter((r) => r.sequenciaAtual > 0)
+    .sort((a, b) => b.sequenciaAtual - a.sequenciaAtual)[0];
+
+  return [
+    {
+      rotulo: "Hábitos",
+      valor: `${resumo.cumpridos} de ${resumo.esperados}`,
+      detalhe: [
+        resumo.taxa !== null ? `${resumo.taxa}%` : null,
+        resumo.falhas > 0 ? `${resumo.falhas} falhas` : null,
+        melhor ? `melhor sequência: ${melhor.habito.name} (${melhor.sequenciaAtual})` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    },
+  ];
+}
+
 async function despachar(request: NextRequest) {
   // 1. AUTORIZAÇÃO, antes de tudo. Ver o cabeçalho.
   const cron = verificarSegredoDeCron(request);
@@ -252,7 +336,7 @@ async function despachar(request: NextRequest) {
     }
 
     const contagens = await contarDaSemana(admin, usuario.id, janela, agora.toISOString());
-    const resumo = montarResumo(janela, contagens);
+    const resumo = montarResumo(janela, contagens, await linhaDeHabitos(admin, usuario.id, janela));
     const corpo = corpoDoEmail(resumo);
 
     const envio = await enviarEmail({

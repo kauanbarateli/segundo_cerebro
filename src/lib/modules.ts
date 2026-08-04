@@ -65,6 +65,26 @@ export const MODULES: ModuleDef[] = [
     core: false,
     description: "Cadernos, páginas e busca no que você escreveu.",
   },
+  /*
+    ⚠️ A POSIÇÃO NESTE ARRAY DECIDE A BARRA DO CELULAR.
+
+    `MobileNavigation` mostra os `MAX_VISIBLE` primeiros; o resto vai para
+    "Mais". Hábitos entra ANTES de Financeiro e Cofre porque é o único módulo
+    de gesto DIÁRIO — marcar o que foi feito hoje —, e um módulo de rotina que
+    exige três toques para ser alcançado deixa de ser rotina.
+
+    Antes desta linha, "Mais" era um atalho para Configurações e os módulos
+    excedentes ficavam INALCANÇÁVEIS no celular. Isso foi corrigido junto (ver
+    `MobileNavigation`), então a posição hoje decide conveniência, não acesso.
+  */
+  {
+    key: "habitos",
+    label: "Hábitos",
+    href: "/habitos",
+    icon: "Repeat",
+    core: false,
+    description: "O que você faz todo dia, e o que falhou.",
+  },
   {
     key: "financeiro",
     label: "Financeiro",

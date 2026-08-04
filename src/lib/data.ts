@@ -19,6 +19,9 @@ import type {
   DriveFolder,
   DriveFile,
   DriveUsage,
+  Habit,
+  HabitEntry,
+  HabitPause,
   KnowledgeNotebook,
   KnowledgePage,
   KnowledgePageNode,
@@ -1260,3 +1263,62 @@ export const getClickUpVerificadoEm = cache(async (): Promise<string | null> => 
   const conta = await lerConta(ctx.userId);
   return conta?.last_checked_at ?? null;
 });
+
+/* ------------------------------------------------------------- Hábitos --- */
+
+/**
+ * Os hábitos ATIVOS, na ordem da tela.
+ *
+ * ⚠️ `archived_at is null` é repetido aqui de propósito, e não é redundância
+ * com o índice: `habits_ativos_idx` é PARCIAL, e o planejador só o usa quando o
+ * predicado aparece na consulta. Sem esta linha o índice existe e não serve.
+ */
+export async function getHabits(): Promise<Habit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("habits")
+    .select("*")
+    .is("archived_at", null)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  return (data as Habit[] | null) ?? [];
+}
+
+/**
+ * As marcações desde `de` (inclusive).
+ *
+ * ⚠️ TRAZ AS LINHAS, NÃO UM AGREGADO — e a janela é o que mantém isso barato.
+ * `melhorSequencia` precisa do histórico inteiro do hábito para achar o maior
+ * trecho, mas a tela só mostra os últimos 90 dias; puxar tudo desde sempre
+ * cresceria sem teto. O painel calcula a melhor sequência DENTRO da janela
+ * carregada, e a janela é escolhida por quem chama.
+ *
+ * Registro esparso ajuda: são poucas linhas por hábito por período, e não uma
+ * por dia. Noventa dias de cinco hábitos são no máximo 450 linhas.
+ */
+export async function getHabitEntries(de: string): Promise<HabitEntry[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("habit_entries")
+    .select("*")
+    .gte("done_on", de)
+    .order("done_on", { ascending: true });
+  return (data as HabitEntry[] | null) ?? [];
+}
+
+/**
+ * As pausas que ALCANÇAM a janela.
+ *
+ * A condição é "não terminou antes do começo da janela" — o que inclui as
+ * pausas ainda em curso (`ends_on is null`). Filtrar por `starts_on >= de`
+ * perderia justamente a pausa que começou no mês passado e continua valendo.
+ */
+export async function getHabitPauses(de: string): Promise<HabitPause[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("habit_pauses")
+    .select("*")
+    .or(`ends_on.is.null,ends_on.gte.${de}`)
+    .order("starts_on", { ascending: true });
+  return (data as HabitPause[] | null) ?? [];
+}

@@ -541,3 +541,51 @@ export interface ClickUpConnection {
   workspaceName: string | null;
   status: ClickUpAccountStatus;
 }
+
+/* ------------------------------------------------------------- Hábitos --- */
+
+export type HabitScheduleKind = "daily" | "weekdays" | "weekly_target";
+
+export interface Habit {
+  id: string;
+  user_id: string;
+  name: string;
+  color_key: string;
+  icon_key: string | null;
+  schedule_kind: HabitScheduleKind;
+  /** 0=domingo..6=sábado. Mesma numeração de `extract(dow)`. */
+  weekdays: number[];
+  weekly_target: number | null;
+  started_on: string;
+  archived_at: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * ⚠️ REGISTRO ESPARSO: existe linha SÓ quando o dia foi cumprido. Não há campo
+ * `feito`, e "falhou" não é uma linha — é a ausência dela, derivada da regra em
+ * `src/lib/habits.ts`. Ver o cabeçalho da migration 0018.
+ */
+export interface HabitEntry {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  /** Dia CIVIL "AAAA-MM-DD" no fuso do aplicativo. Nunca instante. */
+  done_on: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface HabitPause {
+  id: string;
+  user_id: string;
+  /** `null` = pausa geral, vale para todos os hábitos. */
+  habit_id: string | null;
+  starts_on: string;
+  /** `null` = ainda em curso. */
+  ends_on: string | null;
+  reason: string | null;
+  created_at: string;
+}

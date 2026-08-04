@@ -168,6 +168,13 @@ export const Icon = {
       <path d="M5 13 7 5h10l2 8v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z" />
     </svg>
   ),
+  /** Hábitos: o ciclo que se repete. */
+  Repeat: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base(p)}>
+      <path d="M4 11a7 7 0 0 1 11.9-5M20 13A7 7 0 0 1 8.1 18" />
+      <path d="M16 3v3.5h-3.5M8 21v-3.5h3.5" />
+    </svg>
+  ),
   /** Responsáveis de uma tarefa do ClickUp. */
   User: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base(p)}>

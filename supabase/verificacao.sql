@@ -51,7 +51,11 @@ select
           where table_schema = 'public'
             and table_name = 'google_oauth_credentials'
             and column_name = 'key_id')               as "0015_key_id",
-  to_regclass('public.clickup_accounts')  is not null as "0016_clickup";
+  to_regclass('public.clickup_accounts')  is not null as "0016_clickup",
+  to_regclass('public.projects')          is not null as "0017_projetos",
+  to_regclass('public.habits')            is not null as "0018_habitos",
+  to_regclass('public.metric_email_deliveries')
+                                          is not null as "0019_email_metricas";
 
 
 -- -----------------------------------------------------------------------------
@@ -298,6 +302,87 @@ select
   has_table_privilege('anon',          'public.clickup_credentials', 'select') as anon_le_cred,
   has_table_privilege('authenticated', 'public.clickup_credentials', 'select') as auth_le_cred,
   has_table_privilege('anon',          'public.clickup_accounts',    'select') as anon_le_contas;
+
+
+-- -----------------------------------------------------------------------------
+-- BLOCO 15 — Hábitos (0018): a tabela nasceu fechada e a trigger de dono está lá?
+--
+-- ⚠️ O número segue a numeração do PLANO (Projetos = 14, Hábitos = 15), e por
+-- isso o 14 aparece DEPOIS deste arquivo se Projetos ainda não foi aplicado.
+-- Os números são estáveis por decisão registrada no topo: documentos citam
+-- blocos por número, e renumerar quebraria referência escrita em outro lugar.
+--
+-- Rode DEPOIS de aplicar a 0018.
+--
+-- O QUE CADA COLUNA DEVE MOSTRAR:
+--   rls_*            → t nas três. RLS desligada torna a policy decorativa.
+--   policies_*       → 4 em cada (select, insert, update, delete).
+--   anon_le_*        → f nas três. A 0014 varreu o que EXISTIA; tabela nova
+--                      nasce alcançável pelo default do Supabase.
+--   trigger_dono_*   → t nas duas. A FK garante que o hábito EXISTE; não
+--                      garante que é SEU — a checagem de FK roda como dono e
+--                      ignora a RLS.
+--   func_anon_exec   → f. Função nova não vem no bloco em lote de grants.
+-- -----------------------------------------------------------------------------
+select
+  (select relrowsecurity from pg_class
+    where oid = 'public.habits'::regclass)                            as rls_habits,
+  (select relrowsecurity from pg_class
+    where oid = 'public.habit_entries'::regclass)                     as rls_entries,
+  (select relrowsecurity from pg_class
+    where oid = 'public.habit_pauses'::regclass)                      as rls_pauses,
+
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'habits')             as policies_habits,
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'habit_entries')      as policies_entries,
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'habit_pauses')       as policies_pauses,
+
+  has_table_privilege('anon', 'public.habits',        'select')       as anon_le_habits,
+  has_table_privilege('anon', 'public.habit_entries', 'select')       as anon_le_entries,
+  has_table_privilege('anon', 'public.habit_pauses',  'select')       as anon_le_pauses,
+
+  exists (select 1 from pg_trigger
+          where tgname = 'trg_habit_entries_dono' and not tgisinternal)
+                                                                      as trigger_dono_entries,
+  exists (select 1 from pg_trigger
+          where tgname = 'trg_habit_pauses_dono' and not tgisinternal)
+                                                                      as trigger_dono_pauses,
+
+  has_function_privilege('anon', 'public.habit_pertence_ao_usuario()', 'execute')
+                                                                      as func_anon_exec;
+
+-- O índice único de nome é o que impede dois "Ler" mostrando duas sequências
+-- para o que a pessoa pensa ser uma coisa só. Deve devolver UMA linha.
+select indexname from pg_indexes
+where schemaname = 'public' and tablename = 'habits' and indexname = 'habits_nome_unico_idx';
+
+
+-- -----------------------------------------------------------------------------
+-- BLOCO 16 — E-mail semanal (0019): a trava de idempotência existe?
+--
+-- ⚠️ `unique_idempotencia` é a razão de a tabela existir. Sem ela, um segundo
+-- disparo do cron reenvia o e-mail da mesma semana.
+--
+-- `authenticated` tem SELECT e NÃO tem INSERT de propósito: quem escreve é o
+-- cron via service_role. Um insert forjado pelo navegador reservaria a semana e
+-- o e-mail daquela semana nunca sairia.
+-- -----------------------------------------------------------------------------
+select
+  (select relrowsecurity from pg_class
+    where oid = 'public.metric_email_deliveries'::regclass)           as rls_ligada,
+  exists (select 1 from pg_constraint
+          where conname = 'metric_email_deliveries_unique')           as unique_idempotencia,
+  has_table_privilege('anon',          'public.metric_email_deliveries', 'select') as anon_le,
+  has_table_privilege('authenticated', 'public.metric_email_deliveries', 'select') as auth_le,
+  has_table_privilege('authenticated', 'public.metric_email_deliveries', 'insert') as auth_escreve;
+
+-- O que ainda não foi entregue. Vazio é o esperado.
+select period_start, destination, error
+from public.metric_email_deliveries
+where delivered_at is null
+order by period_start desc;
 
 
 -- -----------------------------------------------------------------------------

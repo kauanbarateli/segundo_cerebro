@@ -9,12 +9,17 @@ import { TaskCheckbox } from "@/components/features/tasks/TasksView";
 import { CalendarEventCard } from "@/components/features/calendar/CalendarEventCard";
 import { SocialLinkIcon } from "@/components/features/social/SocialLinkIcon";
 import { rotuloDaConta, tomDaConta } from "@/lib/calendar-colors";
+import { HabitsTodayCard } from "@/components/features/habits/HabitsTodayCard";
+import { somarDias } from "@/lib/habits";
 import {
   getAppContext,
   getCalendarAccounts,
   getCaptures,
   getCategories,
   getEventsForToday,
+  getHabitEntries,
+  getHabitPauses,
+  getHabits,
   getSocialLinks,
   getTasks,
 } from "@/lib/data";
@@ -27,6 +32,7 @@ import {
   plural,
   startOfDay,
   endOfDay,
+  dayRangeInTimeZone,
   cn,
 } from "@/lib/utils";
 export default async function HomePage() {
@@ -37,14 +43,33 @@ export default async function HomePage() {
   // depois: a leitura não depende de nenhuma das outras, então esperá-la em
   // série acrescentaria uma ida e volta HTTP inteira ao caminho crítico da
   // página mais visitada do aplicativo — para trazer, no máximo, oito linhas.
-  const [tasks, captures, categories, accounts, events, socialLinks] = await Promise.all([
-    getTasks(),
-    getCaptures(),
-    getCategories(),
-    getCalendarAccounts(),
-    getEventsForToday(),
-    getSocialLinks(),
-  ]);
+  /*
+    ⚠️ HÁBITOS ENTRA AQUI, E NÃO NUM `await` DEPOIS.
+
+    Sem marcação rápida no Início, o módulo existe e não entra na rotina: esta
+    é a tela que abre primeiro, e um hábito que exige navegar para outra página
+    é um hábito que se esquece.
+
+    As leituras vão condicionadas ao módulo estar ligado — ver `mostrarHabitos`.
+    Ler assim mesmo com o módulo desligado seriam três consultas para desenhar
+    nada.
+  */
+  const mostrarHabitos = ctx.enabledModules.has("habitos");
+  const { dayKey: hojeCivil } = dayRangeInTimeZone(new Date(), "America/Sao_Paulo");
+  const inicioDosHabitos = somarDias(hojeCivil, -29);
+
+  const [tasks, captures, categories, accounts, events, socialLinks, habitos, marcacoes, pausas] =
+    await Promise.all([
+      getTasks(),
+      getCaptures(),
+      getCategories(),
+      getCalendarAccounts(),
+      getEventsForToday(),
+      getSocialLinks(),
+      mostrarHabitos ? getHabits() : Promise.resolve([]),
+      mostrarHabitos ? getHabitEntries(inicioDosHabitos) : Promise.resolve([]),
+      mostrarHabitos ? getHabitPauses(inicioDosHabitos) : Promise.resolve([]),
+    ]);
 
   const now = new Date();
   const todayStart = startOfDay(now).getTime();
@@ -269,6 +294,20 @@ export default async function HomePage() {
               </div>
             )}
           </Card>
+
+          {/*
+            ⚠️ O `mostrarHabitos` é a terceira edição, e é a que costuma ser
+            esquecida: sem ela, desligar o módulo tira o link da barra lateral e
+            o cartão continua na tela inicial — o interruptor passaria a mentir.
+          */}
+          {mostrarHabitos && (
+            <HabitsTodayCard
+              habitos={habitos}
+              marcacoes={marcacoes}
+              pausas={pausas}
+              hoje={hojeCivil}
+            />
+          )}
 
           {/* Resumo do cérebro */}
           <Card className="p-5">

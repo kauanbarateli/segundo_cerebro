@@ -880,3 +880,97 @@ export const socialLinkReorderSchema = z.object({
     .max(LIMITE_DE_LINKS, `São no máximo ${LIMITE_DE_LINKS} links`)
     .refine((ids) => new Set(ids).size === ids.length, "A nova ordem tem links repetidos"),
 });
+
+/* ------------------------------------------------------------- Hábitos --- */
+
+/**
+ * Um dia CIVIL, "AAAA-MM-DD".
+ *
+ * ⚠️ A validação de FORMATO não basta, e a segunda parte é a que importa:
+ * "2026-02-31" casa com a expressão regular e não existe. Sem o `refine`, ele
+ * chegaria ao Postgres, que recusaria com "date/time field value out of range"
+ * — erro cru em inglês num toast em português. E "2026-13-01" viraria 2027.
+ */
+export const diaCivilSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")
+  .refine((v) => {
+    const [a, m, d] = v.split("-").map(Number);
+    const data = new Date(Date.UTC(a!, m! - 1, d!));
+    // Ida e volta: se a data normalizada não bate com a entrada, o dia não
+    // existe naquele mês.
+    return data.toISOString().slice(0, 10) === v;
+  }, "Data inválida");
+
+const cadenciaSchema = z.enum(["daily", "weekdays", "weekly_target"]);
+
+/**
+ * Criar ou editar um hábito.
+ *
+ * O `superRefine` repete no cliente as duas CHECK constraints da 0018. Não é
+ * duplicação inútil: o banco recusaria com "violates check constraint
+ * habits_weekly_target_coerente", que não é frase para mostrar a ninguém — e a
+ * validação aqui evita a ida ao banco. O banco continua sendo a autoridade;
+ * isto é a tradução.
+ */
+export const habitSchema = z
+  .object({
+    name: z.string().trim().min(1, "Dê um nome ao hábito").max(80, "Máximo de 80 caracteres"),
+    colorKey: z.string().trim().max(30).optional().default("stone"),
+    scheduleKind: cadenciaSchema.default("daily"),
+    weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
+    weeklyTarget: z.coerce.number().int().min(1).max(7).nullable().optional(),
+    startedOn: diaCivilSchema,
+  })
+  .superRefine((v, ctx) => {
+    if (v.scheduleKind === "weekdays" && v.weekdays.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["weekdays"],
+        message: "Escolha pelo menos um dia da semana",
+      });
+    }
+    if (v.scheduleKind === "weekly_target" && !v.weeklyTarget) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["weeklyTarget"],
+        message: "Diga quantas vezes por semana",
+      });
+    }
+  })
+  .transform((v) => ({
+    ...v,
+    // Zera o que não pertence à cadência escolhida. Sem isto, trocar de
+    // `weekdays` para `daily` deixaria os dias antigos gravados, e a CHECK do
+    // banco recusaria a atualização com uma mensagem que ninguém entende.
+    weekdays: v.scheduleKind === "weekdays" ? [...new Set(v.weekdays)].sort() : [],
+    weeklyTarget: v.scheduleKind === "weekly_target" ? (v.weeklyTarget ?? null) : null,
+  }));
+
+/** Marcar ou desmarcar um dia. */
+export const habitToggleSchema = z.object({
+  habitId: z.string().uuid(ID_INVALIDO),
+  /**
+   * O dia vem do CLIENTE, e é de propósito: só o navegador sabe em que dia a
+   * pessoa está. `current_date` no servidor gravaria o dia errado toda noite
+   * depois das 21h (a Vercel roda em UTC).
+   *
+   * O teto de distância é a contrapartida: sem ele, um cliente adulterado
+   * marcaria o ano 3000 e o painel passaria a mostrar sequência de mil dias.
+   */
+  dia: diaCivilSchema,
+});
+
+/** Uma pausa (férias, doença). */
+export const habitPauseSchema = z
+  .object({
+    habitId: z.string().uuid(ID_INVALIDO).nullable().optional(),
+    startsOn: diaCivilSchema,
+    endsOn: diaCivilSchema.nullable().optional(),
+    reason: textoOpcional(200),
+  })
+  .refine((v) => !v.endsOn || v.endsOn >= v.startsOn, {
+    path: ["endsOn"],
+    message: "O fim não pode ser antes do começo",
+  });
