@@ -15,6 +15,8 @@ import { TaskBoard } from "@/components/features/tasks/TaskBoard";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
 import { ClickUpPanel } from "@/components/features/tasks/ClickUpPanel";
+import { useBuscaAplicavel, useTermoDeBusca } from "@/components/layout/BuscaNaPagina";
+import { semAcento } from "@/lib/knowledge";
 import type { Category, ClickUpConnection, Task, TaskPriority } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
 import { formatDayLabel, formatTime, cn } from "@/lib/utils";
@@ -117,10 +119,45 @@ export function TasksView({
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
 
+  /*
+    A BUSCA NÃO ALCANÇA A ABA DO CLICKUP, e a linha abaixo é o que garante isso —
+    o campo do cabeçalho some quando aquela aba está aberta.
+
+    Três motivos, e o primeiro sozinho já bastaria:
+
+      1. A lista do ClickUp é TRUNCADA nas primeiras 500. Dizer "nada
+         encontrado" sobre uma tarefa que existe e não veio é uma resposta
+         falsa, e quem lê não tem como saber.
+      2. Na primeira montagem daquela aba a lista está vazia por uma rede
+         inteira — buscar ali devolveria vazio por um motivo que nada tem a ver
+         com o termo.
+      3. É exatamente o defeito das pills, que acabou de ser corrigido logo
+         abaixo. Repeti-lo com a busca seria trocar uma affordance falsa por
+         outra.
+
+    A aba do ClickUp tem o filtro dela, dentro do painel.
+  */
+  useBuscaAplicavel(view !== "clickup");
+  const termoDeBusca = useTermoDeBusca();
+
   const filtered = useMemo(() => {
     const todayStart = startOfDay(new Date()).getTime();
     const todayEnd = endOfDay(new Date()).getTime();
+    /*
+      `semAcento` dos DOIS lados: sem isso, "reuniao" não acha "reunião" — e
+      quem digita rápido não põe acento. É o mesmo helper que a busca do
+      Conhecimento usa, já testado.
+
+      Busca em `title` e `description`. Não existe campo `notes` na tabela.
+    */
+    const alvo = semAcento(termoDeBusca.trim());
     return tasks.filter((t) => {
+      if (alvo.length > 0) {
+        const casa =
+          semAcento(t.title).includes(alvo) ||
+          semAcento(t.description ?? "").includes(alvo);
+        if (!casa) return false;
+      }
       const when = t.due_at ?? t.scheduled_start_at;
       const ts = when ? new Date(when).getTime() : null;
       switch (filter) {
@@ -136,7 +173,9 @@ export function TasksView({
           return catById.get(t.category_id ?? "") === filter;
       }
     });
-  }, [tasks, filter, catById]);
+  }, [tasks, filter, catById, termoDeBusca]);
+
+  const buscando = termoDeBusca.trim().length > 0;
 
   function openCreate() {
     setEditing(null);
@@ -266,16 +305,27 @@ export function TasksView({
       )}
 
       {view === "list" && filtered.length === 0 ? (
-        <EmptyState
-          icon="Tasks"
-          title="Nenhuma tarefa aqui"
-          description="Crie uma tarefa manual para começar a organizar o que importa."
-          action={
-            <Button variant="secondary" size="sm" onClick={openCreate}>
-              Nova tarefa
-            </Button>
-          }
-        />
+        /* Vazio por BUSCA e vazio por não ter tarefa são coisas diferentes, e
+           oferecer "Nova tarefa" a quem está procurando uma existente é
+           responder outra pergunta. */
+        buscando ? (
+          <EmptyState
+            icon="Search"
+            title={`Nenhuma tarefa para “${termoDeBusca.trim()}”`}
+            description="A busca olha o título e a descrição, e ignora acentos. Os filtros acima também estão valendo."
+          />
+        ) : (
+          <EmptyState
+            icon="Tasks"
+            title="Nenhuma tarefa aqui"
+            description="Crie uma tarefa manual para começar a organizar o que importa."
+            action={
+              <Button variant="secondary" size="sm" onClick={openCreate}>
+                Nova tarefa
+              </Button>
+            }
+          />
+        )
       ) : view === "list" ? (
         <>
           {/* Desktop table */}

@@ -113,6 +113,32 @@ export default async function ConhecimentoPage({
         title="O que você aprendeu, escrito."
         subtitle="Cadernos, páginas aninhadas e busca no texto inteiro."
         user={{ name: ctx.displayName, avatarUrl: ctx.avatarUrl }}
+        /*
+          A busca subiu para o cabeçalho. Antes ficava aqui embaixo, e o
+          `PageHeader` desenhava logo acima dela um campo decorativo idêntico
+          que não fazia nada — duas barras de busca a um dedo de distância, uma
+          funcionando e outra não.
+
+          Continua sendo o MESMO componente e o mesmo mecanismo: o termo vai
+          para o `?q=` da URL e quem busca é `searchKnowledge` no servidor. Só o
+          lugar na tela mudou.
+
+          Fica FORA do `cadernos.length === 0`: sem caderno não há o que buscar,
+          e um campo de busca ao lado de "Nenhum caderno ainda" convidaria a
+          procurar o que se sabe não existir.
+        */
+        busca={
+          cadernos.length > 0 ? (
+            <KnowledgeSearch
+              termo={termo}
+              cadernoAtivoId={cadernoAtivo}
+              // `null` quando não há termo: é o que separa "ainda não busquei"
+              // de "busquei e não achei". Mostrar "nenhum resultado" para quem
+              // nem digitou é o erro clássico deste tipo de tela.
+              total={termo.length > 0 ? resultados.length : null}
+            />
+          ) : undefined
+        }
       />
 
       {cadernos.length === 0 ? (
@@ -132,15 +158,6 @@ export default async function ConhecimentoPage({
           />
 
           <section className="min-w-0 space-y-4">
-            <KnowledgeSearch
-              termo={termo}
-              cadernoAtivoId={cadernoAtivo}
-              // `null` quando não há termo: é o que separa "ainda não busquei"
-              // de "busquei e não achei". Mostrar "nenhum resultado" para quem
-              // nem digitou é o erro clássico deste tipo de tela.
-              total={termo.length > 0 ? resultados.length : null}
-            />
-
             {termo.length > 0 ? (
               resultados.length === 0 ? (
                 <EmptyState

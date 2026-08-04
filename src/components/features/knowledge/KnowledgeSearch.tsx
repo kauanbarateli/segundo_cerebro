@@ -3,9 +3,20 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icons";
+import { CLASSE_DO_CAMPO_DE_BUSCA } from "@/components/ui/estilos";
 
 /**
  * CAMPO DE BUSCA do módulo Conhecimento.
+ *
+ * MORA NO CABEÇALHO desde que a barra decorativa do `PageHeader` foi removida.
+ * Antes as duas apareciam juntas nesta rota — a falsa em cima, esta logo abaixo
+ * —, e era o defeito de interface mais visível do aplicativo.
+ *
+ * A contagem (`aria-live`) veio JUNTO, e não ficou no corpo da página. A
+ * separação exigiria levantar o estado de "buscando" para um contexto de
+ * cliente envolvendo cabeçalho e resultados; o que se ganharia são 18 px de
+ * altura no cabeçalho. E a contagem logo abaixo do campo em que se acabou de
+ * digitar é onde o olho já está.
  *
  * O TERMO MORA NA URL, e não em estado deste componente. É o que faz o resultado
  * ser compartilhável, voltar com o botão "voltar" do navegador e — detalhe que
@@ -138,9 +149,9 @@ export function KnowledgeSearch({
             name="q"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
-            placeholder="Buscar em todos os cadernos"
+            placeholder="Buscar nos cadernos"
             maxLength={200}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface pl-9 pr-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+            className={CLASSE_DO_CAMPO_DE_BUSCA}
           />
         </label>
         {/* O botão fica SEMPRE na tela, e não dentro de um `<noscript>`.
@@ -152,9 +163,16 @@ export function KnowledgeSearch({
             esperar. */}
         <button
           type="submit"
-          className="h-10 shrink-0 rounded-md border border-line-strong px-4 text-sm font-medium text-ink hover:bg-surface-muted"
+          aria-label="Buscar"
+          title="Buscar"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line-strong text-ink hover:bg-surface-muted"
         >
-          Buscar
+          {/* Só o ícone desde a mudança para o cabeçalho: ali a largura é do
+              tamanho de um campo, não de uma coluna, e "Buscar" escrito ao lado
+              de um campo que já diz "Buscar nos cadernos" gastava um terço do
+              espaço para repetir a palavra. O `aria-label` mantém o botão
+              nomeado para quem não vê o ícone. */}
+          <Icon.Search aria-hidden="true" width={16} height={16} />
         </button>
       </form>
 

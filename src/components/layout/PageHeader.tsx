@@ -11,47 +11,76 @@ export interface HeaderUser {
 
 /**
  * Cabeçalho global: eyebrow, título, subtítulo + busca / tema / capturar /
- * avatar. Recebe o usuário inteiro (antes recebia só a inicial, duplicada em
- * 7 páginas).
+ * avatar.
+ *
+ * ============================================================================
+ * A BUSCA É UM SLOT, E NÃO UM BOOLEANO — o porquê importa
+ * ============================================================================
+ * Aqui existia um `<input type="search">` fixo: sem `name`, sem `value`, sem
+ * `onChange`, sem `<form>` em volta. Ele não fazia absolutamente nada, em DOZE
+ * rotas. Em `/conhecimento` era pior que inútil: aparecia logo acima da
+ * `KnowledgeSearch`, que é a busca de verdade — duas barras, uma funcionando e
+ * outra não, a um dedo de distância.
+ *
+ * Um `mostrarBusca?: boolean` resolveria metade: a barra sumiria de onde não
+ * serve e continuaria decorativa onde ficasse. Este arquivo é Componente de
+ * SERVIDOR e não pode ter `useState` nem `onChange` — a busca é interação, e
+ * interação mora num componente de cliente.
+ *
+ * Então a prop recebe o componente PRONTO. Quem tem busca passa o seu; as dez
+ * rotas que não têm não mudam uma linha, porque a prop simplesmente não é
+ * passada. E cada página fica livre para levar o termo para a URL
+ * (`/conhecimento`, onde a ida ao servidor É a busca) ou mantê-lo no cliente
+ * (`/tarefas`, onde ir ao servidor não traria nada).
+ *
+ * A prop `right`, que seguia este mesmo padrão, saiu junto: `grep -rn 'right={'
+ * src` não retornava nenhuma ocorrência. Era código morto desde que foi escrita.
+ *
+ * ============================================================================
+ * O LAYOUT, E POR QUE ELE É `flex-wrap` COM `order`
+ * ============================================================================
+ * A barra antiga era `hidden lg:block` — nunca apareceu abaixo de 1024px. Como
+ * ela não fazia nada, ninguém sentiu falta; com busca de verdade, esconder no
+ * celular tiraria a busca justamente de onde a lista mobile é a visão
+ * principal.
+ *
+ * Mas empilhar o campo na mesma linha do título e dos botões, num telefone, não
+ * cabe. A saída é UMA instância só, reposicionada por CSS: no celular ela quebra
+ * para a linha de baixo (`w-full`, `order-3`); a partir de `lg` ela volta para o
+ * meio da linha (`order-2`), antes do seletor de tema.
+ *
+ * ⚠️ Renderizar o slot duas vezes (uma visível no celular, outra no desktop)
+ * seria mais simples de escrever e ERRADO: dois componentes de cliente
+ * independentes, com estado próprio e `id` duplicado no DOM. Digitar em um não
+ * apareceria no outro.
  */
 export function PageHeader({
   eyebrow,
   title,
   subtitle,
   user,
-  right,
+  busca,
 }: {
   eyebrow: string;
   title: ReactNode;
   subtitle?: string;
   user: HeaderUser;
-  right?: ReactNode;
+  /** O campo de busca DESTA página, já montado. Ver o bloco acima. */
+  busca?: ReactNode;
 }) {
   return (
     <header className="mb-8">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="order-1 min-w-0 flex-1">
           <p className="eyebrow">{eyebrow}</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-ink sm:text-5xl">{title}</h1>
           {subtitle && <p className="mt-2 text-corpo-forte text-ink-muted">{subtitle}</p>}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <label className="relative hidden lg:block">
-            <span className="sr-only">Buscar</span>
-            <Icon.Search
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
-              width={16}
-              height={16}
-            />
-            <input
-              type="search"
-              placeholder="Buscar"
-              className="h-10 w-56 rounded-md border border-line-strong bg-surface pl-9 pr-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
-            />
-          </label>
+        {busca && <div className="order-3 w-full lg:order-2 lg:w-80">{busca}</div>}
+
+        <div className="order-2 flex shrink-0 items-center gap-2 lg:order-3">
           <ThemeToggle />
-          {right}
           <Link
             href="/capturar"
             className="flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90"

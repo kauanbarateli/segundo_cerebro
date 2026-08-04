@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { BuscaNaPagina, CampoDeBusca } from "@/components/layout/BuscaNaPagina";
 import { TasksView } from "@/components/features/tasks/TasksView";
 import {
   getCaptureCandidates,
@@ -28,12 +29,23 @@ export default async function TarefasPage() {
   ]);
 
   return (
-    <>
+    /*
+      O provedor envolve o CABEÇALHO E A LISTA porque os dois são irmãos aqui, e
+      o campo de busca mora num e o filtro no outro. Esta página continua sendo
+      Componente de Servidor: o `PageHeader` é passado como filho e é renderizado
+      no servidor do mesmo jeito — o provedor de cliente só embrulha a saída.
+
+      A busca NÃO vai para a URL, e o motivo está escrito em `BuscaNaPagina.tsx`:
+      o `Promise.all` acima seria re-executado inteiro a cada tecla, para
+      devolver exatamente os mesmos dados.
+    */
+    <BuscaNaPagina>
       <PageHeader
         eyebrow="Execução"
         title="Faça o que importa."
         subtitle="Trabalho, estudos e vida pessoal na mesma visão."
         user={{ name: ctx.displayName, avatarUrl: ctx.avatarUrl }}
+        busca={<CampoDeBusca placeholder="Buscar tarefas" rotulo="Buscar tarefas" />}
       />
       <TasksView
         tasks={tasks}
@@ -46,6 +58,6 @@ export default async function TarefasPage() {
         linkCandidates={[...capturas, ...eventos]}
         clickup={clickup}
       />
-    </>
+    </BuscaNaPagina>
   );
 }
