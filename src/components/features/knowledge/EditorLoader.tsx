@@ -39,6 +39,12 @@ import type { EditorDePaginaProps } from "./Editor";
  * `(app)/conhecimento/pagina/[pageId]/page.tsx` é Componente de Servidor e não
  * poderia declarar o `dynamic` ela mesma.
  *
+ * ⚠️ E há uma TERCEIRA razão, que não é de desempenho: `./Editor` passa
+ * `immediatelyRender: true` ao `useEditor`, e essa flag só é correta porque o
+ * componente nunca renderiza no servidor. Tirar o `ssr: false` daqui obriga a
+ * tirar aquela flag lá — e o inverso também vale. As duas linhas são uma decisão
+ * só, escrita em dois arquivos.
+ *
  * O TIPO CRUZA A FRONTEIRA, O CÓDIGO NÃO
  * --------------------------------------
  * `import type` é apagado na compilação e não cria aresta no grafo de módulos, e

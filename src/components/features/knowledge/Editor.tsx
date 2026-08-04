@@ -790,6 +790,27 @@ export default function EditorDePagina({
 
   const editor = useEditor({
     /**
+     * ⚠️ ESTA FLAG DEPENDE DE OUTRO ARQUIVO. `immediatelyRender: true` só é
+     * seguro porque `EditorLoader.tsx` monta este módulo com `ssr: false` — não
+     * existe HTML de servidor deste componente para divergir na hidratação, o
+     * servidor emite o esqueleto do `loading` daquele arquivo. Se aquele
+     * `ssr: false` sair, esta linha tem que sair junto.
+     *
+     * SEM ELA O MÓDULO INTEIRO QUEBRA, e quebra de um jeito que o compilador não
+     * vê. O TipTap 3 detecta o Next (`window.next`, posto por
+     * `next/dist/client/app-bootstrap.js`) e, quando a flag é `undefined`,
+     * desliga a criação imediata e devolve `null` no primeiro render. Só que os
+     * overloads de `useEditor` prometem `Editor` não-nulo justamente no caso sem
+     * a flag — então `tsc` passa limpo e o `useEditorState` lá embaixo, que roda
+     * DURANTE a renderização, estoura em `e.isActive("bold")` com o editor nulo.
+     * A página cai no `error.tsx` antes de pintar qualquer coisa.
+     *
+     * `false` corrigiria o mesmo bug fazendo o compilador exigir o tratamento do
+     * nulo — ao custo de mexer em ~15 pontos deste arquivo (o seletor inteiro e
+     * todos os handlers da barra) para tratar um nulo que aqui nunca acontece.
+     */
+    immediatelyRender: true,
+    /**
      * `codeBlock: false` desliga o bloco de código SIMPLES do StarterKit para
      * que o `CodeBlockLowlight` ocupe o nome `codeBlock` sem colisão de schema —
      * dois nós com o mesmo nome fazem o ProseMirror recusar a montagem.
