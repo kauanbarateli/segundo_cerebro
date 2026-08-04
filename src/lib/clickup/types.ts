@@ -58,6 +58,42 @@ export interface ComentarioCru {
 export type PrioridadeClickUp = "urgente" | "alta" | "normal" | "baixa" | null;
 
 /**
+ * FASE da tarefa — o único agrupamento estável entre listas diferentes.
+ *
+ * As tarefas vêm de VÁRIAS listas e cada Space do ClickUp define a própria
+ * paleta de status: "in progress" da lista A e "em andamento" da lista B são
+ * strings distintas para a mesma ideia, e "revisão" existe só numa delas. Não
+ * há coluna canônica no status literal.
+ *
+ * `status.type` é o que existe de canônico: conjunto fechado, idêntico em todo
+ * workspace, e é FASE (onde a tarefa está no fluxo) e não procedência (de qual
+ * lista ela veio). É por isso que o quadro agrupa por aqui e o cartão continua
+ * mostrando o status literal com a cor do Space — nada se perde e nenhuma
+ * equivalência falsa é afirmada.
+ */
+export type FaseClickUp = "afazer" | "andamento" | "concluido";
+
+/**
+ * Quem mais está na tarefa.
+ *
+ * ⚠️ SEM `email`, de propósito. Este projeto tem postura declarada de não trazer
+ * dado pessoal de terceiros para dentro de um banco que ninguém mais audita, e
+ * o e-mail de um colega não responde nenhuma pergunta que a tela faça. Nome
+ * responde "quem está comigo nisto"; e-mail só serviria para contatar fora
+ * daqui, o que não é função deste aplicativo.
+ *
+ * NADA AQUI É PERSISTIDO. Os nomes trafegam no payload da Server Action, são
+ * desenhados e morrem quando a aba fecha — mesmo tratamento dado aos
+ * comentários.
+ */
+export interface ResponsavelClickUp {
+  id: string;
+  nome: string;
+  /** Quem conectou o token. A tela escreve "você" em vez do nome. */
+  souEu: boolean;
+}
+
+/**
  * O que atravessa a fronteira servidor→cliente.
  *
  * Deliberadamente diferente de `TarefaCrua`: datas já convertidas, prioridade
@@ -70,12 +106,23 @@ export interface TarefaClickUp {
   descricao: string | null;
   status: string | null;
   statusCor: string | null;
+  /**
+   * A fase derivada de `status.type`. Ver `FaseClickUp`.
+   *
+   * Chega DE GRAÇA: `status.type` já vem na listagem que a aba faz, e estava
+   * sendo descartado no mapper. É o que torna o quadro possível sem nenhuma
+   * chamada de rede a mais e sem nenhuma operação nova em `capabilities.ts`.
+   */
+  fase: FaseClickUp;
+  /** `status.orderindex` — a ordem do status DENTRO da lista de origem. */
+  statusOrdem: number | null;
   /** ISO 8601, ou null. A conversão de milissegundos mora em `mapper.ts`. */
   prazo: string | null;
   prioridade: PrioridadeClickUp;
   listaId: string | null;
   listaNome: string | null;
   url: string | null;
+  responsaveis: ResponsavelClickUp[];
 }
 
 export interface ComentarioClickUp {

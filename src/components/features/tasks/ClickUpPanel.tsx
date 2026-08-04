@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/states";
 import { Icon } from "@/components/ui/Icons";
 import { listarTarefasClickUp } from "@/app/(app)/tarefas/clickup-actions";
 import type { MotivoClickUp } from "@/lib/clickup/erros";
+import { FILTRO_VAZIO, filtrarTarefas, opcoesDeFiltro, type FiltroClickUp } from "@/lib/clickup/filtros";
 import type { TarefaClickUp } from "@/lib/clickup/types";
 import { formatDayLabel, formatTime, cn } from "@/lib/utils";
+import { ClickUpFiltros } from "@/components/features/tasks/ClickUpFiltros";
 import { ClickUpTaskSheet } from "@/components/features/tasks/ClickUpTaskSheet";
+import { ResponsaveisClickUp } from "@/components/features/tasks/ResponsaveisClickUp";
 
 /**
  * A aba ClickUp.
@@ -39,6 +42,7 @@ export function ClickUpPanel() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<{ texto: string; motivo?: MotivoClickUp } | null>(null);
   const [aberta, setAberta] = useState<TarefaClickUp | null>(null);
+  const [filtro, setFiltro] = useState<FiltroClickUp>(FILTRO_VAZIO);
 
   // O cache vive em ref, não em estado: ele não deve provocar render nenhum, e
   // sobrevive à troca de aba porque o componente permanece montado.
@@ -72,6 +76,21 @@ export function ClickUpPanel() {
   useEffect(() => {
     void buscar();
   }, [buscar]);
+
+  /*
+    As opções saem da lista COMPLETA e o recorte, da lista filtrada. Derivar as
+    opções do resultado filtrado apagaria do seletor tudo o que não está
+    selecionado — e não haveria como voltar.
+
+    `agora` é congelado no render para a lista não mudar debaixo do usuário
+    enquanto ele lê: com `Date.now()` dentro do comparador, uma tarefa poderia
+    entrar em "Vencidas" no meio de uma rolagem.
+  */
+  const opcoes = useMemo(() => opcoesDeFiltro(tarefas), [tarefas]);
+  const visiveis = useMemo(
+    () => filtrarTarefas(tarefas, filtro, Date.now()),
+    [tarefas, filtro],
+  );
 
   /* ------------------------------------------------------------ carregando */
 
@@ -159,8 +178,35 @@ export function ClickUpPanel() {
         </p>
       )}
 
+      <ClickUpFiltros
+        filtro={filtro}
+        opcoes={opcoes}
+        aoMudar={setFiltro}
+        total={tarefas.length}
+        visiveis={visiveis.length}
+      />
+
+      {visiveis.length === 0 ? (
+        /*
+          Vazio POR FILTRO, e a frase diz isso. O `EmptyState` de cima ("Nenhuma
+          tarefa atribuída a você") continua valendo só para a lista realmente
+          vazia — confundir os dois faria o aplicativo afirmar que não há tarefa
+          nenhuma quando o que houve foi um filtro esquecido ligado.
+
+          ⚠️ E com a lista truncada, "nada encontrado" é ainda mais delicado: a
+          tarefa pode existir e não ter vindo. Daí a segunda frase.
+        */
+        <div className="rounded-md border border-line bg-surface px-4 py-6 text-center">
+          <p className="text-corpo text-ink-muted">Nenhuma tarefa com esse filtro.</p>
+          {truncado && (
+            <p className="mt-1 text-legenda text-ink-subtle">
+              A lista está limitada às primeiras 500 — pode haver outras no ClickUp.
+            </p>
+          )}
+        </div>
+      ) : (
       <ul className="space-y-2">
-        {tarefas.map((t) => {
+        {visiveis.map((t) => {
           const vencida = t.prazo != null && new Date(t.prazo).getTime() < agora;
           return (
             <li key={t.id}>
@@ -204,6 +250,7 @@ export function ClickUpPanel() {
                     </span>
                   )}
                   {t.prioridade && <Badge tone="outline">{t.prioridade}</Badge>}
+                  <ResponsaveisClickUp pessoas={t.responsaveis} className="max-w-[16rem]" />
                   {t.url && (
                     /* O link vem da API; `external-link.ts` não é usado aqui
                        porque o destino é fixo e conhecido (app.clickup.com), e
@@ -223,6 +270,7 @@ export function ClickUpPanel() {
           );
         })}
       </ul>
+      )}
 
       {aberta && (
         <ClickUpTaskSheet

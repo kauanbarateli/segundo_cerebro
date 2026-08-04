@@ -1,11 +1,14 @@
 import type {
   ComentarioClickUp,
   ComentarioCru,
+  FaseClickUp,
   PrioridadeClickUp,
+  ResponsavelClickUp,
   StatusCru,
   StatusPossivel,
   TarefaClickUp,
   TarefaCrua,
+  UsuarioCru,
 } from "@/lib/clickup/types";
 
 /**
@@ -63,7 +66,59 @@ export function traduzirPrioridade(
   }
 }
 
-export function mapearTarefa(crua: TarefaCrua): TarefaClickUp {
+/**
+ * `status.type` → fase.
+ *
+ * O `default` cobrindo "andamento" não é descuido: é a leitura certa do
+ * conjunto. `open` é sempre o primeiro status da lista e `closed`/`done` são os
+ * finais; TUDO o que fica no meio o ClickUp chama de `custom`, e é justamente
+ * "em andamento". Um tipo novo que aparecesse amanhã também estaria no meio.
+ *
+ * ⚠️ `done` está aqui por precaução, não por observação. A integração nunca
+ * falou com a API real; a documentação usa `closed`, e alguns workspaces
+ * relatam `done`. Tratar os dois como concluído erra para o lado seguro — o
+ * contrário jogaria tarefa concluída na coluna "em andamento".
+ */
+export function faseDoStatus(tipo: string | null | undefined): FaseClickUp {
+  switch (tipo?.toLowerCase()) {
+    case "open":
+      return "afazer";
+    case "closed":
+    case "done":
+      return "concluido";
+    default:
+      return "andamento";
+  }
+}
+
+/**
+ * `assignees` → responsáveis, com "você" marcado.
+ *
+ * O id do ClickUp chega ora como número, ora como string, dependendo da rota —
+ * daí o `String()` dos dois lados da comparação. É o mesmo cuidado que
+ * `guard.ts` toma para a invariante I3, e pelo mesmo motivo: `1 === "1"` é
+ * falso, e aqui o preço seria só um destaque errado, mas lá seria recusar a
+ * própria tarefa.
+ *
+ * `meuId` é OPCIONAL para o mapper continuar puro e testável sem credencial.
+ * Sem ele ninguém é "você" — o que é honesto: não há como saber.
+ */
+export function mapearResponsaveis(
+  brutos: UsuarioCru[] | null | undefined,
+  meuId?: string | number | null,
+): ResponsavelClickUp[] {
+  if (!Array.isArray(brutos)) return [];
+  const meu = meuId == null ? null : String(meuId);
+  return brutos.map((u) => ({
+    id: String(u.id),
+    // Sem username, o id é o que sobra — melhor que "(sem nome)" repetido em
+    // toda linha, porque pelo menos distingue duas pessoas.
+    nome: u.username?.trim() || `#${String(u.id)}`,
+    souEu: meu !== null && String(u.id) === meu,
+  }));
+}
+
+export function mapearTarefa(crua: TarefaCrua, meuId?: string | number | null): TarefaClickUp {
   return {
     id: crua.id,
     nome: crua.name ?? "(sem nome)",
@@ -72,11 +127,14 @@ export function mapearTarefa(crua: TarefaCrua): TarefaClickUp {
     descricao: crua.text_content ?? crua.description ?? null,
     status: crua.status?.status ?? null,
     statusCor: crua.status?.color ?? null,
+    fase: faseDoStatus(crua.status?.type),
+    statusOrdem: typeof crua.status?.orderindex === "number" ? crua.status.orderindex : null,
     prazo: msParaIso(crua.due_date),
     prioridade: traduzirPrioridade(crua.priority),
     listaId: crua.list?.id ?? null,
     listaNome: crua.list?.name ?? null,
     url: crua.url ?? null,
+    responsaveis: mapearResponsaveis(crua.assignees, meuId),
   };
 }
 

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { mapearComentario, mapearTarefa, msParaIso, porPrazo, traduzirPrioridade } from "./mapper";
+import {
+  faseDoStatus,
+  mapearComentario,
+  mapearResponsaveis,
+  mapearTarefa,
+  msParaIso,
+  porPrazo,
+  traduzirPrioridade,
+} from "./mapper";
 import type { TarefaClickUp } from "./types";
 
 describe("msParaIso — a armadilha das datas do ClickUp", () => {
@@ -56,18 +64,24 @@ describe("traduzirPrioridade", () => {
 
 describe("mapearTarefa", () => {
   it("reduz a resposta crua ao que a tela desenha", () => {
-    const tarefa = mapearTarefa({
-      id: "abc",
-      name: "Revisar contrato",
-      text_content: "texto puro",
-      description: "**markdown**",
-      status: { status: "in progress", color: "#00f" },
-      due_date: "1754092800000",
-      priority: { priority: "high" },
-      list: { id: "l1", name: "Sprint 4" },
-      url: "https://app.clickup.com/t/abc",
-      assignees: [{ id: 1 }],
-    });
+    const tarefa = mapearTarefa(
+      {
+        id: "abc",
+        name: "Revisar contrato",
+        text_content: "texto puro",
+        description: "**markdown**",
+        status: { status: "in progress", color: "#00f", type: "custom", orderindex: 1 },
+        due_date: "1754092800000",
+        priority: { priority: "high" },
+        list: { id: "l1", name: "Sprint 4" },
+        url: "https://app.clickup.com/t/abc",
+        assignees: [
+          { id: 1, username: "Eu", email: "eu@empresa.com" },
+          { id: 2, username: "Colega", email: "colega@empresa.com" },
+        ],
+      },
+      1,
+    );
 
     expect(tarefa).toEqual({
       id: "abc",
@@ -75,13 +89,40 @@ describe("mapearTarefa", () => {
       descricao: "texto puro", // prefere text_content ao markdown
       status: "in progress",
       statusCor: "#00f",
+      fase: "andamento",
+      statusOrdem: 1,
       prazo: new Date(1754092800000).toISOString(),
       prioridade: "alta",
       listaId: "l1",
       listaNome: "Sprint 4",
       url: "https://app.clickup.com/t/abc",
+      responsaveis: [
+        { id: "1", nome: "Eu", souEu: true },
+        { id: "2", nome: "Colega", souEu: false },
+      ],
     });
-    // `assignees` NÃO atravessa: é dado de colegas e a tela não desenha.
+  });
+
+  it("os responsáveis atravessam, mas o E-MAIL do colega não", () => {
+    /*
+      Esta asserção substituiu um `not.toHaveProperty("assignees")` que existia
+      para impedir que dado de colega atravessasse. A intenção mudou de "nada
+      de terceiros passa" para "só o necessário passa, e nada é persistido":
+      saber quem mais está na tarefa responde uma pergunta real ("quem está
+      comigo nisto?"), enquanto o e-mail só serviria para contatar fora daqui.
+
+      O nome trafega no payload da action, é desenhado e morre ao fechar a aba —
+      mesmo tratamento dado aos comentários.
+    */
+    const tarefa = mapearTarefa({
+      id: "abc",
+      name: "x",
+      assignees: [{ id: 7, username: "Colega", email: "colega@empresa.com" }],
+    });
+
+    expect(tarefa.responsaveis).toEqual([{ id: "7", nome: "Colega", souEu: false }]);
+    expect(JSON.stringify(tarefa)).not.toContain("colega@empresa.com");
+    // A forma crua também não atravessa com outro nome.
     expect(tarefa).not.toHaveProperty("assignees");
   });
 
@@ -91,6 +132,57 @@ describe("mapearTarefa", () => {
     expect(tarefa.prazo).toBeNull();
     expect(tarefa.prioridade).toBeNull();
     expect(tarefa.listaId).toBeNull();
+    expect(tarefa.responsaveis).toEqual([]);
+    // Sem `status.type`, a fase cai em "andamento" — ver `faseDoStatus`.
+    expect(tarefa.fase).toBe("andamento");
+    expect(tarefa.statusOrdem).toBeNull();
+  });
+});
+
+describe("faseDoStatus — o único agrupamento estável entre listas", () => {
+  it("open vira 'a fazer'; closed e done viram 'concluído'", () => {
+    expect(faseDoStatus("open")).toBe("afazer");
+    expect(faseDoStatus("closed")).toBe("concluido");
+    // `done` é precaução: a documentação usa `closed`, mas alguns workspaces
+    // relatam `done`. Errar para "concluído" é o lado seguro.
+    expect(faseDoStatus("done")).toBe("concluido");
+  });
+
+  it("tudo o que fica no MEIO é andamento — inclusive o que ainda não existe", () => {
+    expect(faseDoStatus("custom")).toBe("andamento");
+    expect(faseDoStatus("um_tipo_que_o_clickup_inventar")).toBe("andamento");
+    expect(faseDoStatus(null)).toBe("andamento");
+    expect(faseDoStatus(undefined)).toBe("andamento");
+  });
+
+  it("não depende de maiúsculas", () => {
+    expect(faseDoStatus("OPEN")).toBe("afazer");
+    expect(faseDoStatus("Closed")).toBe("concluido");
+  });
+});
+
+describe("mapearResponsaveis", () => {
+  it("compara ids como STRING — 1 === '1' é falso", () => {
+    // O ClickUp manda o id ora como número, ora como string, dependendo da
+    // rota. Sem o `String()` dos dois lados, "você" nunca seria marcado.
+    expect(mapearResponsaveis([{ id: 1 }], "1")[0]?.souEu).toBe(true);
+    expect(mapearResponsaveis([{ id: "1" }], 1)[0]?.souEu).toBe(true);
+  });
+
+  it("sem meuId, ninguém é 'você' — é o honesto, não dá para saber", () => {
+    expect(mapearResponsaveis([{ id: 1 }])[0]?.souEu).toBe(false);
+    expect(mapearResponsaveis([{ id: 1 }], null)[0]?.souEu).toBe(false);
+  });
+
+  it("sem username, cai no id — que ao menos distingue duas pessoas", () => {
+    expect(mapearResponsaveis([{ id: 9 }])[0]?.nome).toBe("#9");
+    expect(mapearResponsaveis([{ id: 9, username: "   " }])[0]?.nome).toBe("#9");
+  });
+
+  it("campo ausente ou nulo vira lista vazia, não exceção", () => {
+    expect(mapearResponsaveis(null)).toEqual([]);
+    expect(mapearResponsaveis(undefined)).toEqual([]);
+    expect(mapearResponsaveis([])).toEqual([]);
   });
 });
 
@@ -123,11 +215,14 @@ describe("porPrazo — sem prazo vai para o FIM", () => {
     descricao: null,
     status: null,
     statusCor: null,
+    fase: "andamento",
+    statusOrdem: null,
     prazo,
     prioridade: null,
     listaId: null,
     listaNome: null,
     url: null,
+    responsaveis: [],
   });
 
   it("ordena por prazo, com os sem data por último", () => {

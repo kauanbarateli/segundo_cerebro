@@ -150,12 +150,29 @@ export function TasksView({
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+        {/*
+          AS PILLS SOMEM NA ABA DO CLICKUP, e isso não é economia de espaço.
+
+          Elas são categorias da tabela `tasks` deste aplicativo — Trabalho,
+          Estudos, Pessoal vêm do banco local e não existem no ClickUp. Ficando
+          visíveis com aquela aba aberta, eram controles que não afetavam nada
+          do que estava sendo mostrado: uma affordance falsa, e a pior espécie,
+          porque clicar não dá erro nenhum — simplesmente não acontece nada e a
+          conclusão razoável é que o aplicativo está quebrado.
+
+          O lugar de filtrar tarefas do ClickUp é dentro do próprio painel, com
+          as dimensões que existem lá (`ClickUpFiltros`).
+
+          A `<div>` continua no lugar quando some, para o grupo de visões não
+          pular da direita para a esquerda ao trocar de aba.
+        */}
         <div className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => (
-            <PillButton key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>
-              {f.label}
-            </PillButton>
-          ))}
+          {view !== "clickup" &&
+            FILTERS.map((f) => (
+              <PillButton key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>
+                {f.label}
+              </PillButton>
+            ))}
         </div>
         <div className="flex items-center gap-2">
           {/*

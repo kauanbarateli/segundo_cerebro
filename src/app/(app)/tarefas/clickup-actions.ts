@@ -96,7 +96,10 @@ export async function listarTarefasClickUp(): Promise<ListagemClickUp> {
 
     return {
       ok: true,
-      tarefas: tarefas.map(mapearTarefa).sort(porPrazo),
+      // O `clickupUserId` vai ao mapper só para marcar `souEu` nos responsáveis.
+      // Ele NÃO atravessa para o cliente: quem chega lá é um booleano por
+      // pessoa, que é o que a tela precisa para escrever "você".
+      tarefas: tarefas.map((t) => mapearTarefa(t, credencial.clickupUserId)).sort(porPrazo),
       truncado,
     };
   } catch (e) {
@@ -168,7 +171,7 @@ export async function detalharTarefaClickUp(taskId: unknown): Promise<DetalheCli
       parsed.data,
       credencial.clickupUserId,
     );
-    const tarefa = mapearTarefa(crua);
+    const tarefa = mapearTarefa(crua, credencial.clickupUserId);
 
     // As duas leituras que faltam não dependem uma da outra.
     const [comentarios, statusPossiveis] = await Promise.all([

@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/tarefas/clickup-actions";
 import type { ComentarioClickUp, StatusPossivel, TarefaClickUp } from "@/lib/clickup/types";
 import { formatDayLabel, formatTime } from "@/lib/utils";
+import { ResponsaveisClickUp } from "@/components/features/tasks/ResponsaveisClickUp";
 
 /**
  * Detalhe de uma tarefa do ClickUp: ler, mudar status, comentar.
@@ -126,6 +127,7 @@ export function ClickUpTaskSheet({
               </span>
             )}
             {detalhe.prioridade && <span>Prioridade: {detalhe.prioridade}</span>}
+            <ResponsaveisClickUp pessoas={detalhe.responsaveis} />
             {detalhe.url && (
               <a
                 href={detalhe.url}
