@@ -128,3 +128,21 @@ describe("isSelfAuthenticatedPath — a isenção é nominal, não por prefixo",
     expect(isSelfAuthenticatedPath("/")).toBe(false);
   });
 });
+
+describe("isSelfAuthenticatedPath — o e-mail semanal de métricas", () => {
+  it("isenta /api/metrics/email", () => {
+    /*
+      Sem a isenção, o agendador levaria 307 para /login e o log registraria
+      307/200: a aparência exata de um job que funciona. O e-mail nunca sairia,
+      e nada denunciaria isso — é o mesmo defeito que a rota de sync já sofreu.
+    */
+    expect(isSelfAuthenticatedPath("/api/metrics/email")).toBe(true);
+    expect(isSelfAuthenticatedPath("/api/metrics/email/")).toBe(true);
+  });
+
+  it("a isenção continua nominal — vizinhos de nome não pegam carona", () => {
+    expect(isSelfAuthenticatedPath("/api/metrics/email-teste")).toBe(false);
+    expect(isSelfAuthenticatedPath("/api/metrics/email/enviar")).toBe(false);
+    expect(isSelfAuthenticatedPath("/api/metrics")).toBe(false);
+  });
+});

@@ -74,5 +74,17 @@ export function serverEnv() {
      */
     tokenEncryptionKeys: trimmed(process.env.TOKEN_ENCRYPTION_KEYS),
     cronSecret: trimmed(process.env.CRON_SECRET),
+    /**
+     * Chave da Resend, para o e-mail semanal de métricas. Vazia = a rota
+     * responde que não está configurada, e nada é enviado nem reservado.
+     */
+    resendApiKey: trimmed(process.env.RESEND_API_KEY),
+    /**
+     * Remetente. Vazio usa `onboarding@resend.dev`, que dispensa domínio
+     * verificado — e obriga o destinatário a ser o e-mail da conta Resend.
+     * Existe como variável para que verificar um domínio depois seja só trocar
+     * esta linha no painel.
+     */
+    resendFrom: trimmed(process.env.RESEND_FROM),
   };
 }

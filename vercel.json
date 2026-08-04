@@ -3,7 +3,11 @@
   "crons": [
     {
       "path": "/api/google/calendar/sync",
-      "schedule": "0 * * * *"
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/metrics/email",
+      "schedule": "0 11 * * 1"
     }
   ]
 }

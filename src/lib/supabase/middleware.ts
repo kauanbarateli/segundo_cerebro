@@ -34,7 +34,22 @@ const PUBLIC_PATHS = ["/login", "/auth"];
  * 401 se não houver usuário. O middleware deixa de bloquear; ninguém deixa de
  * autenticar.
  */
-const SELF_AUTHENTICATED_PATHS = ["/api/google/calendar/sync"];
+const SELF_AUTHENTICATED_PATHS = [
+  "/api/google/calendar/sync",
+  /*
+    ⚠️ SEM ESTA LINHA, O E-MAIL SEMANAL NUNCA SAI — e sai em silêncio.
+
+    O agendador chama sem cookie. O middleware o redirecionaria para /login, e o
+    log da Vercel registraria 307/200: a aparência exata de um job que funciona.
+    É a mesma armadilha que a rota de sync documenta logo acima, e ela custou
+    para ser encontrada uma vez.
+
+    A promessa que esta entrada faz: `/api/metrics/email` recusa sozinha quem
+    não se autenticou. E ela é mais estrita que a do sync — não tem caminho de
+    sessão nenhum, então credencial ausente é 401 igual a credencial errada.
+  */
+  "/api/metrics/email",
+];
 
 /** Exportado para o teste conseguir afirmar sobre a decisão sem subir servidor. */
 export function isSelfAuthenticatedPath(pathname: string): boolean {
