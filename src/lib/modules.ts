@@ -86,6 +86,14 @@ export const MODULES: ModuleDef[] = [
     description: "O que você faz todo dia, e o que falhou.",
   },
   {
+    key: "projetos",
+    label: "Projetos",
+    href: "/projetos",
+    icon: "Target",
+    core: false,
+    description: "Agrupa tarefas, capturas, cadernos e pastas.",
+  },
+  {
     key: "financeiro",
     label: "Financeiro",
     href: "/financeiro",

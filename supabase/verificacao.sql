@@ -305,6 +305,74 @@ select
 
 
 -- -----------------------------------------------------------------------------
+-- BLOCO 14 — Projetos (0017): a coluna foi para o CONTÊINER, e a guarda existe?
+--
+-- Rode DEPOIS de aplicar a 0017.
+--
+-- ⚠️ AS DUAS COLUNAS QUE PRECISAM ESTAR **FALSAS** são `col_paginas` e
+-- `col_arquivos`. Elas são a prova de que a decisão de modelo foi respeitada:
+-- `project_id` em `knowledge_pages` criaria um TERCEIRO contêiner numa árvore
+-- que já tem `notebook_id not null` + `parent_id` + trigger de coerência de
+-- caderno + CTE recursiva. Nada impediria a página P no projeto A com a filha C
+-- no projeto B.
+--
+-- O QUE CADA COLUNA DEVE MOSTRAR:
+--   col_tarefas..col_pastas   → t nas quatro (os contêineres).
+--   col_paginas, col_arquivos → ⚠️ **f** nas duas. Ver acima.
+--   guardas                   → 4. Uma por tabela de contêiner.
+--   guarda_invoker            → t. `security definer` faria a checagem rodar
+--                               como dona e NÃO barrar nada.
+--   anon_le_projects          → f. Tabela nova nasce alcançável.
+--   func_anon_exec            → f.
+-- -----------------------------------------------------------------------------
+select
+  to_regclass('public.projects') is not null                          as tabela_projects,
+
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and column_name = 'project_id'
+      and table_name = 'tasks')                                       as col_tarefas,
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and column_name = 'project_id'
+      and table_name = 'captures')                                    as col_capturas,
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and column_name = 'project_id'
+      and table_name = 'knowledge_notebooks')                         as col_cadernos,
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and column_name = 'project_id'
+      and table_name = 'drive_folders')                               as col_pastas,
+
+  -- ⚠️ ESTAS DUAS TÊM QUE SER ZERO.
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and column_name = 'project_id'
+      and table_name = 'knowledge_pages')                             as col_paginas_DEVE_SER_0,
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and column_name = 'project_id'
+      and table_name = 'drive_files')                                 as col_arquivos_DEVE_SER_0,
+
+  (select count(*) from pg_trigger
+    where tgname like 'trg_%_project_alive' and not tgisinternal)     as guardas,
+
+  (select not prosecdef from pg_proc
+    where pronamespace = 'public'::regnamespace
+      and proname = 'enforce_project_alive_same_owner')               as guarda_invoker,
+
+  has_table_privilege('anon', 'public.projects', 'select')            as anon_le_projects,
+  has_function_privilege('anon', 'public.enforce_project_alive_same_owner()', 'execute')
+                                                                      as func_anon_exec;
+
+-- A função de conversão continua com o insert do vínculo da 0009 no corpo?
+-- (`src/test/migracao-0017-conversao-de-captura.test.ts` já trava isso no
+-- ARQUIVO; esta consulta confere o que está APLICADO no banco.)
+select
+  position('task_capture_links' in prosrc) > 0   as tem_vinculo_da_0009,
+  position('deleted_at is null' in prosrc) > 0   as filtra_projeto_apagado,
+  prosecdef                                      as security_definer
+from pg_proc
+where pronamespace = 'public'::regnamespace
+  and proname = 'convert_capture_to_task';
+
+
+-- -----------------------------------------------------------------------------
 -- BLOCO 15 — Hábitos (0018): a tabela nasceu fechada e a trigger de dono está lá?
 --
 -- ⚠️ O número segue a numeração do PLANO (Projetos = 14, Hábitos = 15), e por

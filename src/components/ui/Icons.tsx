@@ -168,6 +168,14 @@ export const Icon = {
       <path d="M5 13 7 5h10l2 8v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z" />
     </svg>
   ),
+  /** Projetos: o alvo que agrupa o esforço. */
+  Target: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.6" />
+    </svg>
+  ),
   /** Hábitos: o ciclo que se repete. */
   Repeat: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base(p)}>

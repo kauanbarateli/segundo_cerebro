@@ -17,7 +17,7 @@ import { RelatedSection } from "@/components/features/links/RelatedSection";
 import { ClickUpPanel } from "@/components/features/tasks/ClickUpPanel";
 import { useBuscaAplicavel, useTermoDeBusca } from "@/components/layout/BuscaNaPagina";
 import { semAcento } from "@/lib/knowledge";
-import type { Category, ClickUpConnection, Task, TaskPriority } from "@/lib/database.types";
+import type { Category, ClickUpConnection, Project, Task, TaskPriority } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
 import { formatDayLabel, formatTime, cn } from "@/lib/utils";
 import { completeTask, reopenTask, deleteTask, archiveTask } from "@/app/(app)/tarefas/actions";
@@ -76,6 +76,7 @@ export function TasksView({
   initialView = "list",
   related,
   linkCandidates,
+  projetos = [],
   clickup,
 }: {
   tasks: Task[];
@@ -97,6 +98,8 @@ export function TasksView({
   related: Map<string, RelatedItem[]>;
   /** Capturas e eventos oferecidos no autocomplete. */
   linkCandidates: RelatedItem[];
+  /** Projetos vivos, para o seletor do formulário. Vazio some com o campo. */
+  projetos?: Project[];
   /**
    * Estado da conexão com o ClickUp. `null` = nunca conectou.
    *
@@ -431,6 +434,7 @@ export function TasksView({
         <Modal title={editing ? "Editar tarefa" : "Nova tarefa"} onClose={() => setFormOpen(false)}>
           <TaskForm
             categories={categories}
+            projetos={projetos}
             task={editing ?? undefined}
             onDone={() => setFormOpen(false)}
             onCancel={() => setFormOpen(false)}

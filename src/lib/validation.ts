@@ -122,6 +122,29 @@ const centavos = (rotulo = "valor") =>
 const centavosPositivos = (rotulo = "valor") =>
   centavos(rotulo).positive(`Informe um ${rotulo} maior que zero`);
 
+/* ------------------------------------------------------------ Projetos --- */
+
+export const projectSchema = z.object({
+  name: z.string().trim().min(1, "Dê um nome ao projeto").max(100, "Máximo de 100 caracteres"),
+  description: textoOpcional(2_000),
+  colorKey: z.string().trim().max(30).optional().default("stone"),
+});
+
+/**
+ * O campo `projectId` dos formulários que ATRIBUEM projeto (tarefa, captura).
+ *
+ * `""` vira `null` porque é o que um `<select>` sem escolha manda — e `null`
+ * significa "sem projeto", que é um estado legítimo e o padrão. Sem o
+ * `.or(z.literal(""))`, escolher "Sem projeto" no seletor viraria erro de
+ * validação em vez de limpar a atribuição.
+ */
+export const projectIdOpcional = z
+  .string()
+  .uuid(ID_INVALIDO)
+  .optional()
+  .or(z.literal(""))
+  .transform((v) => (v && v.length > 0 ? v : null));
+
 export const taskInputSchema = z.object({
   title: z.string().trim().min(1, "Informe um título").max(200),
   description: textoOpcional(5_000),
@@ -131,6 +154,7 @@ export const taskInputSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v && v.length > 0 ? v : null)),
+  projectId: projectIdOpcional,
   priority: taskPrioritySchema.default("medium"),
   status: taskStatusSchema.default("todo"),
   dueAt: optionalDateTime,
@@ -152,6 +176,7 @@ export const captureInputSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v && v.length > 0 ? v : null)),
+  projectId: projectIdOpcional,
 });
 
 export type CaptureInput = z.infer<typeof captureInputSchema>;
@@ -172,6 +197,7 @@ export const captureUpdateSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v && v.length > 0 ? v : null)),
+  projectId: projectIdOpcional,
 });
 
 export type CaptureUpdateInput = z.infer<typeof captureUpdateSchema>;
@@ -320,6 +346,15 @@ export const financeTransactionSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v && v.length > 0 ? v : null)),
+  /*
+    ⚠️ NÃO existe `projectId` aqui, e a ausência é decisão de modelo.
+
+    `finance_transactions` não ganhou a coluna na 0017. O lançamento pertence à
+    CONTA e à categoria financeira; amarrá-lo a projeto criaria uma terceira
+    dimensão de agrupamento no módulo que mais depende de somas fechadas — e a
+    pergunta "quanto este projeto custou?" passaria a ter duas respostas
+    dependendo de o lançamento ter sido classificado ou não.
+  */
   kind: z.enum(["income", "expense"]),
   amountCents: centavosPositivos(),
   description: z.string().trim().min(1, "Informe uma descrição").max(160),

@@ -27,6 +27,7 @@ export async function createCapture(input: {
   title?: string;
   content?: string;
   categoryId?: string;
+  projectId?: string;
 }): Promise<CaptureResult> {
   const parsed = captureInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -60,6 +61,7 @@ export async function createCapture(input: {
         title: i.title,
         content: i.content,
         category_id: i.categoryId,
+        project_id: i.projectId,
         status: "inbox",
       })
       .select("id")
@@ -90,6 +92,7 @@ export async function updateCapture(input: {
   title?: string;
   content?: string;
   categoryId?: string;
+  projectId?: string;
 }): Promise<CaptureResult> {
   const parsed = captureUpdateSchema.safeParse(input);
   if (!parsed.success) {
@@ -110,6 +113,7 @@ export async function updateCapture(input: {
         title: i.title,
         content: i.content,
         category_id: i.categoryId,
+        project_id: i.projectId,
       })
       .eq("id", i.id)
       .select("id");

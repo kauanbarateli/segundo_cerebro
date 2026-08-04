@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/states";
 import { useToast } from "@/components/ui/Toast";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
-import type { Capture, CaptureType, Category } from "@/lib/database.types";
+import type { Capture, CaptureType, Category, Project } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
 import { formatDayLabel } from "@/lib/utils";
 import {
@@ -43,15 +43,18 @@ interface Draft {
   title: string;
   content: string;
   categoryId: string;
+  /** "" = sem projeto. Ver `projectIdOpcional` em validation.ts. */
+  projectId: string;
 }
 
-const emptyDraft: Draft = { type: "idea", title: "", content: "", categoryId: "" };
+const emptyDraft: Draft = { type: "idea", title: "", content: "", categoryId: "", projectId: "" };
 
 export function CaptureView({
   captures,
   categories,
   related,
   linkCandidates,
+  projetos = [],
   userId,
 }: {
   captures: Capture[];
@@ -60,6 +63,8 @@ export function CaptureView({
   related: Map<string, RelatedItem[]>;
   /** Tarefas e eventos oferecidos no autocomplete. */
   linkCandidates: RelatedItem[];
+  /** Projetos vivos, para os seletores. Vazio some com os campos. */
+  projetos?: Project[];
   /**
    * Dono da sessão. Entra só para compor a chave do rascunho — ver
    * `src/lib/capture-draft.ts`. Sem ele a chave é global e o rascunho de uma
@@ -130,6 +135,7 @@ export function CaptureView({
         title: draft.title || undefined,
         content: draft.content || undefined,
         categoryId: draft.categoryId || undefined,
+        projectId: draft.projectId || undefined,
       });
       if (r.ok) {
         toast("Enviado ao cérebro", "success");
@@ -207,6 +213,7 @@ export function CaptureView({
       title: selected.title ?? "",
       content: selected.content ?? "",
       categoryId: selected.category_id ?? "",
+      projectId: selected.project_id ?? "",
     });
   }
 
@@ -223,6 +230,8 @@ export function CaptureView({
         // mandar o campo APAGA a categoria da captura. Por isso o select existe
         // neste formulário: o valor atual viaja de volta em toda edição.
         categoryId: edit.categoryId || undefined,
+        // Mesma armadilha do campo acima: nao mandar APAGA a atribuicao.
+        projectId: edit.projectId || undefined,
       });
       if (r.ok) {
         // Volta para leitura sem mexer em `selectedId`: o revalidatePath da
@@ -293,19 +302,39 @@ export function CaptureView({
         />
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <select
-            aria-label="Categoria"
-            value={draft.categoryId}
-            onChange={(e) => setDraft((d) => ({ ...d, categoryId: e.target.value }))}
-            className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
-          >
-            <option value="">Sem categoria</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Categoria"
+              value={draft.categoryId}
+              onChange={(e) => setDraft((d) => ({ ...d, categoryId: e.target.value }))}
+              className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            >
+              <option value="">Sem categoria</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {/* Some quando nao ha projeto nenhum: um seletor de uma opcao so e
+                uma pergunta cuja resposta ja se sabe, e a caixa de captura e
+                justamente onde nao se quer parar para responder nada. */}
+            {projetos.length > 0 && (
+              <select
+                aria-label="Projeto"
+                value={draft.projectId}
+                onChange={(e) => setDraft((d) => ({ ...d, projectId: e.target.value }))}
+                className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+              >
+                <option value="">Sem projeto</option>
+                {projetos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           <Button variant="primary" onClick={submit} disabled={pending}>
             {pending ? "Enviando…" : "Enviar ao cérebro"}
           </Button>
@@ -499,6 +528,7 @@ export function CaptureView({
             <CaptureEditFields
               draft={edit}
               categories={categories}
+              projetos={projetos}
               onChange={(patch) => setEdit((d) => (d ? { ...d, ...patch } : d))}
             />
           ) : (
@@ -615,10 +645,12 @@ function CaptureDetailBody({
 function CaptureEditFields({
   draft,
   categories,
+  projetos,
   onChange,
 }: {
   draft: Draft;
   categories: Category[];
+  projetos: Project[];
   onChange: (patch: Partial<Draft>) => void;
 }) {
   return (
@@ -671,6 +703,22 @@ function CaptureEditFields({
           </option>
         ))}
       </select>
+
+      {projetos.length > 0 && (
+        <select
+          aria-label="Projeto"
+          value={draft.projectId}
+          onChange={(e) => onChange({ projectId: e.target.value })}
+          className="mt-3 h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+        >
+          <option value="">Sem projeto</option>
+          {projetos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

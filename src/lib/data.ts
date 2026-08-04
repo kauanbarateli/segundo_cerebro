@@ -22,6 +22,7 @@ import type {
   Habit,
   HabitEntry,
   HabitPause,
+  Project,
   KnowledgeNotebook,
   KnowledgePage,
   KnowledgePageNode,
@@ -1321,4 +1322,125 @@ export async function getHabitPauses(de: string): Promise<HabitPause[]> {
     .or(`ends_on.is.null,ends_on.gte.${de}`)
     .order("starts_on", { ascending: true });
   return (data as HabitPause[] | null) ?? [];
+}
+
+/* ------------------------------------------------------------ Projetos --- */
+
+/**
+ * Os projetos VIVOS, na ordem da tela.
+ *
+ * ⚠️ `deleted_at is null` repetido aqui de propósito: `projects_ativos_idx` é
+ * PARCIAL, e o planejador só o usa quando o predicado aparece na consulta.
+ */
+export async function getProjects(): Promise<Project[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("projects")
+    .select("*")
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  return (data as Project[] | null) ?? [];
+}
+
+export async function getProject(id: string): Promise<Project | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return (data as Project | null) ?? null;
+}
+
+/**
+ * TUDO do projeto, numa onda só.
+ *
+ * ============================================================================
+ * ⚠️ O CONHECIMENTO SAI DE GRAÇA — é o pagamento da decisão de modelo
+ * ============================================================================
+ * `knowledge_pages` NÃO tem `project_id`. "As páginas do projeto" são as
+ * páginas dos CADERNOS do projeto: uma consulta pelos cadernos e outra pelas
+ * páginas deles. Sem coluna nova, sem trigger de árvore, sem CTE recursiva — e
+ * `createPage` e `movePage` não mudaram uma linha.
+ *
+ * O mesmo vale para os arquivos: `drive_files` não tem a coluna, e todo upload
+ * dentro de uma pasta do projeto já nasce no projeto.
+ *
+ * ============================================================================
+ * A AGENDA SAI DAS TAREFAS, NÃO DOS VÍNCULOS DA 0009
+ * ============================================================================
+ * O cabeçalho da 0009 define vínculo como PROCEDÊNCIA ("esta tarefa nasceu
+ * daquela reunião"). Derivar a agenda dele transformaria procedência em
+ * pertencimento: a 1:1 semanal ligada a tarefas de três projetos apareceria nas
+ * três agendas, sem forma de tirá-la de uma sem apagar um vínculo que quer
+ * dizer outra coisa. Aqui a agenda são os campos que as tarefas já têm.
+ */
+export interface ConteudoDoProjeto {
+  tarefas: Task[];
+  capturas: Capture[];
+  cadernos: KnowledgeNotebook[];
+  paginas: KnowledgePageSummary[];
+  pastas: DriveFolder[];
+}
+
+export async function getProjectContents(projectId: string): Promise<ConteudoDoProjeto> {
+  const supabase = await createClient();
+
+  const [tarefas, capturas, cadernos, pastas] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("project_id", projectId)
+      .neq("status", "archived")
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("captures")
+      .select("*")
+      .eq("project_id", projectId)
+      .neq("status", "archived")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("knowledge_notebooks")
+      .select("*")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("position", { ascending: true }),
+    supabase
+      .from("drive_folders")
+      .select("*")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
+  ]);
+
+  const listaDeCadernos = (cadernos.data as KnowledgeNotebook[] | null) ?? [];
+
+  // As páginas vêm num SEGUNDO passo porque dependem dos ids dos cadernos. Com
+  // zero cadernos a consulta é pulada: um `in ()` vazio é uma ida ao banco para
+  // trazer nada.
+  let paginas: KnowledgePageSummary[] = [];
+  if (listaDeCadernos.length > 0) {
+    const { data } = await supabase
+      .from("knowledge_pages")
+      .select("id, notebook_id, parent_id, title, position, updated_at")
+      .in(
+        "notebook_id",
+        listaDeCadernos.map((c) => c.id),
+      )
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(50);
+    paginas = (data as KnowledgePageSummary[] | null) ?? [];
+  }
+
+  return {
+    tarefas: (tarefas.data as Task[] | null) ?? [],
+    capturas: (capturas.data as Capture[] | null) ?? [],
+    cadernos: listaDeCadernos,
+    paginas,
+    pastas: (pastas.data as DriveFolder[] | null) ?? [],
+  };
 }

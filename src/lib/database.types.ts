@@ -187,6 +187,8 @@ export interface FinanceBudget {
 /* -------------------------------------------------------------------- drive */
 
 export interface DriveFolder {
+  /** Projeto ao qual pertence. NULO = sem projeto. Ver `Project`. */
+  project_id: string | null;
   id: string;
   user_id: string;
   parent_id: string | null;
@@ -229,6 +231,8 @@ export interface Category {
 }
 
 export interface Task {
+  /** Projeto ao qual pertence. NULO = sem projeto. Ver `Project`. */
+  project_id: string | null;
   id: string;
   user_id: string;
   category_id: string | null;
@@ -251,6 +255,8 @@ export interface Task {
 }
 
 export interface Capture {
+  /** Projeto ao qual pertence. NULO = sem projeto. Ver `Project`. */
+  project_id: string | null;
   id: string;
   user_id: string;
   type: CaptureType;
@@ -374,6 +380,8 @@ export interface CaptureEventLink {
 export type ProseMirrorDoc = { type: string; content?: unknown[] };
 
 export interface KnowledgeNotebook {
+  /** Projeto ao qual pertence. NULO = sem projeto. Ver `Project`. */
+  project_id: string | null;
   id: string;
   user_id: string;
   name: string;
@@ -588,4 +596,27 @@ export interface HabitPause {
   ends_on: string | null;
   reason: string | null;
   created_at: string;
+}
+
+/* ------------------------------------------------------------ Projetos --- */
+
+/**
+ * ⚠️ `project_id` mora no CONTÊINER (tarefa, captura, caderno, pasta), NUNCA no
+ * item (página, arquivo). Ver o cabeçalho da migration 0017: pôr a coluna em
+ * `knowledge_pages` criaria um terceiro contêiner numa árvore que já tem
+ * invariante de caderno escrita em trigger.
+ *
+ * Consequência boa: "o conhecimento do projeto" são as páginas dos cadernos do
+ * projeto, sem coluna nenhuma em `knowledge_pages`.
+ */
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  color_key: string;
+  deleted_at: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
 }

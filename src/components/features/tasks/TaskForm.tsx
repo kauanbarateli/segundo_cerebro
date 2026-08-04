@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
-import type { Category, Task } from "@/lib/database.types";
+import type { Category, Project, Task } from "@/lib/database.types";
+import { SeletorDeProjeto } from "@/components/features/projects/SeletorDeProjeto";
 import { createTask, updateTask } from "@/app/(app)/tarefas/actions";
 
 const PRIORITIES = [
@@ -23,11 +24,19 @@ function toLocalInput(iso: string | null): string {
 
 export function TaskForm({
   categories,
+  projetos = [],
   task,
   onDone,
   onCancel,
 }: {
   categories: Category[];
+  /**
+   * Os projetos vivos. Vazio (o padrão) some com o seletor — ver
+   * `SeletorDeProjeto`. O default existe para que quem não passa a lista não
+   * quebre: o campo simplesmente não aparece, e `projectId` chega ausente ao
+   * schema, que o traduz para `null`.
+   */
+  projetos?: Project[];
   task?: Task;
   onDone: () => void;
   onCancel: () => void;
@@ -99,6 +108,10 @@ export function TaskForm({
             ))}
           </select>
         </div>
+        {/* Projeto é faceta ORTOGONAL à categoria, e por isso fica ao lado e
+            não dentro dela: uma tarefa de "Trabalho" pode estar no projeto
+            "Migração" ou em nenhum, e as duas perguntas são independentes. */}
+        <SeletorDeProjeto projetos={projetos} valorInicial={task?.project_id} />
         <div>
           <label htmlFor="priority" className="mb-1.5 block text-corpo font-medium text-ink">
             Prioridade

@@ -7,6 +7,7 @@ import {
   getEventCandidates,
   getClickUpConnection,
   getRelatedItems,
+  getProjects,
   getTasks,
 } from "@/lib/data";
 import { requireModule } from "@/lib/guards";
@@ -16,7 +17,7 @@ export default async function TarefasPage() {
   // Tudo numa onda só. Os vínculos entram AQUI, e não depois com os ids das
   // tarefas em mãos, justamente para não custar uma ida e volta em série a cada
   // navegação — ver a nota em `getRelatedItems`.
-  const [tasks, categories, related, capturas, eventos, clickup] = await Promise.all([
+  const [tasks, categories, related, capturas, eventos, clickup, projetos] = await Promise.all([
     getTasks(),
     getCategories(),
     getRelatedItems("task"),
@@ -26,6 +27,10 @@ export default async function TarefasPage() {
     // Ver getClickUpConnection: por a chamada externa aqui faria a lista
     // pessoal esperar pelo ClickUp a cada navegacao.
     getClickUpConnection(),
+    // Os projetos entram no mesmo Promise.all: e uma leitura curta e
+    // independente, e em serie custaria uma ida e volta inteira so para
+    // popular um <select>.
+    getProjects(),
   ]);
 
   return (
@@ -57,6 +62,7 @@ export default async function TarefasPage() {
         // exatamente os outros dois tipos.
         linkCandidates={[...capturas, ...eventos]}
         clickup={clickup}
+        projetos={projetos}
       />
     </BuscaNaPagina>
   );

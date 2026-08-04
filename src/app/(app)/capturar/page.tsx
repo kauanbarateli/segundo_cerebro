@@ -4,6 +4,7 @@ import {
   getCaptures,
   getCategories,
   getEventCandidates,
+  getProjects,
   getRelatedItems,
   getTaskCandidates,
 } from "@/lib/data";
@@ -11,12 +12,13 @@ import { requireModule } from "@/lib/guards";
 
 export default async function CapturarPage() {
   const ctx = await requireModule("capturar");
-  const [captures, categories, related, tarefas, eventos] = await Promise.all([
+  const [captures, categories, related, tarefas, eventos, projetos] = await Promise.all([
     getCaptures(),
     getCategories(),
     getRelatedItems("capture"),
     getTaskCandidates(),
     getEventCandidates(),
+    getProjects(),
   ]);
 
   return (
@@ -32,6 +34,7 @@ export default async function CapturarPage() {
         categories={categories}
         related={related}
         linkCandidates={[...tarefas, ...eventos]}
+        projetos={projetos}
         userId={ctx.userId}
       />
     </>
