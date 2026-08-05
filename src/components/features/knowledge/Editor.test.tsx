@@ -118,3 +118,10 @@ describe("EditorDePagina", () => {
     expect((window as unknown as { next?: unknown }).next).toBeDefined();
   });
 });
+
+/*
+ * O contrato do TipTap sobre `editor.view` antes de a view montar mora em
+ * `tiptap-view.test.ts`, ao lado. Ele NÃO pode ficar aqui: este arquivo roda em
+ * jsdom, e com um DOM disponível o TipTap consegue montar a view mesmo sem
+ * `element` — o estado a testar deixa de existir e os casos viram fachada.
+ */

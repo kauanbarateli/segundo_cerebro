@@ -720,6 +720,19 @@ export default function EditorDePagina({
    */
   const sincronizarMenu = useCallback(
     (instancia: Editor, permitirAbrir: boolean) => {
+      /*
+        SEM VIEW MONTADA NÃO HÁ MENU A POSICIONAR — e tocar nela aqui LANÇA.
+
+        Ver o aviso longo no efeito de `aria-activedescendant`, mais abaixo: com
+        `immediatelyRender: true` a instância existe antes de a view existir, e
+        `instancia.view` nesse intervalo é um Proxy que lança em quase toda
+        propriedade. O `coordsAtPos` do fim desta função é uma delas.
+
+        Sair cedo é o comportamento certo, não um remendo: este callback só tem
+        trabalho quando existe uma área editável na tela para medir.
+      */
+      if (!instancia.isInitialized) return;
+
       const { state } = instancia;
       const selecao = state.selection;
 
@@ -992,8 +1005,45 @@ export default function EditorDePagina({
    * o que faz o trabalho, e ele não exige o papel.
    */
   useEffect(() => {
-    const dom = editor.view?.dom;
-    if (!dom) return;
+    /*
+      =========================================================================
+      ⚠️ `editor.view` NÃO É UM CAMPO QUE PODE SER NULO — É UM PROXY QUE LANÇA
+      =========================================================================
+      A versão anterior desta linha era `const dom = editor.view?.dom`, e o `?.`
+      não protegia NADA. Quando a view ainda não montou, o TipTap 3 devolve em
+      `editor.view` um Proxy (@tiptap/core, "The editor view is not available"):
+      ele é um objeto, portanto TRUTHY, portanto o `?.` passa direto — e quem
+      lança é o acesso a `.dom`, porque o Proxy só finge ter `dispatch`,
+      `composing`, `dragging`, `editable`, `isDestroyed` e `state`. `dom` não
+      está na lista.
+
+      E o compilador não podia ajudar: o tipo declarado é `get view(): EditorView`,
+      não-nulo. Para o TypeScript, o `?.` era até redundante.
+
+      QUANDO ISSO ACONTECE NA PRÁTICA. Com `immediatelyRender: true` — que é o
+      que esta tela precisa, porque `EditorLoader` a monta com `ssr: false` — a
+      INSTÂNCIA passa a existir já no primeiro render, enquanto a VIEW só nasce
+      quando o `EditorContent` entra no DOM. Este efeito depende de `comandos` e
+      `indiceDoComando`, então roda em passagens em que aquela janela ainda está
+      aberta. O sintoma era a tela de erro do módulo ao abrir uma página, com o
+      "Tentar novamente" funcionando — porque a remontagem chega com a view já
+      pronta.
+
+      A guarda é `isInitialized`, e ela é CONSERVADORA de propósito: o Proxy
+      consulta um campo interno que não é essa flag, então existe janela em que a
+      view já existe e `isInitialized` ainda é falso. O custo é pular estes
+      atributos numa passagem — e eles são reaplicados na próxima, porque o
+      efeito depende de `menuVisivel`, `comandos` e `indiceDoComando`. O erro
+      inverso, tocar na view cedo demais, derruba o módulo inteiro.
+
+      NÃO troque por `?.` (inútil, ver acima), nem por `try/catch` (esconderia
+      erro real do ProseMirror), nem por `editor.isDestroyed` (responde outra
+      pergunta: se o editor ACABOU, não se ele começou).
+
+      O contrato está travado em `tiptap-view.test.ts`, ao lado.
+    */
+    if (!editor.isInitialized) return;
+    const dom = editor.view.dom;
     if (menuVisivel) {
       const ativo = comandos[indiceDoComando] ?? comandos[0];
       dom.setAttribute("aria-expanded", "true");
