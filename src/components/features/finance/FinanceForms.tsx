@@ -28,6 +28,21 @@ import {
 const inputCls =
   "h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2";
 
+/*
+  PARES DE CAMPOS — por que todo `grid-cols-2` deste arquivo tem `grid-cols-1`
+  antes e o `sm:` na frente.
+
+  Estes formulários vivem dentro do `Modal`, e a conta de largura no celular é
+  implacável: 375px de tela − 32px do padding do véu − 40px do padding do painel
+  = 303px úteis. Tirando o `gap-3`, sobram ~145px por coluna, e o `px-3` do
+  campo come mais 24. Um `<input type="date">` renderiza o seletor nativo do
+  sistema dentro disso: no iOS o texto "31/12/2025" já encosta nas bordas, e
+  dentro da caixa do cartão (que ainda tem `p-3.5` próprio) fica pior.
+
+  Empilhar no celular e voltar a duas colunas a partir de `sm` (640px) não muda
+  nada no desktop, que é onde o pareamento existe para economizar altura.
+*/
+
 function Field({
   label,
   children,
@@ -242,7 +257,7 @@ export function TransactionForm({
         <input name="description" required defaultValue={transaction?.description ?? ""} className={inputCls} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={parcelado ? "Valor TOTAL da compra (R$)" : "Valor (R$)"} hint="Ex.: 1.234,56">
           <input
             value={amount}
@@ -264,7 +279,7 @@ export function TransactionForm({
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Conta">
           <select
             name="accountId"
@@ -528,7 +543,7 @@ export function StatementPaymentForm({
         conta como despesa nos totais do mês — a despesa já foi contada em cada compra.
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Pagar com">
           <select name="fromAccountId" required className={inputCls}>
             <option value="">Selecione…</option>
@@ -557,7 +572,7 @@ export function StatementPaymentForm({
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field
           label="Valor (R$)"
           // Com pagamento já registrado, o rodapé mostra os três números: o que
@@ -635,7 +650,7 @@ export function TransferForm({
         Gera dois lançamentos ligados (saída e entrada). Não conta como receita
         nem despesa nos totais.
       </p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="De">
           <select name="fromAccountId" required className={inputCls}>
             <option value="">Selecione…</option>
@@ -657,7 +672,7 @@ export function TransferForm({
           </select>
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Valor (R$)">
           <input
             value={amount}
@@ -774,7 +789,7 @@ export function AccountForm({
       <Field label="Nome">
         <input name="name" required defaultValue={account?.name ?? ""} className={inputCls} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Tipo">
           <select
             name="kind"
@@ -812,7 +827,7 @@ export function AccountForm({
               className={inputCls}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Dia do fechamento"
               hint="Compra feita nesse dia já entra na fatura seguinte."

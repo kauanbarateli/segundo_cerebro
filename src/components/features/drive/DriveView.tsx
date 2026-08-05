@@ -211,7 +211,9 @@ export function DriveView({
     <div className="space-y-5">
       {/* Uso de armazenamento */}
       <Card className="p-4">
-        <div className="mb-2 flex items-center justify-between text-corpo">
+        {/* `flex-wrap`: "Armazenamento" + "512,3 MB de 1 GB · 1234 arquivos"
+            passa de 300px em 13px, que é toda a largura do cartão em 375px. */}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-corpo">
           <span className="text-ink">Armazenamento</span>
           <span className="text-ink-muted">
             {formatBytes(usedBytes)} de {formatBytes(QUOTA_BYTES)} · {usage?.file_count ?? 0} arquivos
@@ -244,7 +246,10 @@ export function DriveView({
           ))}
         </nav>
 
-        <div className="flex gap-2">
+        {/* Lixeira + Nova pasta + Enviar somam ~291px e a linha tem 335px em
+            375px: cabe por 44px, e não cabe mais se um rótulo crescer. O
+            `flex-wrap` evita que o terceiro botão saia da tela. */}
+        <div className="flex flex-wrap gap-2">
           <Link
             href="/drive/lixeira"
             className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-corpo text-ink-muted hover:text-ink"
@@ -364,7 +369,25 @@ export function DriveView({
               ))}
 
               {files.map((file) => (
-                <li key={file.id} className="flex items-center gap-3 px-4 py-3">
+                /*
+                  A linha de arquivo é a mais apertada do aplicativo e por isso
+                  quebra em duas no celular.
+
+                  São CINCO ações (destacar, baixar, renomear, mover, lixeira).
+                  Mesmo antes de crescerem para 44px elas já somavam ~221px dos
+                  303px que a linha tem em 375px; com o ícone e os `gap-3`,
+                  sobravam ~40px para o nome do arquivo — três caracteres e
+                  reticências. Não dava para distinguir um arquivo do outro.
+
+                  Tamanho e ações descem para a segunda linha (o contêiner
+                  `w-full` não cabe ao lado do nome, então quebra), e o nome
+                  passa a ter a largura inteira. A partir de `sm` volta tudo
+                  para uma linha só.
+                */
+                <li
+                  key={file.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap"
+                >
                   <Icon.File width={18} height={18} className="shrink-0 text-ink-subtle" />
                   <button
                     type="button"
@@ -374,49 +397,55 @@ export function DriveView({
                     {file.name}
                   </button>
                   {file.starred && <Badge tone="outline">★</Badge>}
-                  <span className="hidden w-20 text-right text-legenda text-ink-subtle sm:block">
-                    {formatBytes(file.size_bytes)}
-                  </span>
-                  <div className="flex shrink-0 gap-1">
-                    <IconButton
-                      label={file.starred ? "Remover destaque" : "Destacar"}
-                      onClick={() =>
-                        start(async () => {
-                          const r = await toggleStar(file.id, !file.starred);
-                          if (r.ok) router.refresh();
-                          else toast(r.error ?? "Erro", "error");
-                        })
-                      }
-                    >
-                      <Icon.Star width={13} height={13} />
-                    </IconButton>
-                    <IconButton label="Baixar" onClick={() => void download(file)}>
-                      <Icon.Download width={13} height={13} />
-                    </IconButton>
-                    <IconButton
-                      label="Renomear"
-                      onClick={() => setRenaming({ id: file.id, name: file.name, isFolder: false })}
-                    >
-                      Renomear
-                    </IconButton>
-                    <IconButton label="Mover" onClick={() => setMoving(file)}>
-                      Mover
-                    </IconButton>
-                    <IconButton
-                      label="Enviar para a lixeira"
-                      danger
-                      onClick={() =>
-                        start(async () => {
-                          const r = await trashFile(file.id);
-                          if (r.ok) {
-                            toast("Enviado para a lixeira", "success");
-                            router.refresh();
-                          } else toast(r.error ?? "Erro", "error");
-                        })
-                      }
-                    >
-                      <Icon.Trash width={13} height={13} />
-                    </IconButton>
+                  <div className="flex w-full items-center justify-end gap-3 sm:w-auto">
+                    {/* Continua escondido no celular: com os cinco botões em
+                        44px a segunda linha já usa ~275 dos 303px, e o tamanho
+                        do arquivo não cabe sem espremer os alvos de toque de
+                        volta. */}
+                    <span className="hidden w-20 text-right text-legenda text-ink-subtle sm:block">
+                      {formatBytes(file.size_bytes)}
+                    </span>
+                    <div className="flex shrink-0 gap-1">
+                      <IconButton
+                        label={file.starred ? "Remover destaque" : "Destacar"}
+                        onClick={() =>
+                          start(async () => {
+                            const r = await toggleStar(file.id, !file.starred);
+                            if (r.ok) router.refresh();
+                            else toast(r.error ?? "Erro", "error");
+                          })
+                        }
+                      >
+                        <Icon.Star width={13} height={13} />
+                      </IconButton>
+                      <IconButton label="Baixar" onClick={() => void download(file)}>
+                        <Icon.Download width={13} height={13} />
+                      </IconButton>
+                      <IconButton
+                        label="Renomear"
+                        onClick={() => setRenaming({ id: file.id, name: file.name, isFolder: false })}
+                      >
+                        Renomear
+                      </IconButton>
+                      <IconButton label="Mover" onClick={() => setMoving(file)}>
+                        Mover
+                      </IconButton>
+                      <IconButton
+                        label="Enviar para a lixeira"
+                        danger
+                        onClick={() =>
+                          start(async () => {
+                            const r = await trashFile(file.id);
+                            if (r.ok) {
+                              toast("Enviado para a lixeira", "success");
+                              router.refresh();
+                            } else toast(r.error ?? "Erro", "error");
+                          })
+                        }
+                      >
+                        <Icon.Trash width={13} height={13} />
+                      </IconButton>
+                    </div>
                   </div>
                 </li>
               ))}
@@ -526,7 +555,20 @@ function IconButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-sm border border-line-strong px-2 text-meta text-ink-muted transition-colors",
+        /*
+          ALVO DE TOQUE — os `h-11 min-w-11` (44px) valem só no celular.
+
+          Estes botões eram 28px de altura e ~29px de largura nos que só têm
+          ícone: metade do alvo mínimo confortável, numa LISTA onde o vizinho de
+          4px é "Enviar para a lixeira". Errar o dedo aqui apaga arquivo.
+
+          O ícone NÃO cresceu — continua 13px. O que cresceu foi a área
+          clicável, via altura mínima e padding. A partir de `sm` tudo volta ao
+          h-7/px-2 original, porque com mouse o alvo pequeno não é problema e a
+          densidade da lista no desktop é desejada.
+        */
+        "inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-sm border border-line-strong px-3 text-meta text-ink-muted transition-colors",
+        "sm:h-7 sm:min-w-0 sm:px-2",
         danger ? "hover:text-red-600 dark:hover:text-red-400" : "hover:text-ink",
       )}
     >

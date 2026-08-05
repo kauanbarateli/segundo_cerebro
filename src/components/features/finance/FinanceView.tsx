@@ -505,7 +505,24 @@ function Transactions({
           {monthTx.map((tx) => {
             const transfer = isTransfer(tx);
             return (
-              <li key={tx.id} className="flex items-center gap-3 px-4 py-3">
+              /*
+                Duas linhas no celular, uma no desktop.
+
+                A conta na tela de 375px não fechava: a `<main>` tem px-5 e o
+                item px-4, sobram 303px. O ícone (32) + o valor (~95, com o
+                sinal e `tabular-nums`) + "Editar" e a lixeira (~79) + três
+                `gap-3` comem 242 — a descrição ficava com 61px, ou seja,
+                truncava em cinco caracteres. Todo lançamento virava "Merca…".
+
+                Valor e ações passam a viajar juntos num contêiner `w-full`,
+                que não cabe ao lado do texto e por isso cai para a segunda
+                linha; a partir de `sm` ele volta a ser `w-auto` e o `li` volta
+                a `flex-nowrap` — o desktop fica idêntico ao que era.
+              */
+              <li
+                key={tx.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap"
+              >
                 <div
                   className={cn(
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-corpo",
@@ -544,42 +561,44 @@ function Transactions({
                   </div>
                 </div>
 
-                <span
-                  className={cn(
-                    "shrink-0 text-sm font-semibold tabular-nums",
-                    transfer
-                      ? "text-ink-subtle"
-                      : tx.kind === "income"
-                        ? "text-ink"
-                        : "text-red-600 dark:text-red-400",
-                  )}
-                >
-                  {tx.kind === "expense" && !transfer ? "−" : ""}
-                  {money(tx.amount_cents)}
-                </span>
+                <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                  <span
+                    className={cn(
+                      "shrink-0 text-sm font-semibold tabular-nums",
+                      transfer
+                        ? "text-ink-subtle"
+                        : tx.kind === "income"
+                          ? "text-ink"
+                          : "text-red-600 dark:text-red-400",
+                    )}
+                  >
+                    {tx.kind === "expense" && !transfer ? "−" : ""}
+                    {money(tx.amount_cents)}
+                  </span>
 
-                <div className="flex shrink-0 gap-1">
-                  {!transfer && (
+                  <div className="flex shrink-0 gap-1">
+                    {!transfer && (
+                      <button
+                        type="button"
+                        aria-label="Editar lançamento"
+                        onClick={() => {
+                          setEditing(tx);
+                          setFormOpen(true);
+                        }}
+                        className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                      >
+                        Editar
+                      </button>
+                    )}
                     <button
                       type="button"
-                      aria-label="Editar lançamento"
-                      onClick={() => {
-                        setEditing(tx);
-                        setFormOpen(true);
-                      }}
-                      className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                      aria-label="Excluir lançamento"
+                      onClick={() => setTarget(tx)}
+                      className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-red-600 dark:hover:text-red-400"
                     >
-                      Editar
+                      <Icon.Trash width={13} height={13} />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Excluir lançamento"
-                    onClick={() => setTarget(tx)}
-                    className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-red-600 dark:hover:text-red-400"
-                  >
-                    <Icon.Trash width={13} height={13} />
-                  </button>
+                  </div>
                 </div>
               </li>
             );
@@ -833,36 +852,43 @@ function Accounts({
         ) : (
           <ul className="divide-y divide-line">
             {demais.map((a) => (
-              <li key={a.id} className="flex items-center gap-3 px-4 py-3.5">
+              /* Mesma quebra em duas linhas da lista de lançamentos, e pelo
+                 mesmo motivo: saldo e ações somam ~180px dos 303 disponíveis. */
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:flex-nowrap"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{a.name}</p>
-                  <p className="text-legenda text-ink-subtle">
+                  <p className="truncate text-legenda text-ink-subtle">
                     {KIND_LABEL[a.kind] ?? a.kind}
                     {a.institution ? ` · ${a.institution}` : ""}
                   </p>
                 </div>
-                <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
-                  {money(balanceById.get(a.id)?.balance_cents ?? a.opening_balance_cents)}
-                </span>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(a);
-                      setFormOpen(true);
-                    }}
-                    className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Arquivar ${a.name}`}
-                    onClick={() => setTarget(a)}
-                    className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
-                  >
-                    <Icon.Trash width={13} height={13} />
-                  </button>
+                <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
+                    {money(balanceById.get(a.id)?.balance_cents ?? a.opening_balance_cents)}
+                  </span>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(a);
+                        setFormOpen(true);
+                      }}
+                      className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Arquivar ${a.name}`}
+                      onClick={() => setTarget(a)}
+                      className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
+                    >
+                      <Icon.Trash width={13} height={13} />
+                    </button>
+                  </div>
                 </div>
               </li>
             ))}
@@ -1044,22 +1070,33 @@ function CreditCardPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div>
+      {/*
+        Três colunas só a partir de `sm`. No celular o cartão ocupa a largura
+        toda (295px dentro do `p-5`), e três colunas dariam 90px cada — menos que
+        os ~100px que "R$ 12.345,67" ocupa em 14px semibold. Pior: o espaço do
+        `formatBRL` é NÃO-SEPARÁVEL (vem do Intl), então o valor não quebra em
+        duas linhas, ele vaza por cima da coluna vizinha.
+
+        Abaixo de `sm` cada par vira uma linha "rótulo … valor", que é o mesmo
+        desenho do bloco da fatura logo abaixo neste cartão — os três números
+        continuam empilhados e comparáveis, sem inventar um layout novo.
+      */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Limite</p>
-          <p className="mt-0.5 text-sm font-semibold tabular-nums text-ink">
+          <p className="text-sm font-semibold tabular-nums text-ink sm:mt-0.5">
             {temLimite ? money(limiteCents!) : "—"}
           </p>
         </div>
-        <div>
+        <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Usado</p>
-          <p className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{money(usadoCents)}</p>
+          <p className="text-sm font-semibold tabular-nums text-ink sm:mt-0.5">{money(usadoCents)}</p>
         </div>
-        <div>
+        <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Disponível</p>
           <p
             className={cn(
-              "mt-0.5 text-sm font-semibold tabular-nums",
+              "text-sm font-semibold tabular-nums sm:mt-0.5",
               disponivelCents != null && disponivelCents < 0
                 ? "text-red-600 dark:text-red-400"
                 : "text-ink",
@@ -1350,8 +1387,10 @@ function Budgets({
           {progress.map((p) => (
             <li key={p.budget.id} className="px-4 py-3.5">
               <div className="mb-1.5 flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-ink">{p.categoryName}</span>
-                <div className="flex items-center gap-2">
+                {/* `min-w-0` + `truncate`: sem os dois, "Alimentação fora de casa"
+                    empurrava o par gasto/limite para fora do cartão no celular. */}
+                <span className="min-w-0 truncate text-sm font-medium text-ink">{p.categoryName}</span>
+                <div className="flex shrink-0 items-center gap-2">
                   <span className="text-legenda text-ink-muted">
                     {money(p.spentCents)} / {money(p.budget.limit_cents)}
                   </span>

@@ -331,74 +331,90 @@ export function TasksView({
         )
       ) : view === "list" ? (
         <>
-          {/* Desktop table */}
-          <table className="hidden w-full md:table">
-            <thead>
-              <tr className="border-b border-line text-left">
-                {["Quando", "Tarefa", "Área", "Prioridade", "Status", ""].map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-2.5 text-meta font-medium uppercase tracking-wide text-ink-subtle"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => {
-                const when = t.due_at ?? t.scheduled_start_at;
-                return (
-                  <tr key={t.id} className="border-b border-line last:border-0 hover:bg-surface-muted">
-                    <td className="whitespace-nowrap px-4 py-3 text-corpo text-ink-muted">
-                      {formatDayLabel(when)}
-                      {when && !t.all_day && (
-                        <span className="ml-1 text-ink-subtle">{formatTime(when)}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <TaskCheckbox task={t} />
-                        <button
-                          onClick={() => openEdit(t)}
-                          className={cn(
-                            "text-left text-sm font-medium hover:underline",
-                            t.status === "done" ? "text-ink-subtle line-through" : "text-ink",
-                          )}
-                        >
-                          {t.title}
-                        </button>
-                        <LinkCountBadge count={related.get(t.id)?.length ?? 0} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {t.category_id && <Badge tone="outline">{catById.get(t.category_id)}</Badge>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={t.priority === "high" || t.priority === "urgent" ? "solid" : "default"}>
-                        {PRIORITY_LABEL[t.priority]}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-corpo text-ink-muted">
-                      {t.status === "done" ? "Concluída" : t.status === "in_progress" ? "Em andamento" : "A fazer"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <RowMenu
-                        onEdit={() => openEdit(t)}
-                        onArchive={() =>
-                          startDelete(async () => {
-                            const r = await archiveTask(t.id);
-                            toast(r.ok ? "Arquivada" : r.error ?? "Erro", r.ok ? "success" : "error");
-                          })
-                        }
-                        onDelete={() => setDeleteTarget(t)}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {/*
+            Desktop table
+
+            O contêiner rolável não é enfeite. A tabela só existe a partir de
+            `md` (768px), mas EM 768px ela ainda não cabe: cinco colunas de
+            largura própria (a de "Quando" é `whitespace-nowrap` e não encolhe)
+            mais os `px-4` de cada célula somam mais que os ~728px úteis. Sem
+            este `overflow-x-auto` quem estoura não é a tabela — é a PÁGINA, que
+            passa a rolar na horizontal inteira, cabeçalho e barra lateral
+            junto. Com ele, o excesso rola dentro do cartão e só ele se mexe.
+
+            Seguro por causa do portal: o `RowMenu` renderiza o painel em
+            document.body (ver ui/DropdownMenu.tsx), então criar aqui um contexto
+            de rolagem não corta o menu das últimas linhas.
+          */}
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-line text-left">
+                  {["Quando", "Tarefa", "Área", "Prioridade", "Status", ""].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-2.5 text-meta font-medium uppercase tracking-wide text-ink-subtle"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((t) => {
+                  const when = t.due_at ?? t.scheduled_start_at;
+                  return (
+                    <tr key={t.id} className="border-b border-line last:border-0 hover:bg-surface-muted">
+                      <td className="whitespace-nowrap px-4 py-3 text-corpo text-ink-muted">
+                        {formatDayLabel(when)}
+                        {when && !t.all_day && (
+                          <span className="ml-1 text-ink-subtle">{formatTime(when)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <TaskCheckbox task={t} />
+                          <button
+                            onClick={() => openEdit(t)}
+                            className={cn(
+                              "text-left text-sm font-medium hover:underline",
+                              t.status === "done" ? "text-ink-subtle line-through" : "text-ink",
+                            )}
+                          >
+                            {t.title}
+                          </button>
+                          <LinkCountBadge count={related.get(t.id)?.length ?? 0} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {t.category_id && <Badge tone="outline">{catById.get(t.category_id)}</Badge>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge tone={t.priority === "high" || t.priority === "urgent" ? "solid" : "default"}>
+                          {PRIORITY_LABEL[t.priority]}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-corpo text-ink-muted">
+                        {t.status === "done" ? "Concluída" : t.status === "in_progress" ? "Em andamento" : "A fazer"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <RowMenu
+                          onEdit={() => openEdit(t)}
+                          onArchive={() =>
+                            startDelete(async () => {
+                              const r = await archiveTask(t.id);
+                              toast(r.ok ? "Arquivada" : r.error ?? "Erro", r.ok ? "success" : "error");
+                            })
+                          }
+                          onDelete={() => setDeleteTarget(t)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {/* Mobile cards */}
           <ul className="divide-y divide-line md:hidden">

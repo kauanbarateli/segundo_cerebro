@@ -23,9 +23,16 @@ export default async function AjudaPage() {
       />
       <Card className="max-w-lg divide-y divide-line">
         {SHORTCUTS.map((s) => (
-          <div key={s.keys} className="flex items-center justify-between px-5 py-3.5">
+          /* Empilha no celular. Lado a lado, o rótulo ficava com ~95px e a
+             descrição ("Botão no cabeçalho ou item Capturar no menu") tinha de
+             se espremer em três linhas nos 200px restantes — a tabela de duas
+             colunas só funciona quando há duas colunas de espaço. */
+          <div
+            key={s.keys}
+            className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+          >
             <span className="text-sm font-medium text-ink">{s.keys}</span>
-            <span className="text-corpo text-ink-subtle">{s.desc}</span>
+            <span className="text-corpo text-ink-subtle sm:text-right">{s.desc}</span>
           </div>
         ))}
       </Card>

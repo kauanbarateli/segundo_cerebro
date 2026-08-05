@@ -36,7 +36,15 @@ export function TrashView({ files }: { files: DriveFile[] }) {
         ) : (
           <ul className="divide-y divide-line">
             {files.map((file) => (
-              <li key={file.id} className="flex items-center gap-3 px-4 py-3">
+              /* Duas linhas no celular: "Restaurar" e "Apagar" ocupam ~155px
+                 dos 303px da linha, e o nome do arquivo — que é a única forma
+                 de saber O QUE se está prestes a apagar de vez — ficava com
+                 menos de 100px. Ler o nome antes de decidir importa mais aqui
+                 do que em qualquer outra lista do aplicativo. */
+              <li
+                key={file.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap"
+              >
                 <Icon.File width={18} height={18} className="shrink-0 text-ink-subtle" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-ink">{file.name}</p>
@@ -44,24 +52,28 @@ export function TrashView({ files }: { files: DriveFile[] }) {
                     Excluído {formatDayLabel(file.deleted_at)} · {formatBytes(file.size_bytes)}
                   </p>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    start(async () => {
-                      const r = await restoreFile(file.id);
-                      if (r.ok) {
-                        toast("Arquivo restaurado", "success");
-                        router.refresh();
-                      } else toast(r.error ?? "Erro", "error");
-                    })
-                  }
-                >
-                  Restaurar
-                </Button>
-                <Button variant="danger" size="sm" onClick={() => setTarget(file)}>
-                  Apagar
-                </Button>
+                {/* `gap-3` e não `gap-2`: era a distância que os dois botões já
+                    tinham quando eram irmãos diretos do `li`. */}
+                <div className="flex w-full justify-end gap-3 sm:w-auto">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      start(async () => {
+                        const r = await restoreFile(file.id);
+                        if (r.ok) {
+                          toast("Arquivo restaurado", "success");
+                          router.refresh();
+                        } else toast(r.error ?? "Erro", "error");
+                      })
+                    }
+                  >
+                    Restaurar
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => setTarget(file)}>
+                    Apagar
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

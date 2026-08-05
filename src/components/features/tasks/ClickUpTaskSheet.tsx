@@ -210,7 +210,11 @@ export function ClickUpTaskSheet({
                 placeholder="Escreva um comentário…"
                 className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-2"
               />
-              <div className="mt-2 flex items-center justify-between gap-3">
+              {/* Empilha no celular: o aviso pede ~250px e o botão outros ~155,
+                  contra os 303px do modal em 375px. Lado a lado, quem encolhia
+                  era o BOTÃO — "Comentar no ClickUp" quebrava em duas linhas
+                  dentro de uma caixa de 32px de altura. */}
+              <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 {/* O aviso é permanente, não um diálogo de confirmação. Um
                     diálogo a mais para cada comentário vira ruído e some da
                     atenção em dois dias; a frase fixa continua sendo lida. */}

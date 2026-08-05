@@ -301,7 +301,16 @@ export function CaptureView({
           className="w-full resize-none rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
         />
 
-        <div className="mt-4 flex items-center justify-between gap-3">
+        {/*
+          `flex-wrap` na linha de fora, e não só no grupo de dentro.
+
+          O grupo dos seletores já quebrava sozinho, mas a linha não: os dois
+          `<select>` pedem ~270px e o "Enviar ao cérebro" outros ~160, contra os
+          295px que o cartão tem em 375px. Sem `flex-wrap` aqui o botão não
+          descia, ele ENCOLHIA — o rótulo quebrava em duas linhas dentro de uma
+          caixa de 40px de altura e vazava por baixo da borda.
+        */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <select
               aria-label="Categoria"

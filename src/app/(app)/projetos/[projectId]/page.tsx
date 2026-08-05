@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ProjectDetail } from "@/components/features/projects/ProjectDetail";
-import { getProject, getProjectContents } from "@/lib/data";
+import { getCategories, getProject, getProjectContents, getProjects } from "@/lib/data";
 import { requireModule } from "@/lib/guards";
 import { lerUuid } from "@/lib/validation";
 
@@ -16,6 +16,14 @@ import { lerUuid } from "@/lib/validation";
  *      barra de endereços, não de um `<Link>` que a aplicação gerou — e um id
  *      malformado chega ao Postgres como "invalid input syntax for type uuid",
  *      que vira 500 em vez de 404.
+ *
+ * ⚠️ POR QUE ESTA PÁGINA CARREGA CATEGORIAS E A LISTA DE PROJETOS. Elas não
+ * aparecem em lugar nenhum da tela — são para o "Criar aqui" da seção Tarefas,
+ * que abre o `TaskForm` de verdade (o mesmo do módulo) dentro de um modal, e
+ * aquele formulário tem os campos Categoria e Projeto. Buscá-las só quando o
+ * modal abrisse exigiria uma segunda ida ao servidor no meio de um clique;
+ * aqui elas vêm no mesmo `Promise.all` das outras três consultas, que já
+ * acontecem de qualquer forma.
  */
 export default async function ProjetoPage({
   params,
@@ -33,7 +41,11 @@ export default async function ProjetoPage({
   const projeto = await getProject(id);
   if (!projeto) notFound();
 
-  const conteudo = await getProjectContents(id);
+  const [conteudo, categorias, projetos] = await Promise.all([
+    getProjectContents(id),
+    getCategories(),
+    getProjects(),
+  ]);
 
   return (
     <>
@@ -43,7 +55,12 @@ export default async function ProjetoPage({
         subtitle={projeto.description ?? undefined}
         user={{ name: ctx.displayName, avatarUrl: ctx.avatarUrl }}
       />
-      <ProjectDetail projeto={projeto} conteudo={conteudo} />
+      <ProjectDetail
+        projeto={projeto}
+        conteudo={conteudo}
+        categorias={categorias}
+        projetos={projetos}
+      />
     </>
   );
 }

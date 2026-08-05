@@ -107,7 +107,26 @@ function BotaoDeLinha({
       tabIndex={tabIndex}
       onClick={onClick}
       className={cn(
-        "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-ink-subtle transition-colors",
+        /*
+          36px no celular, 24px no desktop — e o 36 é um MEIO-TERMO consciente,
+          não descuido.
+
+          24×24 com 2px de vão, tendo "Excluir" como vizinho, é alvo de toque
+          pequeno demais: erra-se o dedo e o que abre é a confirmação de apagar
+          uma página com as subpáginas dentro.
+
+          O ideal seriam 44px, e aqui eles NÃO cabem. O motivo é o `invisible`
+          que esconde este grupo: `visibility: hidden` continua ocupando espaço,
+          então a largura reservada pelos quatro botões é descontada do título
+          em TODAS as linhas da árvore, não só na que está com o mouse em cima.
+          A 44px seriam 182px reservados dos ~335px da barra no celular, e o
+          título de uma página em terceiro nível ficaria com menos de 100px. A
+          36px são 150px, e o título continua legível.
+
+          O ícone segue com 13px nos dois casos: cresceu a área, não o desenho.
+        */
+        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-ink-subtle transition-colors",
+        "sm:h-6 sm:w-6",
         perigo ? "hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400" : "hover:bg-line hover:text-ink",
       )}
     >

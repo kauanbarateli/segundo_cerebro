@@ -482,7 +482,10 @@ function UnlockedView({
     <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
       <div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="relative">
+          {/* `w-full` no celular: 256px fixos numa tela de 335px deixavam um
+              vão morto à direita e empurravam os botões para a linha de baixo
+              mesmo quando havia espaço. */}
+          <div className="relative w-full sm:w-auto">
             <Icon.Search
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
               width={16}
@@ -492,7 +495,7 @@ function UnlockedView({
               placeholder="Buscar no cofre"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-10 w-64 rounded-md border border-line-strong bg-surface pl-9 pr-3 text-sm text-ink focus-visible:outline-2"
+              className="h-10 w-full rounded-md border border-line-strong bg-surface pl-9 pr-3 text-sm text-ink focus-visible:outline-2 sm:w-64"
             />
           </div>
           <div className="flex gap-2">
@@ -743,7 +746,16 @@ function IconBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`inline-flex h-7 items-center gap-1 rounded-sm border border-line-strong px-2 text-ink-muted hover:bg-surface-muted ${
+      /*
+        44px de alvo no celular. Estes botões (revelar senha, copiar, editar,
+        excluir) tinham 28px de altura e ~30px de largura nos que só têm ícone,
+        colados por 4px — e "Copiar senha" fica ao lado de "Excluir".
+
+        Aqui os 44px cabem sem prejuízo porque o contêiner é `flex-wrap`: se a
+        linha encher, o botão desce, em vez de espremer o vizinho. O ícone
+        continua com 14px.
+      */
+      className={`inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-sm border border-line-strong px-3 text-ink-muted hover:bg-surface-muted sm:h-7 sm:min-w-0 sm:px-2 ${
         danger ? "hover:text-red-600 dark:hover:text-red-400" : "hover:text-ink"
       }`}
     >
@@ -780,7 +792,12 @@ function VaultItemForm({
       }}
       className="space-y-3"
     >
-      <div className="grid grid-cols-2 gap-3">
+      {/*
+        Uma coluna no celular, duas a partir de `sm` — mesma conta do
+        FinanceForms: o modal deixa ~145px por coluna em 375px, e "Nome do
+        serviço" / "Número da conta" não são campos de 145px.
+      */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Nome do serviço" required value={data.name} onChange={(v) => set("name", v)} />
         <div>
           <label className="mb-1.5 block text-corpo font-medium text-ink">Tipo</label>
@@ -797,11 +814,11 @@ function VaultItemForm({
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Usuário" value={data.username ?? ""} onChange={(v) => set("username", v)} />
         <Field label="E-mail" value={data.email ?? ""} onChange={(v) => set("email", v)} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Senha" type="password" value={data.password ?? ""} onChange={(v) => set("password", v)} />
         <Field label="Número da conta" value={data.accountNumber ?? ""} onChange={(v) => set("accountNumber", v)} />
       </div>

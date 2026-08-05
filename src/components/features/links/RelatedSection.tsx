@@ -199,11 +199,20 @@ export function RelatedSection({
       ) : (
         <ul className="mb-3 space-y-1.5">
           {related.map((item) => (
+            /*
+              Quebra em duas linhas no celular. "Remover vínculo" é um rótulo
+              longo (~121px) e a seção mora dentro do Modal, que tem 283px úteis
+              em 375px: com o distintivo do tipo na frente, sobravam ~80px para
+              o nome do item vinculado. Truncado a 80px não dá para saber DE QUEM
+              é o vínculo que se está prestes a remover — exatamente o problema
+              que o `aria-label` abaixo resolve para o leitor de tela e que
+              continuava valendo para quem enxerga a tela.
+            */
             <li
               key={`${item.kind}-${item.id}`}
-              className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface-muted px-2.5 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface-muted px-2.5 py-2"
             >
-              <span className="flex min-w-0 items-center gap-2">
+              <span className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
                 <Badge tone="outline">{RELATED_KIND_LABEL[item.kind]}</Badge>
                 <span className="min-w-0">
                   <span className="block truncate text-corpo text-ink">{item.label}</span>
@@ -215,7 +224,7 @@ export function RelatedSection({
               <Button
                 variant="ghost"
                 size="sm"
-                className="shrink-0"
+                className="ml-auto shrink-0"
                 disabled={pendente}
                 // O texto visível se repete em toda linha; o rótulo acessível
                 // diz DE QUEM é o vínculo, senão o leitor de tela anuncia uma

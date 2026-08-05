@@ -36,8 +36,33 @@ export const TITULO_PADRAO = "Sem título";
  * não tem `type`. Um editor que recebesse `{}` quebraria ao montar o documento.
  * `createPage` grava este valor e `normalizarDocumento` conserta o que já
  * estiver gravado, para que o editor nunca precise se defender disso.
+ *
+ * =============================================================================
+ * ⚠️ O PARÁGRAFO NÃO É DECORAÇÃO — SEM ELE O MÓDULO INTEIRO FICA SOMENTE LEITURA
+ * =============================================================================
+ * O nó `doc` do ProseMirror tem content spec `block+`: PELO MENOS UM bloco.
+ * `content: []` tem zero, e o schema recusa com "Invalid content for node doc".
+ *
+ * Isso não passa despercebido — e é justamente por causa de uma defesa que está
+ * certa. `Editor.tsx` liga `enableContentCheck: true` para que um documento que
+ * o schema não entenda NÃO seja aberto mutilado e regravado por cima do
+ * original. Com um documento inválido, essa verificação dispara
+ * `onContentError`, o editor entra em `setEditable(false)` e a página mostra
+ * "criada por uma versão mais recente do editor".
+ *
+ * A mensagem é um diagnóstico enganoso: a página não veio do futuro, ela veio
+ * VAZIA DEMAIS. E como `createPage` grava esta constante, TODA página nova
+ * nascia impossível de escrever.
+ *
+ * O teste que protege isto monta contra o schema real do editor
+ * (`knowledge.test.ts`), e não compara a forma com `toEqual` — comparar a forma
+ * travaria o formato sem provar que ele é aceito, que é exatamente o erro que
+ * deixou este defeito passar por 499 testes verdes.
  */
-export const DOCUMENTO_VAZIO: ProseMirrorDoc = { type: "doc", content: [] };
+export const DOCUMENTO_VAZIO: ProseMirrorDoc = {
+  type: "doc",
+  content: [{ type: "paragraph" }],
+};
 
 /** Profundidade máxima percorrida ao montar/subir a árvore. Ver `montarArvore`. */
 const PROFUNDIDADE_MAXIMA = 256;
@@ -48,15 +73,30 @@ const PROFUNDIDADE_MAXIMA = 256;
  * Devolve uma CÓPIA nova de `DOCUMENTO_VAZIO` no caso ruim, nunca a própria
  * constante: o editor trata o documento como estrutura viva e um objeto
  * compartilhado entre páginas viraria conteúdo vazando de uma para outra.
+ *
+ * DUAS FORMAS RUINS, NÃO UMA. A primeira é o objeto sem `type` (o default
+ * `'{}'::jsonb` da coluna). A segunda é o documento COM `type` e SEM bloco
+ * nenhum — ver o aviso em `DOCUMENTO_VAZIO`: `block+` exige ao menos um, e um
+ * `content: []` faz o editor abrir travado.
+ *
+ * A segunda forma é curada AQUI, na leitura, e isso é deliberado: as páginas
+ * gravadas antes da correção continuam no banco com `content: []`, e curá-las
+ * na leitura conserta todas sem migration e sem escrever no banco. O custo é
+ * uma verificação de tamanho por página aberta.
  */
 export function normalizarDocumento(valor: unknown): ProseMirrorDoc {
   if (valor !== null && typeof valor === "object" && !Array.isArray(valor)) {
-    const doc = valor as { type?: unknown };
+    const doc = valor as { type?: unknown; content?: unknown };
     if (typeof doc.type === "string" && doc.type.length > 0) {
+      if (!Array.isArray(doc.content) || doc.content.length === 0) {
+        // Espalha o original para preservar `attrs` e qualquer campo que uma
+        // versão futura tenha acrescentado — só o `content` é substituído.
+        return { ...(valor as ProseMirrorDoc), content: [{ type: "paragraph" }] };
+      }
       return valor as ProseMirrorDoc;
     }
   }
-  return { type: "doc", content: [] };
+  return { type: "doc", content: [{ type: "paragraph" }] };
 }
 
 /** Rótulo de exibição: título em branco não pode virar item invisível na árvore. */

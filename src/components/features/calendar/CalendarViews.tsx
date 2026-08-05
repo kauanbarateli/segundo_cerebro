@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge, PillButton } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Modal } from "@/components/ui/Modal";
 import { EmptyState } from "@/components/ui/states";
 import { CalendarEventCard } from "@/components/features/calendar/CalendarEventCard";
+import { DetalheDoEvento } from "@/components/features/calendar/DetalheDoEvento";
 import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
 import type { CalendarAccount, CalendarEvent, CalendarSource, CalendarView } from "@/lib/database.types";
@@ -91,7 +91,6 @@ export function CalendarViews({
   // CaptureView. Uma sincronização do Google pode reescrever o evento enquanto
   // o detalhe está aberto — guardar a cópia congelaria o modal no texto velho.
   const [detailId, setDetailId] = useState<string | null>(null);
-  const closeDetailRef = useRef<HTMLButtonElement>(null);
 
   const contarVinculos = (id: string) => related.get(id)?.length ?? 0;
 
@@ -251,39 +250,33 @@ export function CalendarViews({
       </div>
 
       {/*
-        DETALHE DO EVENTO — modal novo, e o menor possível.
+        DETALHE DO EVENTO — o diálogo mora em `DetalheDoEvento.tsx`.
 
         Não existia lugar nenhum na agenda onde a seção "Relacionado" coubesse:
         o card era uma <div> sem interação e o chip da semana, um retângulo com
         `title`. Em vez de inventar uma tela de evento, o diálogo REAPROVEITA o
-        próprio card (sem `onOpen`, para o título não virar botão dentro do
-        modal) e acrescenta só a seção de vínculos. Sem edição, sem exclusão: o
-        evento é espelho do Google e continua sendo editado lá.
+        próprio card e acrescenta só a seção de vínculos.
+
+        O corpo saiu daqui quando o Início passou a abrir o mesmo painel — sem a
+        extração seriam dois modais de evento, e só um deles receberia a próxima
+        correção. Nada mudou nesta tela: o Calendário continua sem descrição e
+        sem link do Google (`mostrarDetalhes` fica desligado), e os vínculos
+        continuam sendo a razão de este diálogo existir.
       */}
       {detail && (
-        <Modal
-          title={detail.summary ?? "(sem título)"}
-          size="lg"
-          onClose={() => setDetailId(null)}
-          // "Fechar" é o único controle inofensivo do painel: o primeiro focável
-          // na ordem do DOM seria um "Remover vínculo", e Enter logo ao abrir
-          // apagaria um vínculo sem confirmação. Aqui o pior que Enter faz é
-          // desfazer a abertura.
-          initialFocus={closeDetailRef}
-          footer={
-            <Button ref={closeDetailRef} variant="ghost" size="sm" onClick={() => setDetailId(null)}>
-              Fechar
-            </Button>
-          }
+        <DetalheDoEvento
+          evento={detail}
+          contaRotulo={badgeFor(detail)}
+          tom={tomFor(detail)}
+          onFechar={() => setDetailId(null)}
         >
-          <CalendarEventCard event={detail} accountBadge={badgeFor(detail)} tom={tomFor(detail)} />
           <RelatedSection
             className="mt-4"
             entity={{ kind: "event", id: detail.id }}
             related={related.get(detail.id) ?? []}
             candidates={linkCandidates}
           />
-        </Modal>
+        </DetalheDoEvento>
       )}
     </Card>
   );

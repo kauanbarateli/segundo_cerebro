@@ -14,12 +14,21 @@ import { somarDias } from "@/lib/habits";
  */
 
 /**
- * A janela carregada.
+ * A janela carregada — e a ÚNICA janela da tela.
  *
- * Noventa dias é o que o mapa de calor mostra, e é também o teto do que a
- * melhor sequência enxerga. Carregar o histórico inteiro cresceria sem limite
- * para um número que quase nunca vem do começo; noventa dias de cinco hábitos
- * são no máximo 450 linhas, porque o registro é esparso.
+ * Noventa dias é o que o mapa de calor mostra, é o teto do que a melhor
+ * sequência enxerga e, desde a reforma da apresentação, é também o período da
+ * taxa e das falhas. Antes o painel resumia 30 dias e desenhava 90: dois
+ * recortes de tempo lado a lado, sem nada avisando, e "4 falhas" não era o que
+ * o quadriculado logo abaixo mostrava.
+ *
+ * Carregar o histórico inteiro cresceria sem limite para um número que quase
+ * nunca vem do começo; noventa dias de cinco hábitos são no máximo 450 linhas,
+ * porque o registro é esparso.
+ *
+ * ⚠️ Mudar este número muda o que a tela AFIRMA, não só o que ela desenha. O
+ * rodapé de `HabitsView` declara a janela por escrito justamente para que o
+ * leitor não precise adivinhar qual é.
  */
 const DIAS_DA_JANELA = 90;
 
@@ -48,7 +57,7 @@ export default async function HabitosPage() {
       <PageHeader
         eyebrow="Rotina"
         title="O que você faz todo dia."
-        subtitle="Marque o que cumpriu. A falha é calculada, não anotada."
+        subtitle="Marque o que cumpriu — é o único registro que existe. A falha sai da regra."
         user={{ name: ctx.displayName, avatarUrl: ctx.avatarUrl }}
       />
       <HabitsView

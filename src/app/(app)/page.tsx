@@ -1,22 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icons";
 import { EmptyState } from "@/components/ui/states";
-import { TaskCheckbox } from "@/components/features/tasks/TasksView";
-import { CalendarEventCard } from "@/components/features/calendar/CalendarEventCard";
+import { CompromissosDeHoje } from "@/components/features/home/CompromissosDeHoje";
+import { ResumoFinanceiro } from "@/components/features/home/ResumoFinanceiro";
+import { TarefasDeHoje } from "@/components/features/home/TarefasDeHoje";
 import { SocialLinkIcon } from "@/components/features/social/SocialLinkIcon";
-import { rotuloDaConta, tomDaConta } from "@/lib/calendar-colors";
 import { HabitsTodayCard } from "@/components/features/habits/HabitsTodayCard";
+import { somaMeses } from "@/lib/credit";
 import { somarDias } from "@/lib/habits";
 import {
   getAppContext,
   getCalendarAccounts,
   getCaptures,
   getCategories,
+  getClickUpConnection,
   getEventsForToday,
+  getFinanceSnapshot,
   getHabitEntries,
   getHabitPauses,
   getHabits,
@@ -30,11 +32,18 @@ import {
   formatTime,
   greeting,
   plural,
-  startOfDay,
-  endOfDay,
   dayRangeInTimeZone,
-  cn,
 } from "@/lib/utils";
+
+/**
+ * O INÍCIO — o panorama de tudo que importa hoje.
+ *
+ * A regra que organiza esta página inteira: NADA AQUI ESPERA POR REDE EXTERNA.
+ * Ela é a primeira tela que abre, e cada serviço de terceiro que entrasse no
+ * `Promise.all` abaixo viraria um jeito de o aplicativo inteiro ficar lento por
+ * culpa de outra empresa. O que vem de fora (as tarefas do ClickUp) é buscado
+ * pelo navegador DEPOIS de a tela existir — ver `TarefasDeHoje`.
+ */
 export default async function HomePage() {
   const ctx = await getAppContext();
   if (!ctx) redirect("/login");
@@ -55,56 +64,114 @@ export default async function HomePage() {
     nada.
   */
   const mostrarHabitos = ctx.enabledModules.has("habitos");
-  const { dayKey: hojeCivil } = dayRangeInTimeZone(new Date(), "America/Sao_Paulo");
-  const inicioDosHabitos = somarDias(hojeCivil, -29);
+  const mostrarFinanceiro = ctx.enabledModules.has("financeiro");
 
-  const [tasks, captures, categories, accounts, events, socialLinks, habitos, marcacoes, pausas] =
-    await Promise.all([
-      getTasks(),
-      getCaptures(),
-      getCategories(),
-      getCalendarAccounts(),
-      getEventsForToday(),
-      getSocialLinks(),
-      mostrarHabitos ? getHabits() : Promise.resolve([]),
-      mostrarHabitos ? getHabitEntries(inicioDosHabitos) : Promise.resolve([]),
-      mostrarHabitos ? getHabitPauses(inicioDosHabitos) : Promise.resolve([]),
-    ]);
+  /*
+    O DIA É O DIA CIVIL DE SÃO PAULO, e não a meia-noite do relógio do servidor.
+
+    `startOfDay(new Date())` devolvia a meia-noite do fuso onde o processo roda —
+    em produção, quase sempre UTC. Às 21h de São Paulo isso já é o dia seguinte:
+    a tarefa de amanhã cedo apareceria como "hoje" e a de hoje à noite sumiria da
+    lista. `dayRangeInTimeZone` é a mesma fronteira que `getEventsForToday` usa
+    para recortar a agenda, então tarefas e compromissos passam a concordar sobre
+    onde o dia começa.
+
+    `endIso` é o começo do dia SEGUINTE (limite exclusivo) — daí as comparações
+    com `<`, nunca `<=`.
+  */
+  const { dayKey: hojeCivil, startIso, endIso } = dayRangeInTimeZone(new Date(), "America/Sao_Paulo");
+  const inicioDeHoje = new Date(startIso).getTime();
+  const fimDeHoje = new Date(endIso).getTime();
+  const inicioDosHabitos = somarDias(hojeCivil, -29);
+  // "2026-08-14" -> "2026-08-01", o mês canônico do módulo Financeiro. Derivado
+  // do dia civil pelo mesmo motivo acima: `monthKey(new Date())` viraria o mês
+  // no fuso do servidor, e no dia 1º isso muda o mês inteiro do resumo.
+  const mesAtual = `${hojeCivil.slice(0, 7)}-01`;
+
+  const [
+    tasks,
+    captures,
+    categories,
+    accounts,
+    events,
+    socialLinks,
+    habitos,
+    marcacoes,
+    pausas,
+    clickup,
+    financeiro,
+    financeiroM2,
+    financeiroM4,
+  ] = await Promise.all([
+    getTasks(),
+    // ⚠️ NÃO REMOVER junto com o antigo bloco "Memória rápida": esta leitura
+    // também alimenta o número "Capturas s/ organizar" do Resumo do cérebro,
+    // lá embaixo. Tirá-la daqui zeraria um indicador em silêncio.
+    getCaptures(),
+    getCategories(),
+    getCalendarAccounts(),
+    getEventsForToday(),
+    getSocialLinks(),
+    mostrarHabitos ? getHabits() : Promise.resolve([]),
+    mostrarHabitos ? getHabitEntries(inicioDosHabitos) : Promise.resolve([]),
+    mostrarHabitos ? getHabitPauses(inicioDosHabitos) : Promise.resolve([]),
+    // Consulta LOCAL de uma linha (ver `getClickUpConnection`), NUNCA a API do
+    // ClickUp: aqui ela só responde "vale a pena o navegador tentar buscar?".
+    getClickUpConnection(),
+    /*
+      ⚠️ TRÊS SNAPSHOTS, E A RAZÃO É CHATA MAS HONESTA.
+
+      `getFinanceSnapshot(M)` traz o mês M e o anterior — é o recorte que o
+      módulo Financeiro precisa, e ele não tem parâmetro de janela. O
+      mini-histórico do resumo quer SEIS meses, então são três chamadas
+      (M, M-2, M-4) que cobrem M-5..M sem sobreposição.
+
+      O custo é real: cada chamada relê contas, categorias, etiquetas e
+      orçamentos, que só são usados uma vez. Elas vão no mesmo `Promise.all`,
+      em paralelo, e ficam atrás de `mostrarFinanceiro` — com o módulo
+      desligado o custo é zero. Ainda assim, o certo seria uma leitura
+      dedicada em `lib/data.ts` (algo como `getFinanceHistory(mes, 6)`,
+      devolvendo só `occurred_on`, `kind` e `amount_cents`), e ela não foi
+      escrita aqui porque `data.ts` não pertence a esta mudança.
+    */
+    mostrarFinanceiro ? getFinanceSnapshot(mesAtual) : Promise.resolve(null),
+    mostrarFinanceiro ? getFinanceSnapshot(somaMeses(mesAtual, -2)) : Promise.resolve(null),
+    mostrarFinanceiro ? getFinanceSnapshot(somaMeses(mesAtual, -4)) : Promise.resolve(null),
+  ]);
 
   const now = new Date();
-  const todayStart = startOfDay(now).getTime();
-  const todayEnd = endOfDay(now).getTime();
-  const catById = new Map(categories.map((c) => [c.id, c.name]));
-  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const agora = now.getTime();
 
   const pending = tasks.filter((t) => t.status !== "done");
-  const todayTasks = tasks.filter((t) => {
+  // Tudo que vence até o fim de hoje, atrasadas incluídas. O recorte é do
+  // servidor; a fusão com o ClickUp e a ordenação são de `TarefasDeHoje`.
+  const tarefasDeHoje = tasks.filter((t) => {
     const when = t.due_at ?? t.scheduled_start_at;
     if (!when) return false;
-    const ts = new Date(when).getTime();
-    return ts <= todayEnd; // inclui atrasadas + hoje
+    return new Date(when).getTime() < fimDeHoje;
   });
   const nextMove = pending.find((t) => {
     const when = t.due_at ?? t.scheduled_start_at;
     return when != null;
   }) ?? pending[0];
 
+  const catById = new Map(categories.map((c) => [c.id, c.name]));
   const openCount = tasks.filter((t) => t.status === "todo" || t.status === "in_progress").length;
   const doneCount = tasks.filter((t) => t.status === "done").length;
-  const meetingsCount = events.length;
+  /*
+    "COMPROMISSOS", E NÃO "REUNIÕES".
 
-  /**
-   * Já terminou? Só para esmaecer — o evento continua na lista.
-   *
-   * Dia inteiro nunca "termina" no meio do dia: ele vale para o dia todo, então
-   * esmaecê-lo às 14h seria dizer que o feriado acabou. Sem `end_at` (evento sem
-   * duração declarada), o critério cai para o próprio início.
-   */
-  const jaTerminou = (ev: (typeof events)[number]): boolean => {
-    if (ev.all_day) return false;
-    const fim = ev.end_at ?? ev.start_at;
-    return fim != null && new Date(fim).getTime() < now.getTime();
-  };
+    A agenda guarda consulta médica, aniversário, viagem, bloqueio de foco e o
+    feriado importado do calendário nacional. Chamar tudo isso de reunião faz o
+    aplicativo afirmar uma coisa errada sobre o dia da pessoa — e, no plural, o
+    número vira "você tem 4 reuniões hoje" num dia em que não há nenhuma.
+  */
+  const compromissosHoje = events.length;
+
+  const transacoesAnteriores = [
+    ...(financeiroM4?.transactions ?? []),
+    ...(financeiroM2?.transactions ?? []),
+  ];
 
   return (
     <>
@@ -120,7 +187,7 @@ export default async function HomePage() {
           {plural(openCount, "tarefa aberta", "tarefas abertas")}
           {" · "}
           {/* "hoje", não "à frente": o número agora conta o dia, não o futuro. */}
-          {plural(meetingsCount, "reunião hoje", "reuniões hoje")}
+          {plural(compromissosHoje, "compromisso hoje", "compromissos hoje")}
         </span>
       </div>
 
@@ -129,13 +196,18 @@ export default async function HomePage() {
         <div className="space-y-6">
           {/* Seu próximo movimento */}
           <section>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="eyebrow">Agora</p>
-                <h2 className="text-lg font-semibold text-ink">Seu próximo movimento</h2>
-              </div>
-              <Badge>Hoje · {todayTasks.length}</Badge>
+            <div className="mb-3">
+              <p className="eyebrow">Agora</p>
+              <h2 className="text-lg font-semibold text-ink">Seu próximo movimento</h2>
             </div>
+
+            {/*
+              O selo "Hoje · N" saiu daqui. Ele contava só as tarefas LOCAIS, e
+              logo abaixo passou a existir uma lista que mistura as locais com as
+              do ClickUp: dois números de "hoje" na mesma tela, discordando um do
+              outro, e nenhum dos dois dizendo qual é qual. Quem conta hoje agora
+              é a própria lista.
+            */}
 
             {nextMove ? (
               /* `shadow-raised`: este painel é o elemento mais importante da
@@ -178,121 +250,55 @@ export default async function HomePage() {
             )}
           </section>
 
-          {/* Tarefas de hoje */}
-          <section>
-            <h2 className="mb-3 text-lg font-semibold text-ink">Tarefas de hoje</h2>
-            <Card className="divide-y divide-line">
-              {todayTasks.length === 0 ? (
-                <EmptyState icon="Tasks" title="Sem tarefas para hoje" />
-              ) : (
-                todayTasks.map((t) => {
-                  const when = t.due_at ?? t.scheduled_start_at;
-                  const overdue =
-                    when != null && new Date(when).getTime() < todayStart && t.status !== "done";
-                  return (
-                    <div key={t.id} className="flex items-center gap-3 px-4 py-3.5">
-                      <TaskCheckbox task={t} />
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={cn(
-                            "text-sm font-medium",
-                            t.status === "done" ? "text-ink-subtle line-through" : "text-ink",
-                          )}
-                        >
-                          {t.title}
-                        </p>
-                        <p className="text-legenda text-ink-subtle">
-                          {when ? `${formatDayLabel(when)}${t.all_day ? "" : " · " + formatTime(when)}` : ""}
-                          {overdue && <span className="ml-1 text-red-500">atrasada</span>}
-                        </p>
-                      </div>
-                      {t.category_id && <Badge tone="outline">{catById.get(t.category_id)}</Badge>}
-                    </div>
-                  );
-                })
-              )}
-            </Card>
-          </section>
+          {/*
+            As tarefas locais vão prontas; o ClickUp é buscado pelo navegador
+            depois de montar. Ver o cabeçalho de `TarefasDeHoje` para o porquê de
+            a chamada externa não poder morar no `Promise.all` acima.
+          */}
+          <TarefasDeHoje
+            tarefas={tarefasDeHoje}
+            categorias={categories}
+            clickupAtivo={clickup?.ativo === true}
+            agora={agora}
+            inicioDeHoje={inicioDeHoje}
+            fimDeHoje={fimDeHoje}
+          />
+
+          {/* O módulo desligado não desenha nada — mesma regra do cartão de
+              hábitos: o interruptor de Configurações não pode mentir. */}
+          {mostrarFinanceiro && financeiro && (
+            <ResumoFinanceiro
+              mes={mesAtual}
+              hojeIso={hojeCivil}
+              snapshot={financeiro}
+              transacoesAnteriores={transacoesAnteriores}
+              ocultarValores={ctx.preferences?.finance_hide_values ?? false}
+            />
+          )}
         </div>
 
         {/* Right column */}
         <div className="space-y-6">
-          {/* Memória rápida */}
-          <Card className="p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="eyebrow">Memória rápida</p>
-                <p className="text-sm font-semibold text-ink">O que está na sua cabeça?</p>
-              </div>
-            </div>
-            <p className="mb-3 text-corpo text-ink-subtle">
-              Escreva uma ideia, lembrete ou preocupação…
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { label: "Ideia", type: "idea" },
-                { label: "Tarefa", type: "task" },
-                { label: "Nota", type: "note" },
-                { label: "Lembrete", type: "reminder" },
-              ].map((q) => (
-                <Link
-                  key={q.type}
-                  href="/capturar"
-                  className="rounded-full border border-line-strong px-3 py-1.5 text-corpo text-ink-muted hover:bg-surface-muted hover:text-ink"
-                >
-                  {q.label}
-                </Link>
-              ))}
-            </div>
-          </Card>
-
           {/*
             Agenda de HOJE, não "os próximos 5 eventos".
             Antes o bloco chamava `getUpcomingEvents(5)`, que devolve os próximos
             eventos a partir de agora sem recorte de dia — numa terça sem
-            compromissos ele exibia a reunião de quinta sob o título "Próximos
-            eventos", e a pessoa lia aquilo como a agenda do dia. O recorte agora
-            é o dia civil de São Paulo (ver `getEventsForToday`), e um dia vazio
-            aparece vazio em vez de tomar emprestado o dia seguinte.
+            compromissos ele exibia o compromisso de quinta sob o título
+            "Próximos eventos", e a pessoa lia aquilo como a agenda do dia. O
+            recorte agora é o dia civil de São Paulo (ver `getEventsForToday`), e
+            um dia vazio aparece vazio em vez de tomar emprestado o dia seguinte.
           */}
           <Card className="p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
                 <p className="eyebrow">Agenda</p>
-                <p className="text-sm font-semibold text-ink">Hoje</p>
+                <p className="text-sm font-semibold text-ink">Compromissos marcados hoje</p>
               </div>
-              <Link href="/calendario" className="text-corpo text-ink-muted hover:text-ink">
+              <Link href="/calendario" className="shrink-0 text-corpo text-ink-muted hover:text-ink">
                 Ver tudo
               </Link>
             </div>
-            {events.length === 0 ? (
-              <p className="py-4 text-center text-corpo text-ink-subtle">
-                {accounts.length === 0
-                  ? "Nenhum evento. Conecte uma conta no Calendário."
-                  : "Sem eventos hoje."}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {events.map((ev) => {
-                  const acc = accountById.get(ev.calendar_account_id);
-                  return (
-                    <CalendarEventCard
-                      key={ev.id}
-                      event={ev}
-                      compact
-                      ended={jaTerminou(ev)}
-                      accountBadge={rotuloDaConta(acc)}
-                      // O mesmo código de cores do Calendário. Sem isto, o
-                      // Início seria a única tela em que as duas contas
-                      // parecem a mesma coisa — e é a tela que se abre
-                      // primeiro. Com uma conta só, `null` mantém o visual
-                      // anterior; ver `tomDaConta`.
-                      tom={accounts.length > 1 ? tomDaConta(acc?.slot) : null}
-                    />
-                  );
-                })}
-              </div>
-            )}
+            <CompromissosDeHoje eventos={events} contas={accounts} agora={agora} />
           </Card>
 
           {/*
@@ -312,11 +318,15 @@ export default async function HomePage() {
           {/* Resumo do cérebro */}
           <Card className="p-5">
             <p className="eyebrow mb-3">Resumo do cérebro</p>
-            <dl className="grid grid-cols-2 gap-3">
+            {/* `grid-cols-1 sm:grid-cols-2`: sem o prefixo, duas colunas de ~150px
+                no celular espremiam "Capturas s/ organizar" em três linhas ao lado
+                de um número de dois dígitos. Empilhado até `sm`, cada indicador
+                ocupa a largura toda e o rótulo cabe numa linha. */}
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Stat label="Tarefas abertas" value={openCount} />
               <Stat label="Concluídas" value={doneCount} />
               <Stat label="Capturas s/ organizar" value={captures.length} />
-              <Stat label="Reuniões hoje" value={meetingsCount} />
+              <Stat label="Compromissos hoje" value={compromissosHoje} />
             </dl>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-legenda text-ink-subtle">

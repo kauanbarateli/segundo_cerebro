@@ -153,6 +153,67 @@ describe("normalizarDocumento", () => {
     const doc = { type: "doc", content: [{ type: "paragraph" }] };
     expect(normalizarDocumento(doc)).toBe(doc);
   });
+
+  it("cura o documento COM type e SEM bloco nenhum — a forma que travava o editor", () => {
+    // É o que ficou gravado nas páginas criadas antes da correção. Sem esta
+    // cura, elas continuariam abrindo em somente-leitura para sempre.
+    const curado = normalizarDocumento({ type: "doc", content: [] });
+    expect(curado.content).toHaveLength(1);
+  });
+
+  it("preserva os campos do original ao curar", () => {
+    // `attrs` (e o que uma versão futura acrescentar) não pode ser perdido só
+    // porque o `content` estava vazio.
+    const curado = normalizarDocumento({ type: "doc", attrs: { versao: 2 }, content: [] });
+    expect((curado as { attrs?: unknown }).attrs).toEqual({ versao: 2 });
+  });
+});
+
+/**
+ * O TESTE QUE FALTAVA — e a ausência dele custou o módulo inteiro duas vezes.
+ *
+ * Afirmar a FORMA de `DOCUMENTO_VAZIO` com `toEqual` não prova nada: foi
+ * exatamente assim que `{ type: "doc", content: [] }` atravessou 499 testes
+ * verdes enquanto tornava toda página nova impossível de escrever.
+ *
+ * O contrato real não é a forma, é o SCHEMA DO EDITOR. Por isso este teste
+ * monta o mesmo schema que `Editor.tsx` monta (mesmas extensões, mesma
+ * configuração) e pede ao ProseMirror que valide. `doc` tem content spec
+ * `block+`; um documento sem bloco nenhum é recusado com "Invalid content for
+ * node doc", e é isso que `enableContentCheck` transforma em editor travado.
+ */
+describe("DOCUMENTO_VAZIO contra o schema real do editor", () => {
+  it("é aceito pelo ProseMirror", async () => {
+    const [{ getSchema }, { default: StarterKit }, { default: CodeBlockLowlight }, { Node }] =
+      await Promise.all([
+        import("@tiptap/core"),
+        import("@tiptap/starter-kit"),
+        import("@tiptap/extension-code-block-lowlight"),
+        import("@tiptap/pm/model"),
+      ]);
+
+    // As MESMAS extensões de Editor.tsx. Se aquela lista mudar, esta precisa
+    // mudar junto — é o preço de o teste ser sobre o schema, e não sobre texto.
+    const schema = getSchema([
+      StarterKit.configure({ codeBlock: false }),
+      CodeBlockLowlight.configure({ defaultLanguage: "plaintext" }),
+    ]);
+
+    expect(() => Node.fromJSON(schema, DOCUMENTO_VAZIO).check()).not.toThrow();
+  });
+
+  it("e o documento sem blocos é MESMO recusado (prova que o teste acima tem valor)", async () => {
+    // Sem este caso, o teste anterior passaria mesmo que a verificação do
+    // ProseMirror não estivesse checando nada.
+    const [{ getSchema }, { default: StarterKit }, { Node }] = await Promise.all([
+      import("@tiptap/core"),
+      import("@tiptap/starter-kit"),
+      import("@tiptap/pm/model"),
+    ]);
+    const schema = getSchema([StarterKit.configure({ codeBlock: false })]);
+
+    expect(() => Node.fromJSON(schema, { type: "doc", content: [] }).check()).toThrow();
+  });
 });
 
 describe("rotuloDaPagina", () => {

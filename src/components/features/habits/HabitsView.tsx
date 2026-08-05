@@ -1,48 +1,66 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmationDialog } from "@/components/ui/ConfirmationDialog";
-import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/states";
 import { Icon } from "@/components/ui/Icons";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { MapaDeCalor } from "@/components/features/habits/MapaDeCalor";
 import { HabitForm } from "@/components/features/habits/HabitForm";
+import { HabitoCard } from "@/components/features/habits/HabitoCard";
+import { LegendaDoMapa } from "@/components/features/habits/MapaDeCalor";
+import {
+  MedidorSemanal,
+  descreverCadencia,
+  feitosNaSemanaCorrente,
+  formatarDiaLongo,
+  formatarDiaMedio,
+  maiuscula,
+  unidadeDaSequencia,
+} from "@/components/features/habits/Leitura";
 import { archiveHabit, toggleHabitDay } from "@/app/(app)/habitos/actions";
 import type { Habit, HabitEntry, HabitPause } from "@/lib/database.types";
-import { celulasDoPeriodo, resumirHabitos, somarDias, type Habito } from "@/lib/habits";
+import { celulasDoPeriodo, resumirHabitos, type Habito, type ResumoDeHabito } from "@/lib/habits";
 import { cn } from "@/lib/utils";
 
 /**
- * A tela de Hábitos: checklist de hoje, painel e mapa de calor.
+ * A TELA DE HÁBITOS — dois blocos, duas perguntas.
  *
  * ⚠️ NENHUM NÚMERO DESTA TELA VEM DO BANCO PRONTO. Sequência, taxa e falhas são
  * derivadas por `src/lib/habits.ts`, o mesmo módulo que a rota do e-mail
  * semanal consome. Duas implementações da mesma conta é como um dia a tela diz
  * 18, o e-mail diz 19, e ninguém sabe qual está certo.
+ *
+ * =============================================================================
+ * A ESTRUTURA, E POR QUE ELA MUDOU
+ * =============================================================================
+ * Antes: quatro cartões de indicador no topo, uma lista onde cada linha tinha
+ * checkbox, distintivos, três métricas e um mapa de calor espremido em 3px de
+ * altura. Tudo com o mesmo peso — e nada é herói quando tudo é.
+ *
+ * Agora a tela responde uma pergunta de cada vez:
+ *
+ *   1. "O que falta marcar hoje?"  → o cartão HOJE, no topo. Linhas de 56px,
+ *      resposta otimista, sem confirmação. É o gesto mais frequente do módulo e
+ *      todos os toques cabem num bloco só.
+ *   2. "Como foi o período?"       → um cartão por hábito, com a SEQUÊNCIA no
+ *      maior corpo tipográfico e o MAPA DE CALOR em tamanho de gráfico, não de
+ *      rodapé.
+ *
+ * =============================================================================
+ * ⚠️ UM PERÍODO SÓ: 90 DIAS
+ * =============================================================================
+ * A versão anterior resumia 30 dias e desenhava 90. Duas janelas na mesma tela
+ * significavam que "4 falhas" e o mapa logo abaixo falavam de recortes
+ * diferentes do tempo, sem nada avisando — e a pessoa só descobria conferindo
+ * quadradinho por quadradinho.
+ *
+ * Agora a taxa, as falhas e o mapa usam a MESMA janela carregada pela página
+ * (`inicioDaJanela`). O texto do rodapé diz qual é, porque um painel que não
+ * declara seu período está pedindo para ser interpretado errado.
  */
-
-/** O que o painel resume. Trinta dias é o recorte que a pessoa lembra. */
-const DIAS_DO_PAINEL = 30;
-
-const CADENCIA_POR_EXTENSO: Record<string, string> = {
-  daily: "Todo dia",
-  weekdays: "Dias fixos",
-  weekly_target: "Por semana",
-};
-
-const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-function descreverCadencia(h: Habit): string {
-  if (h.schedule_kind === "daily") return "Todo dia";
-  if (h.schedule_kind === "weekly_target") return `${h.weekly_target}× por semana`;
-  return h.weekdays.map((d) => DIAS_CURTOS[d]).join(", ");
-}
-
 export function HabitsView({
   habitos,
   marcacoes,
@@ -67,8 +85,8 @@ export function HabitsView({
 
   /*
     OTIMISMO LOCAL. Marcar um hábito precisa responder no toque: esperar a ida
-    ao servidor faria o gesto mais frequente do módulo parecer travado. O Set
-    guarda as chaves `habitId:dia` que divergem do servidor até a revalidação
+    ao servidor faria o gesto mais frequente do módulo parecer travado. O Map
+    guarda as chaves `habitId|dia` que divergem do servidor até a revalidação
     chegar.
   */
   const [otimista, setOtimista] = useState<Map<string, boolean>>(new Map());
@@ -117,16 +135,8 @@ export function HabitsView({
   );
 
   const resumo = useMemo(
-    () =>
-      resumirHabitos(
-        regras,
-        feitosPorHabito,
-        somarDias(hoje, -(DIAS_DO_PAINEL - 1)),
-        hoje,
-        hoje,
-        pausasPuras,
-      ),
-    [regras, feitosPorHabito, hoje, pausasPuras],
+    () => resumirHabitos(regras, feitosPorHabito, inicioDaJanela, hoje, hoje, pausasPuras),
+    [regras, feitosPorHabito, inicioDaJanela, hoje, pausasPuras],
   );
 
   const porId = useMemo(() => new Map(habitos.map((h) => [h.id, h])), [habitos]);
@@ -149,23 +159,26 @@ export function HabitsView({
     });
   }
 
+  function abrirNovo() {
+    setEditando(null);
+    setFormAberto(true);
+  }
+
   if (habitos.length === 0) {
     return (
       <>
+        {/*
+          O VAZIO É UM CONVITE, não um painel de zeros. Quatro indicadores em
+          "0%" na primeira visita ensinam que este módulo mede fracasso — a
+          leitura exatamente oposta à que ele existe para dar.
+        */}
         <EmptyState
           icon="Repeat"
-          title="Nenhum hábito ainda"
-          description="Um hábito é uma regra: o que fazer e com que frequência. A falha é calculada a partir dela — você só marca o que cumpriu."
+          title="Comece pelo primeiro hábito"
+          description="Um hábito é uma regra: o que fazer e com que frequência. Você só marca o que cumpriu — a falha sai da regra, sem precisar anotar nada."
           action={
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setEditando(null);
-                setFormAberto(true);
-              }}
-            >
-              Criar o primeiro
+            <Button variant="primary" size="md" onClick={abrirNovo}>
+              <Icon.Capture width={15} height={15} /> Criar hábito
             </Button>
           }
         />
@@ -178,153 +191,135 @@ export function HabitsView({
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* ------------------------------------------------ painel do período */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Indicador
-          rotulo="Hoje"
-          valor={`${resumo.hojeFeitos} de ${resumo.hojeEsperados}`}
-          detalhe={resumo.hojeEsperados === 0 ? "nada esperado hoje" : "cumpridos"}
-        />
-        <Indicador
-          rotulo={`Taxa (${DIAS_DO_PAINEL} dias)`}
-          // `null` não é 0%: 0% afirmaria fracasso onde não houve oportunidade.
-          valor={resumo.taxa === null ? "—" : `${resumo.taxa}%`}
-          detalhe={`${resumo.cumpridos} de ${resumo.esperados}`}
-        />
-        <Indicador
-          rotulo="Falhas"
-          valor={String(resumo.falhas)}
-          detalhe={`nos últimos ${DIAS_DO_PAINEL} dias`}
-        />
-        <Indicador
-          rotulo="Melhor sequência"
-          valor={String(Math.max(0, ...resumo.porHabito.map((r) => r.melhorSequencia)))}
-          detalhe="entre todos os hábitos"
-        />
-      </div>
+  const progresso =
+    resumo.hojeEsperados === 0
+      ? 0
+      : Math.round((resumo.hojeFeitos / resumo.hojeEsperados) * 100);
 
-      {/* ------------------------------------------------ checklist de hoje */}
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <p className="text-corpo-forte font-medium text-ink">Hoje</p>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setEditando(null);
-              setFormAberto(true);
-            }}
-          >
+  return (
+    <div className="space-y-8">
+      {/* ------------------------------------------------- o gesto do dia -- */}
+      <Card elevacao="destaque" className="overflow-hidden">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-4 pt-4 sm:px-5 sm:pt-5">
+          <div className="min-w-0">
+            {/* `h2` e não `p`: os dois blocos da tela ("Hoje" e o histórico) são
+                os pontos de salto de quem navega por cabeçalhos, e um deles
+                estava invisível para essa navegação. A classe visual não muda. */}
+            <h2 className="eyebrow">Hoje</h2>
+            <p className="mt-1.5 text-corpo-forte font-medium text-ink">
+              {maiuscula(formatarDiaLongo(hoje))}
+            </p>
+          </div>
+          <Button variant="primary" size="md" onClick={abrirNovo}>
             <Icon.Capture width={15} height={15} /> Novo hábito
           </Button>
         </div>
 
-        <ul className="divide-y divide-line">
-          {resumo.porHabito.map((r) => {
-            const habito = porId.get(r.habito.id);
-            if (!habito) return null;
-            const celulas = celulasDoPeriodo(
-              r.habito,
-              feitosPorHabito.get(r.habito.id) ?? new Set(),
-              hoje,
-              diasDaJanela,
-              pausasPuras,
-            );
+        <div className="px-4 pt-4 sm:px-5">
+          {resumo.hojeEsperados === 0 ? (
+            <p className="text-legenda text-ink-subtle">
+              Nenhum hábito é cobrado hoje. Isso não é falha de ninguém — é o que as regras
+              dizem.
+            </p>
+          ) : (
+            <>
+              <p className="flex items-baseline justify-between gap-2 text-legenda text-ink-subtle">
+                <span>
+                  <span className="tabular-nums text-ink">{resumo.hojeFeitos}</span> de{" "}
+                  <span className="tabular-nums">{resumo.hojeEsperados}</span> cumpridos
+                </span>
+                {/* Reconhecimento, não festa: uma frase de três palavras envelhece
+                    melhor que confete num aplicativo que se abre todo dia. */}
+                {resumo.hojeFeitos === resumo.hojeEsperados && <span>dia fechado</span>}
+              </p>
+              <div
+                aria-hidden
+                className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink/10"
+              >
+                <div
+                  className="h-full rounded-full bg-ink transition-[width] duration-200"
+                  style={{ width: `${progresso}%` }}
+                />
+              </div>
+            </>
+          )}
+        </div>
 
-            return (
-              <li key={r.habito.id} className="px-4 py-3.5">
-                <div className="flex items-start gap-3">
-                  {/*
-                    `hojeFeito === null` significa "não era para fazer hoje" —
-                    diferente de "não fiz". O botão fica desabilitado e explica,
-                    em vez de sumir: sumir faria a lista mudar de tamanho todo
-                    dia e a pessoa procuraria o hábito que "desapareceu".
-                  */}
-                  <button
-                    type="button"
-                    disabled={r.hojeFeito === null}
-                    aria-label={
-                      r.hojeFeito === null
-                        ? `${habito.name}: não é esperado hoje`
-                        : r.hojeFeito
-                          ? `Desmarcar ${habito.name}`
-                          : `Marcar ${habito.name}`
-                    }
-                    aria-pressed={r.hojeFeito ?? false}
-                    title={r.hojeFeito === null ? "Não é esperado hoje" : undefined}
-                    onClick={() => marcar(r.habito.id, hoje, !r.hojeFeito)}
-                    className={cn(
-                      "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors",
-                      r.hojeFeito === null
-                        ? "cursor-not-allowed border-dashed border-line text-transparent"
-                        : r.hojeFeito
-                          ? "border-transparent bg-accent text-accent-ink"
-                          : "border-line-strong text-transparent hover:border-ink",
-                    )}
-                  >
-                    <Icon.Check width={14} height={14} />
-                  </button>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <p
-                        className={cn(
-                          "text-sm font-medium",
-                          r.hojeFeito ? "text-ink-subtle line-through" : "text-ink",
-                        )}
-                      >
-                        {habito.name}
-                      </p>
-                      <Badge tone="outline">{descreverCadencia(habito)}</Badge>
-                      {r.sequenciaAtual > 0 && (
-                        <Badge tone="solid">
-                          {r.sequenciaAtual}
-                          {habito.schedule_kind === "weekly_target" ? " sem." : " dias"}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-ink-subtle">
-                      <span>{r.taxa === null ? "sem histórico" : `${r.taxa}% no período`}</span>
-                      {r.falhas > 0 && <span>{r.falhas} falhas</span>}
-                      {r.melhorSequencia > r.sequenciaAtual && (
-                        <span>melhor: {r.melhorSequencia}</span>
-                      )}
-                    </div>
-
-                    <div className="mt-2.5">
-                      <MapaDeCalor celulas={celulas} />
-                    </div>
-                  </div>
-
-                  <DropdownMenu
-                    label={`Ações de ${habito.name}`}
-                    items={[
-                      {
-                        label: "Editar",
-                        onClick: () => {
-                          setEditando(habito);
-                          setFormAberto(true);
-                        },
-                      },
-                      { label: "Arquivar", onClick: () => setArquivando(habito) },
-                    ]}
-                  >
-                    <Icon.Dots width={16} height={16} />
-                  </DropdownMenu>
-                </div>
-              </li>
-            );
-          })}
+        <ul className="mt-4 divide-y divide-line border-t border-line">
+          {resumo.porHabito.map((r) => (
+            <LinhaDeHoje
+              key={r.habito.id}
+              resumo={r}
+              hoje={hoje}
+              feitosNaSemana={feitosNaSemanaCorrente(
+                feitosPorHabito.get(r.habito.id) ?? new Set(),
+                hoje,
+                r.habito.started_on,
+              )}
+              onMarcar={() => marcar(r.habito.id, hoje, !r.hojeFeito)}
+            />
+          ))}
         </ul>
       </Card>
 
-      <p className="text-legenda text-ink-subtle">
-        A janela carregada é de {diasDaJanela} dias (desde {inicioDaJanela}). Sequência, taxa e
-        falhas são calculadas a partir da regra de cada hábito — não existe registro de “falhou”.
-      </p>
+      {/* --------------------------------------------------- o histórico -- */}
+      <section className="space-y-4">
+        <h2 className="eyebrow flex items-center gap-3">
+          <span className="shrink-0">Últimos {diasDaJanela} dias</span>
+          <span aria-hidden className="h-px flex-1 bg-line" />
+        </h2>
+
+        {/*
+          Duas colunas a partir de `lg`. O mapa de 90 dias ocupa ~250px de
+          largura, então meia largura de tela grande sobra — e uma coluna só
+          transformaria cinco hábitos em cinco telas de rolagem, o que faz a
+          comparação entre eles (o motivo de estarem na mesma página) sumir.
+        */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {resumo.porHabito.map((r) => {
+            const habito = porId.get(r.habito.id);
+            if (!habito) return null;
+            return (
+              <HabitoCard
+                key={r.habito.id}
+                habito={habito}
+                resumo={r}
+                hoje={hoje}
+                celulas={celulasDoPeriodo(
+                  r.habito,
+                  feitosPorHabito.get(r.habito.id) ?? new Set(),
+                  hoje,
+                  diasDaJanela,
+                  pausasPuras,
+                )}
+                feitosNaSemana={feitosNaSemanaCorrente(
+                  feitosPorHabito.get(r.habito.id) ?? new Set(),
+                  hoje,
+                  r.habito.started_on,
+                )}
+                onEditar={() => {
+                  setEditando(habito);
+                  setFormAberto(true);
+                }}
+                onArquivar={() => setArquivando(habito)}
+              />
+            );
+          })}
+        </div>
+      </section>
+
+      {/* `div` e não `footer`: um `<footer>` que não está dentro de `article` ou
+          `section` vira landmark `contentinfo`, e o layout do aplicativo já tem
+          o dele. Dois `contentinfo` na mesma página fazem o leitor de tela
+          anunciar "rodapé" duas vezes para coisas diferentes. */}
+      <div className="space-y-3 border-t border-line pt-5">
+        <LegendaDoMapa />
+        <p className="text-legenda text-ink-subtle">
+          A janela carregada é de {diasDaJanela} dias, desde {formatarDiaMedio(inicioDaJanela)}.
+          Taxa, falhas e sequência saem da regra de cada hábito — não existe registro de
+          “falhou”, e por isso nenhum número aqui depende de algum processo ter rodado à noite.
+        </p>
+      </div>
 
       {formAberto && (
         <Modal
@@ -360,22 +355,138 @@ export function HabitsView({
   );
 }
 
-function Indicador({
-  rotulo,
-  valor,
-  detalhe,
+/**
+ * UMA LINHA DO CARTÃO "HOJE" — e ela é o alvo de toque, inteira.
+ *
+ * =============================================================================
+ * ⚠️ A LINHA TODA É O BOTÃO, não o círculo de 24px que havia antes
+ * =============================================================================
+ * O gesto mais repetido do módulo não pode exigir mira. `min-h-[56px]` passa
+ * folgado dos 44px de piso, e como a área clicável vai de ponta a ponta, marcar
+ * é "toque em qualquer lugar da linha" — o polegar não precisa acertar nada.
+ *
+ * É também por isso que o menu de ações (editar, arquivar) NÃO está aqui: dois
+ * alvos na mesma linha significam um errar o outro, e arquivar por engano custa
+ * muito mais caro que abrir o menu no cartão de histórico, um bloco abaixo.
+ *
+ * =============================================================================
+ * ⚠️ `hojeFeito === null` VIRA LINHA SEM BOTÃO, e não botão desabilitado
+ * =============================================================================
+ * Significa "não era para fazer hoje" — diferente de "não fiz". Botão
+ * desabilitado não recebe foco e é anunciado como controle indisponível, o que
+ * convida a tentar de novo; aqui não há nada a tentar. Então a linha continua
+ * na lista (sumir faria a lista mudar de tamanho todo dia, e a pessoa
+ * procuraria o hábito que "desapareceu") mas deixa de ser interativa e diz por
+ * escrito qual é a regra.
+ */
+function LinhaDeHoje({
+  resumo,
+  hoje,
+  feitosNaSemana,
+  onMarcar,
 }: {
-  rotulo: string;
-  valor: string;
-  detalhe: string;
+  resumo: ResumoDeHabito;
+  hoje: string;
+  feitosNaSemana: number;
+  onMarcar: () => void;
 }) {
+  const { habito } = resumo;
+  const semanal = habito.schedule_kind === "weekly_target";
+  const alvo = habito.weekly_target ?? 1;
+  const feito = resumo.hojeFeito === true;
+
+  const cadencia = descreverCadencia(habito);
+  const legenda =
+    resumo.sequenciaAtual > 0
+      ? `${cadencia} · ${resumo.sequenciaAtual} ${unidadeDaSequencia(habito.schedule_kind, resumo.sequenciaAtual)}`
+      : cadencia;
+
+  if (resumo.hojeFeito === null) {
+    return (
+      <li className="flex min-h-[56px] items-center gap-3 px-4 py-2.5 sm:px-5">
+        <span
+          aria-hidden
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong"
+        >
+          <span className="h-px w-2.5 bg-ink-subtle" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-corpo-forte text-ink-muted">{habito.name}</span>
+          <span className="block truncate text-legenda text-ink-subtle">{cadencia}</span>
+        </span>
+        <span className="shrink-0 text-legenda text-ink-subtle">não é hoje</span>
+      </li>
+    );
+  }
+
+  /*
+    O RÓTULO ACESSÍVEL DIZ O HÁBITO **E** O DIA. "Marcar Ler 20 páginas", sozinho,
+    não informa qual dia está sendo marcado — e esta tela também aceita marcação
+    de outro dia por outros caminhos. O contexto no fim (sequência ou progresso
+    da semana) é o que o olho lê à direita; sem ele, quem usa leitor de tela
+    decide sem a informação que o outro usuário tem na frente.
+  */
+  const contexto = semanal
+    ? ` ${feitosNaSemana} de ${alvo} cumpridos nesta semana.`
+    : resumo.sequenciaAtual > 0
+      ? ` Sequência de ${resumo.sequenciaAtual} ${unidadeDaSequencia(habito.schedule_kind, resumo.sequenciaAtual)}.`
+      : "";
+
+  /*
+    ⚠️ `focus-visible:-outline-offset-2`, e não `-outline-offset-2` solto: a regra
+    global de `:focus-visible` em globals.css vem DEPOIS de `@tailwind utilities`
+    e tem a mesma especificidade que um utilitário simples, então venceria e
+    devolveria o contorno para 2px PARA FORA. Como o cartão é `overflow-hidden`,
+    um contorno para fora seria cortado e a linha ficaria sem indicador de foco
+    nenhum. Com a variante, a especificidade sobe para (0,2,0) e o contorno
+    desenha por dentro.
+  */
   return (
-    <Card className="p-4">
-      <p className="eyebrow">{rotulo}</p>
-      <p className="mt-1 text-2xl font-semibold text-ink">{valor}</p>
-      <p className="mt-0.5 text-legenda text-ink-subtle">{detalhe}</p>
-    </Card>
+    <li>
+      <button
+        type="button"
+        aria-pressed={feito}
+        aria-label={`${feito ? "Desmarcar" : "Marcar"} ${habito.name} em ${formatarDiaLongo(hoje)}.${contexto}`}
+        onClick={onMarcar}
+        className="flex min-h-[56px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 active:bg-surface-muted sm:px-5"
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
+            feito
+              ? "border-transparent bg-accent text-accent-ink"
+              : "border-line-strong text-transparent",
+          )}
+        >
+          <Icon.Check width={16} height={16} />
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span
+            className={cn(
+              "block truncate text-corpo-forte",
+              // Riscado E esmaecido: a informação "já foi" não pode depender só
+              // do risco, que some em telas pequenas e em fonte fina.
+              feito ? "text-ink-subtle line-through" : "font-medium text-ink",
+            )}
+          >
+            {habito.name}
+          </span>
+          <span className="block truncate text-legenda text-ink-subtle">{legenda}</span>
+        </span>
+
+        {/* Só a cadência semanal ganha medidor: é a única em que "quanto falta"
+            é uma pergunta em aberto no meio da semana. */}
+        {semanal && (
+          <span className="flex shrink-0 flex-col items-end gap-1.5">
+            <span className="text-corpo tabular-nums text-ink-muted">
+              {feitosNaSemana}/{alvo}
+            </span>
+            <MedidorSemanal feitos={feitosNaSemana} alvo={alvo} />
+          </span>
+        )}
+      </button>
+    </li>
   );
 }
-
-export { CADENCIA_POR_EXTENSO };

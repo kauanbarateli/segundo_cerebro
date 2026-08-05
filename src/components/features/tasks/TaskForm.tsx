@@ -25,6 +25,7 @@ function toLocalInput(iso: string | null): string {
 export function TaskForm({
   categories,
   projetos = [],
+  projetoInicial,
   task,
   onDone,
   onCancel,
@@ -37,6 +38,24 @@ export function TaskForm({
    * schema, que o traduz para `null`.
    */
   projetos?: Project[];
+  /**
+   * Projeto já escolhido ao ABRIR o formulário — é o "Criar aqui" da tela de um
+   * projeto, que abre este mesmo formulário com o campo preenchido.
+   *
+   * ⚠️ Três coisas que esta prop deliberadamente NÃO faz:
+   *
+   *   1. Não muda nada quando não vem. Sem ela o seletor continua começando
+   *      em "Sem projeto" na criação, como sempre começou.
+   *   2. Não vence o projeto da tarefa em EDIÇÃO (ver o `??` lá embaixo).
+   *      Abrir uma tarefa que está no projeto A a partir da tela do projeto B
+   *      e vê-la mudar sozinha para B seria reescrever uma decisão do usuário
+   *      só porque ele foi olhar.
+   *   3. Não TRAVA o campo. O seletor continua editável, e trocar ali dentro
+   *      vale: o valor é apenas o ponto de partida. Um campo travado exigiria
+   *      explicar por que ele está travado, e a explicação seria "porque você
+   *      clicou naquele botão" — que a pessoa já sabe.
+   */
+  projetoInicial?: string | null;
   task?: Task;
   onDone: () => void;
   onCancel: () => void;
@@ -111,7 +130,16 @@ export function TaskForm({
         {/* Projeto é faceta ORTOGONAL à categoria, e por isso fica ao lado e
             não dentro dela: uma tarefa de "Trabalho" pode estar no projeto
             "Migração" ou em nenhum, e as duas perguntas são independentes. */}
-        <SeletorDeProjeto projetos={projetos} valorInicial={task?.project_id} />
+        {/* O teste é `task ?`, e NÃO `task?.project_id ?? projetoInicial`. A
+            diferença aparece na tarefa que está sendo EDITADA e não tem
+            projeto: com `??`, o `null` dela cairia no valor inicial e o
+            formulário passaria a sugerir o projeto de onde o clique veio —
+            transformando "esta tarefa não tem projeto" em "tem". Editar mostra
+            o que a tarefa diz, inclusive quando ela diz nada. */}
+        <SeletorDeProjeto
+          projetos={projetos}
+          valorInicial={task ? task.project_id : projetoInicial}
+        />
         <div>
           <label htmlFor="priority" className="mb-1.5 block text-corpo font-medium text-ink">
             Prioridade

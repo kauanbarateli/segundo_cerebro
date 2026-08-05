@@ -5,6 +5,12 @@ import { useMemo, useState, useTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icons";
 import { useToast } from "@/components/ui/Toast";
+import {
+  MedidorSemanal,
+  feitosNaSemanaCorrente,
+  formatarDiaLongo,
+  unidadeDaSequencia,
+} from "@/components/features/habits/Leitura";
 import { toggleHabitDay } from "@/app/(app)/habitos/actions";
 import type { Habit, HabitEntry, HabitPause } from "@/lib/database.types";
 import { resumirHabitos, somarDias, type Habito } from "@/lib/habits";
@@ -23,6 +29,10 @@ import { cn } from "@/lib/utils";
  *
  * Os números saem de `resumirHabitos` — o mesmo módulo puro que a tela de
  * Hábitos e o e-mail semanal usam.
+ *
+ * ⚠️ AS LINHAS SÃO ALVO DE TOQUE INTEIRO, com 48px de altura mínima. O círculo
+ * de 20px que havia aqui exigia mira num cartão que a pessoa toca de pé, com
+ * uma mão só — e um gesto que erra é um gesto que não se repete amanhã.
  */
 export function HabitsTodayCard({
   habitos,
@@ -78,6 +88,10 @@ export function HabitsTodayCard({
   // Só os que são esperados HOJE. Listar os outros encheria o cartão com o que
   // não cabe fazer agora, que é o oposto do que uma tela de "hoje" serve.
   const deHoje = resumo.porHabito.filter((r) => r.hojeFeito !== null);
+  const progresso =
+    resumo.hojeEsperados === 0
+      ? 0
+      : Math.round((resumo.hojeFeitos / resumo.hojeEsperados) * 100);
 
   function marcar(habitId: string, feito: boolean) {
     const chave = `${habitId}|${hoje}`;
@@ -97,9 +111,12 @@ export function HabitsTodayCard({
 
   return (
     <Card className="p-5">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <p className="eyebrow">Hábitos de hoje</p>
-        <Link href="/habitos" className="text-corpo text-ink-muted hover:text-ink">
+        <Link
+          href="/habitos"
+          className="rounded-sm text-corpo text-ink-muted hover:text-ink focus-visible:outline-2"
+        >
           Ver tudo
         </Link>
       </div>
@@ -115,47 +132,89 @@ export function HabitsTodayCard({
       ) : deHoje.length === 0 ? (
         // Distingue "não tem hábito" de "hoje não era dia" — um hábito de
         // segunda/quarta/sexta não falhou no domingo.
-        <p className="py-2 text-corpo text-ink-subtle">Nenhum hábito esperado hoje.</p>
+        <p className="py-2 text-corpo text-ink-subtle">Nenhum hábito é cobrado hoje.</p>
       ) : (
         <>
-          <p className="mb-2 text-legenda text-ink-subtle">
-            {resumo.hojeFeitos} de {resumo.hojeEsperados} cumpridos
+          <p className="text-legenda text-ink-subtle">
+            <span className="tabular-nums text-ink">{resumo.hojeFeitos}</span> de{" "}
+            <span className="tabular-nums">{resumo.hojeEsperados}</span> cumpridos
           </p>
-          <ul className="space-y-1">
-            {deHoje.map((r) => (
-              <li key={r.habito.id}>
-                <button
-                  type="button"
-                  aria-pressed={r.hojeFeito ?? false}
-                  onClick={() => marcar(r.habito.id, !r.hojeFeito)}
-                  className="flex w-full items-center gap-2.5 rounded-sm py-1 text-left focus-visible:outline-2"
-                >
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                      r.hojeFeito
-                        ? "border-transparent bg-accent text-accent-ink"
-                        : "border-line-strong text-transparent",
-                    )}
+          <div aria-hidden className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink/10">
+            <div
+              className="h-full rounded-full bg-ink transition-[width] duration-200"
+              style={{ width: `${progresso}%` }}
+            />
+          </div>
+
+          {/* `-mx-2` devolve à linha a área de toque que o padding do cartão
+              tinha comido: o alvo vai de borda a borda sem que o texto saia do
+              alinhamento com o resto do cartão. */}
+          <ul className="mt-2 -mx-2">
+            {deHoje.map((r) => {
+              const semanal = r.habito.schedule_kind === "weekly_target";
+              const alvo = r.habito.weekly_target ?? 1;
+              const feitosNaSemana = feitosNaSemanaCorrente(
+                feitosPorHabito.get(r.habito.id) ?? new Set(),
+                hoje,
+                r.habito.started_on,
+              );
+              const contexto = semanal
+                ? ` ${feitosNaSemana} de ${alvo} cumpridos nesta semana.`
+                : r.sequenciaAtual > 0
+                  ? ` Sequência de ${r.sequenciaAtual} ${unidadeDaSequencia(r.habito.schedule_kind, r.sequenciaAtual)}.`
+                  : "";
+
+              return (
+                <li key={r.habito.id}>
+                  <button
+                    type="button"
+                    aria-pressed={r.hojeFeito ?? false}
+                    aria-label={`${r.hojeFeito ? "Desmarcar" : "Marcar"} ${r.habito.name} em ${formatarDiaLongo(hoje)}.${contexto}`}
+                    onClick={() => marcar(r.habito.id, !r.hojeFeito)}
+                    className="flex min-h-[48px] w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 active:bg-surface-muted"
                   >
-                    <Icon.Check width={13} height={13} />
-                  </span>
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate text-sm",
-                      r.hojeFeito ? "text-ink-subtle line-through" : "text-ink",
-                    )}
-                  >
-                    {r.habito.name}
-                  </span>
-                  {r.sequenciaAtual > 0 && (
-                    <span className="shrink-0 text-legenda text-ink-subtle">
-                      {r.sequenciaAtual}
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors",
+                        r.hojeFeito
+                          ? "border-transparent bg-accent text-accent-ink"
+                          : "border-line-strong text-transparent",
+                      )}
+                    >
+                      <Icon.Check width={14} height={14} />
                     </span>
-                  )}
-                </button>
-              </li>
-            ))}
+
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-corpo",
+                        r.hojeFeito ? "text-ink-subtle line-through" : "text-ink",
+                      )}
+                    >
+                      {r.habito.name}
+                    </span>
+
+                    {/* A cadência semanal mostra quanto falta na SEMANA; as
+                        outras duas mostram a sequência. São perguntas
+                        diferentes: "ainda dá tempo?" contra "estou emendando?". */}
+                    {semanal ? (
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <MedidorSemanal feitos={feitosNaSemana} alvo={alvo} />
+                        <span className="text-legenda tabular-nums text-ink-subtle">
+                          {feitosNaSemana}/{alvo}
+                        </span>
+                      </span>
+                    ) : (
+                      r.sequenciaAtual > 0 && (
+                        <span className="shrink-0 text-legenda tabular-nums text-ink-subtle">
+                          {r.sequenciaAtual}
+                        </span>
+                      )
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
