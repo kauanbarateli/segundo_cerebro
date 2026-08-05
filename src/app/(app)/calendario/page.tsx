@@ -53,10 +53,14 @@ export default async function CalendarioPage({
 
   return (
     <>
+      {/* "Compromissos", e não "Reuniões": a agenda guarda consulta médica,
+          aniversário, viagem e feriado importado. Era a última string da
+          interface que ainda chamava tudo isso de reunião — o Início já foi
+          corrigido, e as duas telas mostram a MESMA agenda. */}
       <PageHeader
         eyebrow="Agenda unificada"
         title="Sua agenda em uma só visão."
-        subtitle="Reuniões pessoais e profissionais sem trocar de conta."
+        subtitle="Compromissos pessoais e profissionais sem trocar de conta."
         user={{ name: ctx.displayName, avatarUrl: ctx.avatarUrl }}
       />
 

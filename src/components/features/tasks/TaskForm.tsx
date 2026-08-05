@@ -108,7 +108,15 @@ export function TaskForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/*
+        `grid-cols-1 sm:grid-cols-2`, e não `grid-cols-2` seco: este formulário
+        vive dentro de um `Modal`, que no celular sobra ~310px de largura útil.
+        Duas colunas ali dão ~145px cada — largura em que o `<select>` de
+        categoria corta o nome no segundo caractere e o seletor de projeto fica
+        inutilizável. É a mesma conta já escrita no cabeçalho de
+        `FinanceForms.tsx`, e a mesma correção.
+      */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor="categoryId" className="mb-1.5 block text-corpo font-medium text-ink">
             Categoria
@@ -159,7 +167,10 @@ export function TaskForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Mesma razão do par acima — e aqui é pior, porque os dois campos são de
+          data: o seletor nativo do celular precisa da largura para caber
+          "dd/mm/aaaa --:--" sem reticências. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor="dueAt" className="mb-1.5 block text-corpo font-medium text-ink">
             Vencimento

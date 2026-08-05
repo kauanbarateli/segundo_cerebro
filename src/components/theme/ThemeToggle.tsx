@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icons";
+import { CHAVE_TEMA } from "@/components/theme/tema-init";
 
-/** Inline script (in <head>) applies the stored theme before paint to avoid FOUC. */
-export const themeInitScript = `(function(){try{var t=localStorage.getItem('sb-theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;var dark=t==='dark'||((!t||t==='system')&&m);document.documentElement.classList.toggle('dark',dark);}catch(e){}})();`;
+/*
+  ⚠️ `themeInitScript` NÃO MORA MAIS AQUI — foi para `tema-init.ts`, e não pode
+  voltar. Este arquivo tem "use client", e o layout raiz que consome o script é
+  Componente de Servidor: exportar a string daqui devolvia ao servidor uma
+  REFERÊNCIA de cliente em vez do texto, e o `<head>` acabava com o código-fonte
+  de uma função lançadora dentro da tag <script>. O arquivo novo explica o
+  defeito por inteiro; o resumo é que constante partilhada entre os dois lados
+  fica em módulo sem diretiva.
+*/
 
 type Theme = "light" | "dark" | "system";
 
@@ -12,13 +20,13 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("system");
 
   useEffect(() => {
-    const stored = (localStorage.getItem("sb-theme") as Theme | null) ?? "system";
+    const stored = (localStorage.getItem(CHAVE_TEMA) as Theme | null) ?? "system";
     setTheme(stored);
   }, []);
 
   function apply(next: Theme) {
     setTheme(next);
-    localStorage.setItem("sb-theme", next);
+    localStorage.setItem(CHAVE_TEMA, next);
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const dark = next === "dark" || (next === "system" && prefersDark);
     document.documentElement.classList.toggle("dark", dark);

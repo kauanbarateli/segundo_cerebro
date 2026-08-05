@@ -1,4 +1,4 @@
-import { diaDaSemana, segundaDaSemana, somarDias, type CadenciaHabito } from "@/lib/habits";
+import { contarNaSemana, diaDaSemana, segundaDaSemana, type CadenciaHabito } from "@/lib/habits";
 import { cn } from "@/lib/utils";
 
 /**
@@ -168,32 +168,24 @@ export function unidadeDaSequencia(cadencia: CadenciaHabito, n: number): string 
 /**
  * Quantas vezes o hábito foi cumprido na semana CORRENTE (segunda a domingo).
  *
- * ⚠️ ESTA CONTA É UM ESPELHO de `contarNaSemana`, em `src/lib/habits.ts`, que é
- * privada do módulo e por isso não pode ser importada. As duas precisam
- * concordar em três coisas, e é por isso que elas estão escritas iguais:
+ * ⚠️ ELA NÃO CALCULA NADA — delega a `contarNaSemana`, em `src/lib/habits.ts`.
+ * Isto aqui já foi um ESPELHO daquela conta, escrito à mão porque a função era
+ * privada do módulo; o `export` veio na integração e o espelho morreu. Se um dia
+ * a tentação de "só somar um dia aqui" voltar: a mesma conta alimenta o e-mail
+ * semanal de métricas, e é assim que a tela passa a dizer 2 enquanto o e-mail
+ * diz 3.
  *
- *   1. a semana começa na SEGUNDA (`segundaDaSemana`);
- *   2. dia anterior a `started_on` NÃO conta, mesmo que exista marcação;
- *   3. os sete dias entram, inclusive os do futuro dentro desta semana — que
- *      simplesmente não têm marcação ainda.
- *
- * Duas implementações da mesma conta é exatamente o que o cabeçalho de
- * `habits.ts` proíbe, então isto está anotado no relatório como pedido de
- * `export` de `contarNaSemana`. Enquanto ele não vem, o espelho fica aqui, com
- * a lista acima servindo de contrato.
+ * O que sobra é a tradução de argumentos: a tela tem "hoje" e quer a semana
+ * dele; `contarNaSemana` quer a segunda-feira. `segundaDaSemana` é a única
+ * ponte, e ela também vem do módulo — a definição de onde a semana começa
+ * continua morando num lugar só.
  */
 export function feitosNaSemanaCorrente(
   feitos: Set<string>,
   hoje: string,
   startedOn: string,
 ): number {
-  const segunda = segundaDaSemana(hoje);
-  let n = 0;
-  for (let i = 0; i < 7; i++) {
-    const dia = somarDias(segunda, i);
-    if (dia >= startedOn && feitos.has(dia)) n++;
-  }
-  return n;
+  return contarNaSemana({ started_on: startedOn }, feitos, segundaDaSemana(hoje));
 }
 
 /* --------------------------------------------------------------- medidor -- */

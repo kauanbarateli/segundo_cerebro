@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/states";
 import { CalendarEventCard } from "@/components/features/calendar/CalendarEventCard";
 import { DetalheDoEvento } from "@/components/features/calendar/DetalheDoEvento";
-import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
 import type { CalendarAccount, CalendarEvent, CalendarSource, CalendarView } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";

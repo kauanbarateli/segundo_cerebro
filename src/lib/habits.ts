@@ -215,7 +215,29 @@ function sequenciaSemanal(
   return sequencia;
 }
 
-function contarNaSemana(habito: Habito, feitos: Set<string>, segunda: string): number {
+/**
+ * Quantas vezes o hábito foi cumprido na semana que começa em `segunda`.
+ *
+ * ⚠️ ESTÁ EXPORTADA, e a razão é a regra do cabeçalho deste arquivo: a tela de
+ * Hábitos precisa deste MESMO número para escrever "2 de 3 esta semana", e
+ * enquanto ela não podia importá-lo a conta vivia copiada em `Leitura.tsx`. Duas
+ * implementações concordam no dia em que nascem e divergem na primeira correção
+ * — exatamente o defeito que este módulo existe para impedir.
+ *
+ * O primeiro parâmetro é `{ started_on }` e não `Habito` inteiro de propósito:
+ * a conta só precisa saber a partir de quando o hábito existe, e pedir o objeto
+ * completo obrigaria quem só tem a data a fabricar um hábito falso para chamar.
+ *
+ * As três regras que ela decide, e que qualquer chamador herda:
+ *   1. a semana são os SETE dias a partir de `segunda` (ver `segundaDaSemana`);
+ *   2. dia anterior a `started_on` NÃO conta, mesmo que exista marcação;
+ *   3. dias futuros dentro da semana entram — eles só não têm marcação ainda.
+ */
+export function contarNaSemana(
+  habito: { started_on: string },
+  feitos: Set<string>,
+  segunda: string,
+): number {
   let n = 0;
   for (let i = 0; i < 7; i++) {
     const dia = somarDias(segunda, i);

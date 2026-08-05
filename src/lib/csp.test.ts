@@ -157,7 +157,11 @@ describe("hash do script de tema", () => {
     const { createHash } = await import("node:crypto");
     const { HASH_DO_SCRIPT_DE_TEMA } = await import("./csp");
 
-    const fonte = readFileSync("src/components/theme/ThemeToggle.tsx", "utf8");
+    // O caminho mudou junto com a constante: ela saiu de `ThemeToggle.tsx`
+    // ("use client") para um módulo sem diretiva, porque o layout raiz é
+    // Componente de Servidor e recebia uma referência de cliente no lugar da
+    // string. Ver o cabeçalho de `tema-init.ts`. A conta abaixo é a mesma.
+    const fonte = readFileSync("src/components/theme/tema-init.ts", "utf8");
     const encontrado = fonte.match(/export const themeInitScript = `([\s\S]*?)`;/);
     expect(encontrado, "themeInitScript não foi encontrado no arquivo").not.toBeNull();
 

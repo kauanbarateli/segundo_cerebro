@@ -161,7 +161,7 @@ function origensDoSupabase(): string[] {
 }
 
 /**
- * Hash do `themeInitScript` de src/components/theme/ThemeToggle.tsx.
+ * Hash do `themeInitScript` de src/components/theme/tema-init.ts.
  *
  * É uma CONSTANTE e não um cálculo em tempo de execução por duas razões: o
  * middleware roda no Edge, onde `crypto.subtle.digest` é assíncrono (e a

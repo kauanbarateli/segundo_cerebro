@@ -419,8 +419,6 @@ export function KnowledgeSidebar({ cadernos, cadernoAtivoId, paginas, paginaAtiv
   const [excluindoPagina, setExcluindoPagina] = useState<KnowledgePageSummary | null>(null);
   const [excluindoCaderno, setExcluindoCaderno] = useState<KnowledgeNotebook | null>(null);
 
-  const cadernoAtivo = cadernos.find((c) => c.id === cadernoAtivoId) ?? null;
-
   /* -- ações --------------------------------------------------------------- */
 
   const criarPagina = (parentId: string | null) => {

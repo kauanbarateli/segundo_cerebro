@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { themeInitScript } from "@/components/theme/ThemeToggle";
+/*
+  ⚠️ O IMPORT VEM DE `tema-init`, QUE NÃO TEM "use client" — e isso é o que faz
+  o script funcionar. Importá-lo de `ThemeToggle.tsx` (onde ele morava) devolvia
+  a este Componente de Servidor uma referência de cliente, e o <script> abaixo
+  saía com o código-fonte de uma função lançadora em vez do script do tema. Ver
+  o cabeçalho de `tema-init.ts`.
+*/
+import { themeInitScript } from "@/components/theme/tema-init";
 import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 
