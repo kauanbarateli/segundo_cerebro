@@ -44,9 +44,13 @@ export function ThemeToggle() {
       onClick={() => apply(isDark ? "light" : "dark")}
       aria-label={isDark ? "Ativar tema claro" : "Ativar tema escuro"}
       title={isDark ? "Tema claro" : "Tema escuro"}
-      className="flex h-10 w-10 items-center justify-center rounded-md border border-line-strong bg-surface text-ink-muted transition-colors hover:text-ink focus-visible:outline-2"
+      /* 44×44: o alvo mínimo do DS §9, e o mesmo do avatar ao lado no
+         cabeçalho — dois controles vizinhos com alturas diferentes desalinham a
+         linha inteira. A borda é `line` (a leve) e não `line-strong`: este botão
+         convive com o campo de busca, e o DS §7 dá a mesma moldura aos dois. */
+      className="flex h-11 w-11 items-center justify-center rounded-md border border-line bg-surface text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
     >
-      {isDark ? <Icon.Sun width={17} height={17} /> : <Icon.Moon width={17} height={17} />}
+      {isDark ? <Icon.Sun /> : <Icon.Moon />}
     </button>
   );
 }

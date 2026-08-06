@@ -34,23 +34,33 @@
  * que a cor é o único diferenciador.
  *
  * ============================================================================
- * A ESCOLHA DAS DUAS CORES
+ * A ESCOLHA DAS DUAS CORES — agora nomeadas pelo DS
  * ============================================================================
- * VERMELHO E ÂMBAR ESTÃO PROIBIDOS AQUI: são as duas únicas cores literais que
- * o projeto usa, e as duas já significam erro e aviso. Uma conta pintada de
- * vermelho faria toda reunião dela parecer um problema.
+ * VERMELHO E ÂMBAR ESTÃO PROIBIDOS AQUI: eles são `danger` e `warning`, e já
+ * significam erro e aviso no sistema inteiro. Uma conta pintada de vermelho
+ * faria toda reunião dela parecer um problema.
  *
- * Sobrou escolher um par com boa separação de matiz. `teal` e `violet` ficam em
- * lados quase opostos do círculo e não colidem com nada — verde não é usado em
- * nenhum lugar do projeto.
+ * O par usado é `work` (#20B8A5) e `personal` (#8B5CF6) — os dois tokens que o
+ * DS §7 reserva exatamente para isto. Eram `teal-500` e `violet-500` da paleta
+ * crua do Tailwind, e a coincidência é quase total: `violet-500` É `#8B5CF6`,
+ * e `teal-500` (#14B8A6) fica a dois pontos do teal do DS. A troca não muda o
+ * que está na tela; muda o fato de a cor passar a ter NOME e a acompanhar o
+ * tema por conta própria.
+ *
+ * O que a tokenização de verdade resolve: as variantes `dark:` sumiram daqui.
+ * Antes cada tom precisava de um degrau escrito à mão (`dark:bg-teal-400`)
+ * porque a saturação que funciona sobre papel branco some sobre superfície
+ * escura. Agora `--sb-work` e `--sb-personal` já trocam de valor em `.dark`,
+ * medidos contra o piso de AA — ver o bloco das semânticas em globals.css.
  *
  * Registrando com honestidade: o par mais seguro para daltonismo seria azul e
  * laranja, e ele não está disponível porque âmbar significa aviso. Isto é
  * aceitável AQUI, e só aqui, porque a cor nunca carrega a informação sozinha —
  * ver o bloco acima.
  *
- * As variantes `dark:` sobem um degrau: a mesma saturação que fica boa sobre
- * papel branco some sobre superfície escura.
+ * `texto` usa o degrau `-ink` e não o cheio: o teal do DS tem 2.48 de contraste
+ * sobre branco e seria ilegível como texto. `trilho` e `ponto` usam o cheio,
+ * que é o papel para o qual ele foi desenhado.
  */
 
 export interface TomDaConta {
@@ -64,14 +74,14 @@ export interface TomDaConta {
 
 const TONS: Record<1 | 2, TomDaConta> = {
   1: {
-    trilho: "border-l-2 border-l-teal-500 dark:border-l-teal-400",
-    ponto: "bg-teal-500 dark:bg-teal-400",
-    texto: "text-teal-700 dark:text-teal-300",
+    trilho: "border-l-2 border-l-work",
+    ponto: "bg-work",
+    texto: "text-work-ink",
   },
   2: {
-    trilho: "border-l-2 border-l-violet-500 dark:border-l-violet-400",
-    ponto: "bg-violet-500 dark:bg-violet-400",
-    texto: "text-violet-700 dark:text-violet-300",
+    trilho: "border-l-2 border-l-personal",
+    ponto: "bg-personal",
+    texto: "text-personal-ink",
   },
 };
 

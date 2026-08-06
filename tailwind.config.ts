@@ -9,43 +9,63 @@ import type { Config } from "tailwindcss";
  * que claro/escuro troquem com uma única classe no <html>.
  *
  * -----------------------------------------------------------------------------
- * 1. ESCALA TIPOGRÁFICA
+ * 1. ESCALA TIPOGRÁFICA — três degraus abaixo de 20px, e o porquê
  * -----------------------------------------------------------------------------
- * A interface usava 230 tamanhos arbitrários (`text-[13px]`, `text-[12px]`…)
- * espalhados por 34 arquivos. Tamanho arbitrário tem dois defeitos: ninguém
- * consegue responder "qual é o tamanho do texto secundário?" sem abrir o arquivo,
- * e — o que é pior — `text-[13px]` define APENAS font-size. A altura de linha
- * ficava por conta do `line-height: 1.5` que o preflight do Tailwind põe no
- * <html>, ou seja, um número herdado que ninguém escolheu.
+ * A escala anterior nomeava seis tamanhos, mas o produto usava SETE abaixo de
+ * 22px: micro 10, meta 11, legenda 12, corpo 13, corpo-forte 15, mais 99 usos de
+ * `text-sm` (14px) que nunca entraram na escala. Um pixel de diferença entre
+ * `legenda` (12) e `text-sm` (14) e `corpo` (13) não comunica hierarquia —
+ * comunica decisões tomadas em momentos diferentes. O defeito não era o tamanho,
+ * era a QUANTIDADE de degraus.
  *
- * A escala abaixo nomeia os seis tamanhos que o projeto REALMENTE usa — nenhum
- * degrau foi inventado para o futuro — e cada um leva sua altura de linha junto.
+ * O DS 1.0 tem três abaixo de 20px, e é esta a escala agora:
  *
- *   text-micro       10px / 14px   contador em chip, rótulo de canto
- *   text-meta        11px / 16px   metadado, sobrescrito, rótulo maiúsculo
- *   text-legenda     12px / 18px   legenda, texto de apoio, distintivo
- *   text-corpo       13px / 20px   CORPO PADRÃO da interface (o mais usado)
- *   text-corpo-forte 15px / 22px   corpo em destaque: título de cartão, de modal
- *   text-titulo      22px / 28px   título de documento (editor de conhecimento)
+ *   text-micro       10px / 14px   EXCEÇÃO — ver abaixo
+ *   text-meta        12px / 16px   Eyebrow: rótulo curto, categoria, sobrescrito
+ *   text-legenda     14px / 20px   Small:  METADATA — o que se CONSULTA
+ *   text-corpo       16px / 24px   Body:   CONTEÚDO — o que se LÊ
+ *   text-corpo-forte 20px / 29px   Body L: subtítulo de página, destaque
+ *   text-titulo      24px / 30px   H3:     título de cartão, de bloco, de doc
+ *   text-h2          32px / 35px   H2:     título de seção
+ *   text-display     52→80px       Display editorial de cabeçalho de página
  *
- * Por que estas alturas de linha e não outras: elas reproduzem quase exatamente
- * o que a tela já mostrava (o 1.5 herdado dava 15 / 16.5 / 18 / 19.5 / 22.5 / 33),
- * com diferença de no máximo 1px nos cinco primeiros degraus. A troca das 230
- * classes, portanto, NÃO foi um redesenho disfarçado. A única mudança real é o
- * `text-titulo`: 33px de altura de linha num tamanho de 22px é entrelinha de
- * parágrafo aplicada a um título, e ela aperta para 28px de propósito.
+ * ⚠️ ESTE BLOCO MUDOU DE NATUREZA. Até a migração para o DS 1.0 ele afirmava que
+ * a escala reproduzia o que já estava na tela, com no máximo 1px de diferença —
+ * ou seja, que a nomeação NÃO era um redesenho disfarçado. Isso deixou de ser
+ * verdade: `corpo` subiu de 13 para 16px, `legenda` de 12 para 14, `corpo-forte`
+ * de 15 para 20. A adoção do DS é, explicitamente, um redesenho tipográfico, e
+ * este texto é a nova referência.
  *
- * As alturas são pares mas nem todas múltiplas de 4. Isso é deliberado: altura
- * de linha é valor tipográfico, não token de espaçamento. Forçar 10px e 12px ao
- * grid de 4pt obrigaria a escolher entre 12px (1.2, apertado demais para leitura)
- * e 16px (1.6, frouxo demais para rótulo de uma linha) — o grid ganharia e a
- * legibilidade perderia.
+ * -----------------------------------------------------------------------------
+ * A REGRA QUE SUSTENTA A ESCALA: `corpo` vs. `legenda`
+ * -----------------------------------------------------------------------------
+ * O DS separa Body ("conteúdo e controles") de Small ("metadata"). Os 195 usos do
+ * antigo `text-corpo` de 13px cobriam OS DOIS PAPÉIS — título de cartão e carimbo
+ * de data usavam o mesmo tamanho. A migração triou um a um pelo critério:
+ *
+ *   text-corpo (16px)    o que a pessoa LÊ
+ *                        descrição de cartão, rótulo de formulário, texto de
+ *                        botão, mensagem de estado vazio, parágrafo de ajuda
+ *
+ *   text-legenda (14px)  o que a pessoa CONSULTA
+ *                        célula de tabela, data, contador, chip, valor
+ *                        monetário em lista, metadado de linha, texto de apoio
+ *
+ * Não é preferência: é o que contém o refluxo nas telas densas. Subir metadata de
+ * 13 para 16px (+23%) estouraria a tabela do Financeiro e a semana do Calendário;
+ * subir para 14px (+8%) cabe. Componente do mesmo tipo usa o mesmo degrau em
+ * todas as telas — a regra vale por PADRÃO DE COMPONENTE, não por arquivo.
+ *
+ * EXCEÇÃO `text-micro` (10px): o DS não tem degrau abaixo de 12px. Ela sobrevive
+ * porque o mapa de calor de Hábitos põe 13 rótulos de semana lado a lado numa
+ * grade de 7 linhas; em 12px a grade estoura. São 7 usos, todos em rótulo de eixo
+ * de gráfico, e nenhum deles é texto que se lê em sequência.
  *
  * ATENÇÃO ao mexer aqui: usamos `theme.extend.fontSize`, NUNCA `theme.fontSize`.
- * Substituir a chave inteira apagaria a escala padrão do Tailwind, e o projeto
- * ainda usa `text-sm`, `text-lg` e `text-xl` em várias telas — todas quebrariam
- * de uma vez, silenciosamente (a classe simplesmente deixa de existir e o texto
- * volta ao tamanho herdado, sem nenhum erro de build).
+ * Substituir a chave inteira apagaria a escala padrão do Tailwind. A migração
+ * eliminou os `text-sm` soltos, mas `text-2xl`/`text-3xl` ainda aparecem em
+ * pontos isolados e sumiriam de uma vez, silenciosamente (a classe deixa de
+ * existir e o texto volta ao tamanho herdado, sem nenhum erro de build).
  *
  * Precedência: `leading-*` e `tracking-*` continuam vencendo o que está definido
  * aqui, porque o Tailwind emite os plugins `lineHeight` e `letterSpacing` DEPOIS
@@ -61,16 +81,25 @@ import type { Config } from "tailwindcss";
  *
  *   1  (4px)   colado: ícone e seu rótulo, duas linhas do mesmo dado
  *   2  (8px)   itens irmãos dentro de um bloco: botões de uma barra, chips
+ *   2.5(10px)  ícone e rótulo DENTRO de um botão (DS §7 pede exatamente 10)
  *   3  (12px)  separação interna de um bloco: rótulo e campo, linhas de lista
  *   4  (16px)  respiro entre blocos distintos dentro do mesmo cartão
- *   5  (20px)  padding interno de cartão e de modal (é o `p-5` de hoje)
- *   6  (24px)  distância entre seções de uma página
+ *   6  (24px)  padding interno de cartão e de modal; distância entre seções
  *   8+ (32px+) separação entre regiões grandes; acima disso, use 12 (48px)
+ *
+ * O degrau 5 (20px) saiu da lista como padding de cartão: o DS §7 pede 20–28px e
+ * a migração para o DS 1.0 levou o cartão e o modal para 24px (`p-6`). Com o
+ * corpo em 16px e o raio em 18px, 20px deixava o texto encostado na moldura —
+ * quanto maior o raio, mais respiro o canto pede para o conteúdo não parecer que
+ * vaza pela curva. `p-5` continua existindo como o PISO da faixa do DS, para o
+ * cartão compacto que não cabe em 24.
  *
  * Degraus fora dessa lista (`p-2.5`, `gap-1.5`, `py-0.5`) existem no código e
  * continuam válidos onde o alvo é ALTURA DE CONTROLE, não ritmo de layout — um
  * botão de 30px precisa de `py-1.5`, e arredondar para `py-2` mudaria a altura do
- * controle. A regra é sobre ritmo vertical, não sobre métrica de componente.
+ * controle. A regra é sobre ritmo vertical, não sobre métrica de componente. O
+ * degrau 13 (52px) acrescentado em `spacing`, mais abaixo, é o caso extremo
+ * disso: existe só como altura de controle e nunca deve virar gap nem margem.
  *
  * ESTA REGRA VALE PARA CÓDIGO NOVO. Não saia trocando os `gap-3` e `mb-6` que já
  * estão nas telas. Mudança de espaçamento em massa é alteração visual de alto
@@ -93,9 +122,17 @@ import type { Config } from "tailwindcss";
  *
  * Só existem DUAS sombras e nenhuma foi acrescentada. A diferença entre o nível 3
  * e o 4 não é a sombra: é o que está atrás (o nível 4 tem um véu escuro por
- * baixo). Mais sombras não deixariam a hierarquia mais legível, deixariam mais
- * barulhenta. Ver `Card` em src/components/ui/Card.tsx, que é onde os níveis 1 a
- * 3 viram código.
+ * baixo) e o RAIO — modal e menu usam `rounded-xl` (24px), o cartão usa
+ * `rounded-lg` (18px). Mais sombras não deixariam a hierarquia mais legível,
+ * deixariam mais barulhenta. Ver `Card` em src/components/ui/Card.tsx, que é onde
+ * os níveis 1 a 3 viram código.
+ *
+ * ⚠️ AS DUAS SOMBRAS TROCAM COM O TEMA, e isso mudou na migração para o DS 1.0.
+ * Os valores saíram daqui e foram para `--sb-shadow-card` / `--sb-shadow-float`
+ * em globals.css, porque uma sombra preta sobre o fundo #0d0d0d do tema escuro é
+ * literalmente invisível: o cartão perdia o nível 2 e ficava indistinguível do
+ * painel encostado no fundo. O escuro usa sombras mais opacas e mais espalhadas,
+ * que é o que devolve a separação de planos. Ver o bloco de elevação lá.
  *
  * -----------------------------------------------------------------------------
  * 4. MOVIMENTO
@@ -110,10 +147,21 @@ const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      /**
+       * As cores saem TODAS de variável CSS. Ver src/app/globals.css, que traz
+       * os valores, a tabela de equivalência com o DS 1.0 e o contraste medido
+       * de cada par texto/fundo.
+       *
+       * Os pares `{nome}` / `{nome}-ink` das semânticas não são sinônimos: o
+       * primeiro é preenchimento (ponto, barra, moldura) e o segundo é texto.
+       * O do DS reprova em AA como texto no tema claro — o `-ink` é o degrau
+       * que passa. Usar o errado é regressão de acessibilidade silenciosa.
+       */
       colors: {
         canvas: "rgb(var(--sb-canvas) / <alpha-value>)",
         surface: "rgb(var(--sb-surface) / <alpha-value>)",
         "surface-muted": "rgb(var(--sb-surface-muted) / <alpha-value>)",
+        "surface-hover": "rgb(var(--sb-surface-hover) / <alpha-value>)",
         ink: "rgb(var(--sb-ink) / <alpha-value>)",
         "ink-muted": "rgb(var(--sb-ink-muted) / <alpha-value>)",
         "ink-subtle": "rgb(var(--sb-ink-subtle) / <alpha-value>)",
@@ -121,46 +169,123 @@ const config: Config = {
         "line-strong": "rgb(var(--sb-line-strong) / <alpha-value>)",
         accent: "rgb(var(--sb-accent) / <alpha-value>)",
         "accent-ink": "rgb(var(--sb-accent-ink) / <alpha-value>)",
+        disabled: "rgb(var(--sb-disabled) / <alpha-value>)",
+        "disabled-bg": "rgb(var(--sb-disabled-bg) / <alpha-value>)",
+
+        success: "rgb(var(--sb-success) / <alpha-value>)",
+        "success-ink": "rgb(var(--sb-success-ink) / <alpha-value>)",
+        danger: "rgb(var(--sb-danger) / <alpha-value>)",
+        "danger-ink": "rgb(var(--sb-danger-ink) / <alpha-value>)",
+        warning: "rgb(var(--sb-warning) / <alpha-value>)",
+        "warning-ink": "rgb(var(--sb-warning-ink) / <alpha-value>)",
+        info: "rgb(var(--sb-info) / <alpha-value>)",
+        "info-ink": "rgb(var(--sb-info-ink) / <alpha-value>)",
+        work: "rgb(var(--sb-work) / <alpha-value>)",
+        "work-ink": "rgb(var(--sb-work-ink) / <alpha-value>)",
+        personal: "rgb(var(--sb-personal) / <alpha-value>)",
+        "personal-ink": "rgb(var(--sb-personal-ink) / <alpha-value>)",
       },
 
       /**
-       * Escala tipográfica nomeada. Ver o bloco 1 no topo do arquivo.
+       * Escala tipográfica nomeada. Ver o bloco 1 no topo do arquivo, que traz o
+       * critério `corpo` (o que se lê) vs. `legenda` (o que se consulta).
        *
        * A forma [tamanho, { lineHeight }] faz o Tailwind emitir font-size e
        * line-height na MESMA regra — é o que garante que não volte a existir
        * tamanho de texto sem entrelinha declarada.
        *
-       * `letterSpacing` aparece só no `titulo`. Nos tamanhos pequenos, apertar ou
-       * soltar o espaçamento entre letras mudaria a largura de 230 elementos já
-       * posicionados; no título de 22px o ajuste ótico é necessário, e o único
-       * lugar que usa esse degrau já pedia `tracking-tight` na mão.
+       * `letterSpacing` só aparece de `titulo` para cima. Ajuste ótico é
+       * necessário quando a letra é grande: sem ele, um display de 80px parece
+       * frouxo. Abaixo de 24px, apertar ou soltar mudaria a largura de centenas
+       * de elementos já posicionados sem ganho de leitura.
+       *
+       * `display` usa clamp e não breakpoint porque o tamanho precisa acompanhar
+       * a largura continuamente. O piso de 3.25rem (52px) é o teto que o DS §9
+       * pede para o mobile — em 390px o clamp já escolhe o piso, e o título cabe
+       * em duas linhas em vez das três ou quatro que 80px produziriam.
        */
       fontSize: {
         micro: ["10px", { lineHeight: "14px" }],
-        meta: ["11px", { lineHeight: "16px" }],
-        legenda: ["12px", { lineHeight: "18px" }],
-        corpo: ["13px", { lineHeight: "20px" }],
-        "corpo-forte": ["15px", { lineHeight: "22px" }],
-        titulo: ["22px", { lineHeight: "28px", letterSpacing: "-0.01em" }],
+        meta: ["12px", { lineHeight: "16px" }],
+        legenda: ["14px", { lineHeight: "20px" }],
+        corpo: ["16px", { lineHeight: "24px" }],
+        "corpo-forte": ["20px", { lineHeight: "29px" }],
+        titulo: ["24px", { lineHeight: "30px", letterSpacing: "-0.02em" }],
+        h2: ["32px", { lineHeight: "35px", letterSpacing: "-0.035em" }],
+        display: [
+          "clamp(3.25rem, 5.1vw, 5rem)",
+          { lineHeight: "0.96", letterSpacing: "-0.055em" },
+        ],
       },
 
+      /**
+       * FORMA — a escala de raios do DS §6, mais um degrau abaixo dela.
+       *
+       *   xs       4px    micro-superfície: caixa de seleção, <kbd>, realce de busca
+       *   sm       8px    distintivo, botão pequeno, bloco embutido
+       *   DEFAULT  12px   = md. Ver a nota abaixo.
+       *   md       12px   CONTROLE: campo, botão, menu, chip retangular
+       *   lg       18px   CARTÃO — chega a todos eles por ui/Card.tsx
+       *   xl       24px   MODAL e superfícies grandes
+       *   full     999px  chip, pill, avatar (vem do Tailwind)
+       *
+       * `DEFAULT` era 10px, um degrau que não existia na escala e que ninguém
+       * escolhia de propósito: os cinco lugares que usavam `rounded` puro eram
+       * caixas de seleção de 16px que herdaram esse valor por omissão. Agora ele
+       * é o mesmo 12px do controle, e as caixas de seleção passaram a pedir `xs`
+       * explicitamente — 12px numa caixa de 16px a deixa quase redonda, e
+       * redondo é a forma que comunica "botão de rádio", não "caixa de seleção".
+       *
+       * `xs` não vem do DS: o menor raio de lá é 8px, pensado para distintivo e
+       * botão. Abaixo de ~20px de lado, 8px consome metade da forma. É a mesma
+       * classe de exceção do `text-micro`, e pelo mesmo motivo — a escala do DS
+       * começa acima do tamanho destes elementos.
+       *
+       * EXCEÇÃO DOCUMENTADA que continua fora da escala: o mapa de calor de
+       * Hábitos usa `rounded-[2px]` em células de 14–18px. Ali o quadrado é a
+       * linguagem visual da grade (é um gráfico, não uma superfície), e arredondar
+       * mais embaçaria a leitura das colunas. Ver MapaDeCalor.tsx.
+       */
       borderRadius: {
+        xs: "4px",
         sm: "8px",
-        DEFAULT: "10px",
+        DEFAULT: "12px",
         md: "12px",
-        lg: "14px",
+        lg: "18px",
+        xl: "24px",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
       },
 
       /**
+       * 13 = 52px, a ALTURA DE CONTROLE do DS §7 (botão grande, campo de uma
+       * linha). Não existe na escala padrão do Tailwind, que pula de 12 (48px)
+       * para 14 (56px).
+       *
+       * Ela entra em `spacing` e não em `height` para que `h-13`, `min-h-13` e
+       * `w-13` (botão de ícone quadrado) saiam do mesmo número. NÃO é um degrau
+       * de ritmo de layout — o bloco 2 acima continua valendo, e ninguém deve
+       * escrever `gap-13` ou `mb-13`. É métrica de componente, como o `py-1.5`
+       * que o próprio bloco 2 já ressalva.
+       */
+      spacing: {
+        13: "3.25rem",
+      },
+
+      /**
        * Duas sombras, quatro níveis de elevação. Ver o bloco 3 no topo.
        * `subtle` é o cartão pousado na página; `raised` é o que flutua sobre ela.
+       *
+       * Os valores moram em VARIÁVEL CSS, não aqui, porque cada tema precisa da
+       * sua sombra. Uma sombra preta sobre o fundo #0d0d0d do tema escuro não
+       * aparece — o cartão perdia o nível de elevação e ficava igual ao painel
+       * encostado no fundo. Com a variável, `.dark` troca a sombra junto com as
+       * cores e a hierarquia sobrevive nos dois temas. Ver globals.css.
        */
       boxShadow: {
-        subtle: "0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.03)",
-        raised: "0 4px 16px rgb(0 0 0 / 0.06)",
+        subtle: "var(--sb-shadow-card)",
+        raised: "var(--sb-shadow-float)",
       },
 
       /**
@@ -170,8 +295,9 @@ const config: Config = {
        * Até aqui a interface só tinha `transition-colors`: nada nascia, tudo
        * simplesmente aparecia. O que faltava não é enfeite, é ORIGEM — o modal
        * subindo diz "eu vim do botão que você clicou"; o toast subindo do rodapé
-       * diz "eu não estava aqui antes". Deslocamentos de 4 a 8px e durações de
-       * 120 a 200ms: perceptível, nunca esperado.
+       * diz "eu não estava aqui antes". Deslocamentos de 4 a 8px e as DUAS
+       * durações do DS §8 (120ms para o que responde ao ponteiro, 180ms para o
+       * que troca uma superfície): perceptível, nunca esperado.
        *
        * Os keyframes moram AQUI, e não em CSS solto, porque o Tailwind só emite o
        * @keyframes quando a classe `animate-*` correspondente aparece no conteúdo
@@ -259,18 +385,41 @@ const config: Config = {
       },
 
       /**
-       * Curvas: `ease-out` para o que é pequeno e rápido; a cúbica (0.16, 1, 0.3,
-       * 1) para modal e toast, que percorrem mais distância — ela chega rápido e
-       * desacelera no fim, que é o que faz o elemento parecer POUSAR em vez de
-       * frear.
+       * MOVIMENTO — duas durações e UMA curva (DS §8).
+       *
+       *   120ms  o que responde ao ponteiro: hover, menu ancorado no gatilho
+       *   180ms  o que troca uma superfície: modal, véu, toast, item de lista
+       *
+       * Antes havia três durações (140 / 180 / 200) e duas curvas (`ease-out` e
+       * a cúbica 0.16,1,0.3,1). Nenhuma das diferenças era perceptível — 140 e
+       * 180ms no mesmo clique não se distinguem —, mas cada uma era uma decisão
+       * a mais para alguém tomar ao escrever o próximo componente. Duas durações
+       * e uma curva é o que faz o movimento parecer um sistema.
+       *
+       * A curva `cubic-bezier(.2,.75,.25,1)` sai rápido e desacelera longo no
+       * fim: o elemento parece POUSAR em vez de frear. Ela é a mesma dos
+       * utilitários `transition-*` (ver `transitionTimingFunction` abaixo), então
+       * animação de entrada e transição de estado combinam.
        */
       animation: {
-        "overlay-in": "sb-fade-in 140ms ease-out",
-        "modal-in": "sb-modal-in 180ms cubic-bezier(0.16, 1, 0.3, 1)",
-        "toast-in": "sb-toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1)",
-        "popover-in": "sb-popover-in 120ms ease-out",
-        "list-in": "sb-list-in 180ms ease-out",
+        "overlay-in": "sb-fade-in 180ms cubic-bezier(0.2, 0.75, 0.25, 1)",
+        "modal-in": "sb-modal-in 180ms cubic-bezier(0.2, 0.75, 0.25, 1)",
+        "toast-in": "sb-toast-in 180ms cubic-bezier(0.2, 0.75, 0.25, 1)",
+        "popover-in": "sb-popover-in 120ms cubic-bezier(0.2, 0.75, 0.25, 1)",
+        "list-in": "sb-list-in 180ms cubic-bezier(0.2, 0.75, 0.25, 1)",
       },
+
+      /**
+       * Estes dois DEFAULT são o que os utilitários `transition-colors`,
+       * `transition-opacity` etc. emitem quando ninguém escreve `duration-*` nem
+       * `ease-*` junto — e é o caso das ~90 transições do projeto, todas de
+       * hover. Os padrões do Tailwind (150ms, cubic-bezier(.4,0,.2,1)) viravam a
+       * curva de movimento mais usada do produto sem que ninguém a tivesse
+       * escolhido. Repontá-los aqui alinha o hover ao DS §8 numa linha, sem
+       * tocar em nenhum componente.
+       */
+      transitionDuration: { DEFAULT: "120ms" },
+      transitionTimingFunction: { DEFAULT: "cubic-bezier(0.2, 0.75, 0.25, 1)" },
     },
   },
   plugins: [],

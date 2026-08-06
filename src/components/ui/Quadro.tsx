@@ -83,7 +83,7 @@ export function QuadroColuna({
           type="button"
           onClick={aoAlternar}
           aria-expanded={!colapsada}
-          className="mb-1 flex w-full items-center justify-between gap-2 rounded-sm text-left focus-visible:outline-2"
+          className="mb-1 flex w-full items-center justify-between gap-2 rounded-sm text-left"
         >
           <span className="flex min-w-0 items-center gap-1.5">
             <span

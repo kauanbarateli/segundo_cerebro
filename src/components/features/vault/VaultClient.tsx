@@ -16,6 +16,12 @@ import {
   decryptItem,
   type VaultMasterKeyMaterial,
 } from "@/lib/crypto/vault";
+import {
+  CLASSE_DO_CAMPO,
+  CLASSE_DO_CAMPO_DE_BUSCA,
+  CLASSE_DO_CAMPO_MULTILINHA,
+} from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 import { GerarKit, RestaurarComKit } from "@/components/features/vault/RecoveryKit";
 import { analisarLinkExterno } from "@/lib/external-link";
 import {
@@ -271,7 +277,7 @@ function LockedView({
             <Icon.Lock width={20} height={20} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-ink">Cofre criado</h2>
+            <h2 className="text-titulo font-semibold text-ink">Cofre criado</h2>
             <p className="text-corpo text-ink-subtle">
               Guarde a senha mestra num gerenciador de senhas. Depois, gere o kit de recuperação.
             </p>
@@ -297,7 +303,7 @@ function LockedView({
         <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink">
           <Icon.Lock width={20} height={20} />
         </div>
-        <h2 className="text-lg font-semibold text-ink">Sem kit de recuperação</h2>
+        <h2 className="text-titulo font-semibold text-ink">Sem kit de recuperação</h2>
 
         <div className="my-4 rounded-md border border-line bg-surface-muted px-4 py-3 text-left">
           <p className="text-corpo font-medium text-ink">
@@ -331,7 +337,7 @@ function LockedView({
             <Icon.Lock width={20} height={20} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-ink">Recuperar com o kit</h2>
+            <h2 className="text-titulo font-semibold text-ink">Recuperar com o kit</h2>
             <p className="text-corpo text-ink-subtle">
               Para quando a senha mestra se perdeu.
             </p>
@@ -355,7 +361,7 @@ function LockedView({
           <Icon.Lock width={20} height={20} />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-ink">
+          <h2 className="text-titulo font-semibold text-ink">
             {hasMasterKey ? "Cofre bloqueado" : "Criar cofre"}
           </h2>
           <p className="text-corpo text-ink-subtle">
@@ -378,7 +384,7 @@ function LockedView({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && hasMasterKey && handleUnlock()}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full")}
           />
         </div>
         {!hasMasterKey && (
@@ -392,13 +398,13 @@ function LockedView({
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+              className={cn(CLASSE_DO_CAMPO, "w-full")}
             />
           </div>
         )}
 
         {error && (
-          <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+          <p role="alert" className="text-corpo text-danger-ink">
             {error}
           </p>
         )}
@@ -421,7 +427,7 @@ function LockedView({
           <button
             type="button"
             onClick={() => setEtapa("restaurar")}
-            className="block w-full text-center text-corpo text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-2"
+            className="block w-full text-center text-corpo text-ink-muted underline-offset-2 hover:text-ink hover:underline"
           >
             Esqueci a senha mestra — tenho o kit de recuperação
           </button>
@@ -495,7 +501,7 @@ function UnlockedView({
               placeholder="Buscar no cofre"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-10 w-full rounded-md border border-line-strong bg-surface pl-9 pr-3 text-sm text-ink focus-visible:outline-2 sm:w-64"
+              className={cn(CLASSE_DO_CAMPO_DE_BUSCA, "sm:w-64")}
             />
           </div>
           <div className="flex gap-2">
@@ -539,7 +545,7 @@ function UnlockedView({
                         {item.data.name.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink">{item.data.name}</p>
+                        <p className="truncate text-corpo font-medium text-ink">{item.data.name}</p>
                         <p className="truncate text-legenda text-ink-subtle">
                           {item.data.username || item.data.email || item.data.accountNumber || "—"}
                         </p>
@@ -621,16 +627,16 @@ function UnlockedView({
 
       {/* Side panel */}
       <div className="space-y-4">
-        <Card className="p-5">
+        <Card className="p-6">
           <p className="eyebrow mb-2">Sessão do cofre</p>
           <p className="text-corpo text-ink-muted">
             Bloqueio automático após 5 minutos de inatividade. Os dados descriptografados existem
             apenas na memória desta aba.
           </p>
         </Card>
-        <Card className="p-5">
+        <Card className="p-6">
           <p className="eyebrow mb-2">Itens</p>
-          <p className="text-3xl font-semibold text-ink">{items.length}</p>
+          <p className="text-h2 font-semibold text-ink">{items.length}</p>
           <p className="text-legenda text-ink-subtle">protegidos com AES-256-GCM</p>
         </Card>
 
@@ -641,7 +647,7 @@ function UnlockedView({
           criado sem kit nenhum. Aqui a chave de dados está viva na aba, que é a
           única condição necessária para reembrulhá-la.
         */}
-        <Card className="p-5">
+        <Card className="p-6">
           <p className="eyebrow mb-2">Kit de recuperação</p>
           <p className="text-corpo text-ink-muted">
             Um arquivo <code className="text-legenda">.json</code> mais um código que, juntos, abrem
@@ -756,7 +762,7 @@ function IconBtn({
         continua com 14px.
       */
       className={`inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-sm border border-line-strong px-3 text-ink-muted hover:bg-surface-muted sm:h-7 sm:min-w-0 sm:px-2 ${
-        danger ? "hover:text-red-600 dark:hover:text-red-400" : "hover:text-ink"
+        danger ? "hover:text-danger-ink" : "hover:text-ink"
       }`}
     >
       {children}
@@ -804,7 +810,7 @@ function VaultItemForm({
           <select
             value={type}
             onChange={(e) => setType(e.target.value as VaultItemType)}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full")}
           >
             {TYPES.map((t) => (
               <option key={t} value={t}>
@@ -829,7 +835,7 @@ function VaultItemForm({
           rows={2}
           value={data.notes ?? ""}
           onChange={(e) => set("notes", e.target.value)}
-          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full")}
         />
       </div>
       <div className="flex justify-end gap-2 pt-1">
@@ -866,7 +872,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
-        className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO, "w-full")}
       />
     </div>
   );

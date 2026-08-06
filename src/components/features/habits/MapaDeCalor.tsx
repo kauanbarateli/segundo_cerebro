@@ -298,6 +298,13 @@ export function MapaDeCalor({
                   gridRow: ((deslocamento + i) % 7) + 2,
                   gridColumn: colunaDe(i) + 1,
                 }}
+                /* `rounded-[2px]` é EXCEÇÃO CONSCIENTE à escala de raios do DS.
+                   O menor degrau de lá é 4px (`rounded-xs`), e numa célula de
+                   14px isso arredonda quase um terço do lado: as colunas param
+                   de se ler como colunas e a grade vira um borrão de pontos.
+                   Aqui o quadrado não é superfície, é marca de gráfico — a mesma
+                   razão pela qual o `text-micro` de 10px sobrevive neste arquivo.
+                   Ver o bloco de forma em tailwind.config.ts. */
                 className={cn(
                   "flex h-[var(--cel)] w-[var(--cel)] items-center justify-center rounded-[2px]",
                   tomDaCelula(c, hoje),

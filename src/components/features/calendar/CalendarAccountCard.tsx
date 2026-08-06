@@ -41,13 +41,13 @@ export function CalendarAccountCard({
 
   if (!account) {
     return (
-      <Card className="flex flex-col justify-between p-5">
+      <Card className="flex flex-col justify-between p-6">
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="eyebrow">Conta {slot}</p>
             <Badge tone="outline">Vazio</Badge>
           </div>
-          <p className="text-sm font-medium text-ink">Nenhuma conta conectada</p>
+          <p className="text-corpo font-medium text-ink">Nenhuma conta conectada</p>
           <p className="mt-1 text-corpo text-ink-subtle">
             Conecte uma conta Google para ver os compromissos aqui.
           </p>
@@ -55,7 +55,7 @@ export function CalendarAccountCard({
         {googleConfigured ? (
           <a
             href={connectHref}
-            className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90"
+            className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-accent px-4 text-legenda font-medium text-accent-ink hover:opacity-90"
           >
             <Icon.Google width={16} height={16} /> Conectar conta Google
           </a>
@@ -78,7 +78,7 @@ export function CalendarAccountCard({
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <div className="mb-3 flex items-center justify-between">
         <p className="eyebrow">Conta {slot}</p>
         <Badge tone={account.status === "connected" ? "outline" : "default"}>
@@ -91,7 +91,7 @@ export function CalendarAccountCard({
           <Icon.Google width={16} height={16} />
         </div>
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
+          <p className="flex items-center gap-1.5 truncate text-corpo font-medium text-ink">
             {/*
               A LEGENDA. É aqui que se dá o apelido à conta, então é aqui que a
               cor precisa ser vista ao lado do nome — sem isso, o ponto teal na
@@ -136,7 +136,7 @@ export function CalendarAccountCard({
       </div>
 
       {account.status === "error" && account.last_error && (
-        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-legenda text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+        <p className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-legenda text-danger-ink">
           {account.last_error}
         </p>
       )}
@@ -159,7 +159,7 @@ export function CalendarAccountCard({
                       else toast(r.error ?? "Erro", "error");
                     })
                   }
-                  className="h-4 w-4 rounded border-line-strong"
+                  className="h-4 w-4 rounded-xs border-line-strong"
                 />
                 <label htmlFor={`src-${s.id}`} className="min-w-0 flex-1 truncate text-corpo text-ink">
                   {s.summary ?? s.google_calendar_id}
@@ -198,7 +198,7 @@ export function CalendarAccountCard({
         </Button>
         <a
           href={connectHref}
-          className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-corpo font-medium text-ink hover:bg-surface-muted"
+          className="alvo-44 inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-legenda font-medium text-ink hover:bg-surface-muted"
         >
           Reconectar
         </a>

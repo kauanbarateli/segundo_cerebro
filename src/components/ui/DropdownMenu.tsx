@@ -190,7 +190,9 @@ export function DropdownMenu({
         aria-expanded={open}
         onClick={() => (open ? fechar() : abrir())}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-md text-ink-subtle hover:bg-surface hover:text-ink focus-visible:outline-2",
+          // `alvo-44`: o gatilho continua desenhando 32px (ele mora no canto de
+          // linhas de lista densas), mas a área tocável vai a 44px. Ver globals.css.
+          "alvo-44 flex h-8 w-8 items-center justify-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink",
           className,
         )}
       >
@@ -227,7 +229,7 @@ export function DropdownMenu({
                  style, nunca de transform: as duas coisas não brigam, e o
                  deslocamento zera no último quadro. Se o posicionamento um dia
                  passar a usar transform, esta classe sai junto. */
-              className="z-[89] animate-popover-in overflow-hidden rounded-md border border-line bg-surface py-1 shadow-raised"
+              className="z-[89] animate-popover-in overflow-hidden rounded-md border border-line bg-surface py-1.5 shadow-raised"
             >
               {items.map((item) => (
                 <button
@@ -242,8 +244,8 @@ export function DropdownMenu({
                     item.onClick();
                   }}
                   className={cn(
-                    "block w-full px-3 py-2 text-left text-corpo hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none",
-                    item.danger ? "text-red-600 dark:text-red-400" : "text-ink",
+                    "block w-full px-3.5 py-2.5 text-left text-corpo hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-none",
+                    item.danger ? "text-danger-ink" : "text-ink",
                   )}
                 >
                   {item.label}

@@ -448,7 +448,7 @@ function LinhaDeHoje({
         aria-pressed={feito}
         aria-label={`${feito ? "Desmarcar" : "Marcar"} ${habito.name} em ${formatarDiaLongo(hoje)}.${contexto}`}
         onClick={onMarcar}
-        className="flex min-h-[56px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 active:bg-surface-muted sm:px-5"
+        className="flex min-h-[56px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-muted focus-visible:-outline-offset-2 active:bg-surface-muted sm:px-5"
       >
         <span
           aria-hidden
@@ -480,7 +480,7 @@ function LinhaDeHoje({
             é uma pergunta em aberto no meio da semana. */}
         {semanal && (
           <span className="flex shrink-0 flex-col items-end gap-1.5">
-            <span className="text-corpo tabular-nums text-ink-muted">
+            <span className="text-legenda tabular-nums text-ink-muted">
               {feitosNaSemana}/{alvo}
             </span>
             <MedidorSemanal feitos={feitosNaSemana} alvo={alvo} />

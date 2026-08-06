@@ -98,24 +98,39 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/*
           O TETO DE LARGURA ACOMPANHA A BARRA — senão recolher não devolve nada.
 
-          `max-w-6xl` são 72rem. Numa tela de 1440px com a barra expandida sobram
-          1184px de espaço útil, e o teto já morde: o conteúdo para em 1152px.
-          Recolher a barra libera 12rem (16rem − 4rem), mas com o teto parado em
-          72rem esses 12rem viram MARGEM — a página fica igual, só mais centrada,
-          e o clique não produziu efeito visível nenhum.
+          O teto expandido é 67.5rem (1080px), o número do DS §5. Recolher a barra
+          libera espaço, mas com o teto parado esse espaço vira MARGEM: a página
+          fica igual, só mais centrada, e o clique não produz efeito visível.
+          O teto recolhido precisa, portanto, ser `67.5rem + o que a barra
+          devolveu`.
 
-          84rem = 72 + 12: exatamente o que a barra devolveu. O conteúdo mantém
-          as mesmas distâncias das bordas que tinha antes, em vez de ganhar um
-          teto novo escolhido no chute.
+          ⚠️ E A BARRA DEVOLVE DUAS COISAS DIFERENTES, porque ela tem dois
+          tamanhos (ver AppSidebar.tsx — 16rem até 1535px, 20rem a partir de
+          1536px). São dois regimes, e por isso são dois tetos recolhidos:
 
-          Sem prefixo `md:` porque abaixo de 768px a conta não muda nada: a
-          viewport é menor que 72rem e nenhum dos dois tetos chega a valer.
+            até 1535px   barra 16 → 4rem, devolve 12rem   →  67.5 + 12 = 79.5rem
+            de 1536px    barra 20 → 4rem, devolve 16rem   →  67.5 + 16 = 83.5rem
+
+          A conta foi CONFERIDA nos dois, não deduzida. Em 1535px com a barra
+          recolhida sobram 1391px úteis (1535 − 64 de barra − 80 de padding); o
+          teto de 79.5rem (1272px) deixa 59.5px de margem de cada lado, que é
+          exatamente a margem que o estado expandido tinha. Com o teto de 83.5rem
+          ali, a margem cairia para 27.5px — o conteúdo cresceria 64px A MAIS do
+          que a barra liberou, e o "recolher" passaria a comer o respiro lateral
+          em vez de só devolver o que era da barra.
+
+          Em 1536px a mesma conta fecha com 83.5rem: 1392px úteis, 1336px de
+          conteúdo, 28px de margem de cada lado — os mesmos 28px do expandido.
+
+          Sem prefixo `md:` no teto de baixo porque abaixo de 768px a conta não
+          muda nada: a viewport é menor que 67.5rem e nenhum teto chega a valer.
         */}
         <main
           className={cn(
-            "mx-auto w-full max-w-6xl flex-1 px-5 pb-24 pt-8 md:pb-10 md:pt-10",
+            "mx-auto w-full max-w-[67.5rem] flex-1 px-5 pb-24 pt-8 md:px-8 md:pb-10 md:pt-10 lg:px-10",
             "transition-[max-width] duration-150 ease-out",
-            "[[data-sidebar=recolhida]_&]:max-w-[84rem]",
+            "[[data-sidebar=recolhida]_&]:max-w-[79.5rem]",
+            "2xl:[[data-sidebar=recolhida]_&]:max-w-[83.5rem]",
           )}
         >
           {children}

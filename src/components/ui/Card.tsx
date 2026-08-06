@@ -4,6 +4,17 @@ import { cn } from "@/lib/utils";
 /**
  * CARTÃO — e os níveis de elevação do sistema.
  *
+ * Forma: `rounded-lg`, que a migração para o DS 1.0 levou de 14 para 18px. O
+ * número está em `tailwind.config.ts` e chega aqui por uma classe só, então todos
+ * os cartões do produto que passam por este componente mudaram juntos. Padding de
+ * 24px (o meio da faixa de 20–28 do DS §7) — quem passa `p-5`/`p-6` na
+ * `className` vence, e a maioria das telas faz isso em vez de usar
+ * CardHeader/CardBody.
+ *
+ * ⚠️ A sombra de cada nível agora TROCA COM O TEMA (ver globals.css). Antes era a
+ * mesma sombra preta nos dois, e sobre o fundo escuro ela não aparecia — o nível
+ * 2 abaixo era, na prática, igual ao nível 1.
+ *
  * O problema que este arquivo resolve não é visual, é de HIERARQUIA. `Card` era
  * usado em trinta lugares com exatamente o mesmo peso, então uma tela com seis
  * cartões não dizia qual deles importa: tudo tinha a mesma borda e a mesma
@@ -55,10 +66,19 @@ export function Card({
   );
 }
 
+/*
+  Padding de 24px, o meio da faixa de 20–28px do DS §7. Era 20px. O ganho não é
+  de espaço em si: com o corpo em 16px (era 13px), 20px de respiro deixava o
+  texto encostado demais na moldura de 18px de raio — quanto maior o raio, mais
+  padding o canto pede para o conteúdo não parecer que vaza pela curva.
+
+  As chamadas que passam `p-5`/`p-6` na `className` VENCEM estes valores, e a
+  maioria dos cartões do produto faz isso em vez de usar CardHeader/CardBody.
+*/
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-5 pt-5 pb-3", className)} {...props} />;
+  return <div className={cn("px-6 pt-6 pb-3", className)} {...props} />;
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-5 pb-5", className)} {...props} />;
+  return <div className={cn("px-6 pb-6", className)} {...props} />;
 }

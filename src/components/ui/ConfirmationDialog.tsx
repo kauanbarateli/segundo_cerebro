@@ -53,19 +53,30 @@ export function ConfirmationDialog({
            precisa nascer do mesmo jeito. Duas caixas que fazem o mesmo papel
            entrando de formas diferentes é o que faz uma interface parecer
            montada por pessoas que não se falaram. */
-        className="w-full max-w-sm animate-modal-in rounded-lg border border-line bg-surface p-5 shadow-raised outline-none"
+        className="w-full max-w-sm animate-modal-in rounded-xl border border-line bg-surface p-6 shadow-raised outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-corpo-forte font-semibold text-ink">{title}</h2>
-        {description && <p className="mt-1.5 text-corpo text-ink-muted">{description}</p>}
+        <h2 className="text-titulo font-semibold text-ink">{title}</h2>
+        {description && <p className="mt-2 text-corpo text-ink-muted">{description}</p>}
         {children}
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+        {/*
+          Os botões são `size="md"` (44px) e não `sm`. Este é o último ponto antes
+          de uma ação que não volta: encolher o alvo aqui é onde um toque errado
+          custa caro. Vale tanto para o confirmar quanto para o CANCELAR — quem
+          quer desistir precisa acertar o botão na primeira tentativa.
+        */}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="ghost" size="md" onClick={onCancel}>
             {cancelLabel}
           </Button>
+          {/*
+            `danger-solid` é o único uso do vermelho cheio no produto — a regra do
+            DS §7 ("fundo danger sólido só em confirmação destrutiva"). Fora daqui,
+            excluir usa a variante `danger` de moldura neutra e texto vermelho.
+          */}
           <Button
-            variant={destructive ? "danger" : "primary"}
-            size="sm"
+            variant={destructive ? "danger-solid" : "primary"}
+            size="md"
             onClick={onConfirm}
             autoFocus
           >

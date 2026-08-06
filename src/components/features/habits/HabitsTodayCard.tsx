@@ -110,12 +110,12 @@ export function HabitsTodayCard({
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="eyebrow">Hábitos de hoje</p>
         <Link
           href="/habitos"
-          className="rounded-sm text-corpo text-ink-muted hover:text-ink focus-visible:outline-2"
+          className="rounded-sm text-corpo text-ink-muted hover:text-ink"
         >
           Ver tudo
         </Link>
@@ -171,7 +171,7 @@ export function HabitsTodayCard({
                     aria-pressed={r.hojeFeito ?? false}
                     aria-label={`${r.hojeFeito ? "Desmarcar" : "Marcar"} ${r.habito.name} em ${formatarDiaLongo(hoje)}.${contexto}`}
                     onClick={() => marcar(r.habito.id, !r.hojeFeito)}
-                    className="flex min-h-[48px] w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 active:bg-surface-muted"
+                    className="flex min-h-[48px] w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors hover:bg-surface-muted active:bg-surface-muted"
                   >
                     <span
                       aria-hidden

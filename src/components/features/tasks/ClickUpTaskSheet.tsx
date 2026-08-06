@@ -10,6 +10,8 @@ import {
   detalharTarefaClickUp,
   mudarStatusClickUp,
 } from "@/app/(app)/tarefas/clickup-actions";
+import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 import type { ComentarioClickUp, StatusPossivel, TarefaClickUp } from "@/lib/clickup/types";
 import { formatDayLabel, formatTime } from "@/lib/utils";
 import { ResponsaveisClickUp } from "@/components/features/tasks/ResponsaveisClickUp";
@@ -112,7 +114,7 @@ export function ClickUpTaskSheet({
           <div className="h-20 animate-pulse rounded-sm bg-surface-muted" />
         </div>
       ) : erro ? (
-        <p role="alert" className="flex items-start gap-2 text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="flex items-start gap-2 text-corpo text-danger-ink">
           <Icon.Alert width={15} height={15} className="mt-0.5 shrink-0" />
           <span>{erro}</span>
         </p>
@@ -152,7 +154,7 @@ export function ClickUpTaskSheet({
                 value={detalhe.status ?? ""}
                 disabled={mudandoStatus}
                 onChange={(e) => trocarStatus(e.target.value)}
-                className="h-10 w-full max-w-xs rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+                className={cn(CLASSE_DO_CAMPO, "w-full max-w-xs")}
               >
                 {statusPossiveis.map((s) => (
                   <option key={s.status} value={s.status}>
@@ -208,7 +210,7 @@ export function ClickUpTaskSheet({
                 onChange={(e) => setTexto(e.target.value)}
                 maxLength={10_000}
                 placeholder="Escreva um comentário…"
-                className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-2"
+                className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full")}
               />
               {/* Empilha no celular: o aviso pede ~250px e o botão outros ~155,
                   contra os 303px do modal em 375px. Lado a lado, quem encolhia

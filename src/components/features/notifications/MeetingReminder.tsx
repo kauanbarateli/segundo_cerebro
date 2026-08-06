@@ -112,7 +112,7 @@ export function MeetingReminder({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={link.href}
-                className="shrink-0 rounded-sm bg-surface px-2.5 py-1 text-legenda font-medium text-ink hover:opacity-90"
+                className="alvo-44 shrink-0 rounded-sm bg-surface px-2.5 py-1 text-legenda font-medium text-ink hover:opacity-90"
               >
                 {link.ehGoogleMeet ? "Entrar no Meet" : `Abrir ${link.hostname}`}
               </a>
@@ -121,7 +121,7 @@ export function MeetingReminder({
               type="button"
               aria-label="Dispensar lembrete"
               onClick={() => setActive((prev) => prev.filter((x) => x.key !== r.key))}
-              className="shrink-0 rounded-sm p-1 opacity-70 hover:opacity-100"
+              className="alvo-44 shrink-0 rounded-sm p-1 opacity-70 hover:opacity-100"
             >
               <Icon.X width={15} height={15} />
             </button>

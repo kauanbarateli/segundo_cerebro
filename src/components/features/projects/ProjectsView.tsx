@@ -50,11 +50,11 @@ export function ProjectsView({ projetos }: { projetos: Project[] }) {
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {projetos.map((p) => (
               <li key={p.id}>
-                <Card className="flex h-full flex-col p-4">
+                <Card className="flex h-full flex-col p-5">
                   <div className="flex items-start justify-between gap-2">
                     <Link
                       href={`/projetos/${p.id}`}
-                      className="min-w-0 flex-1 rounded-sm text-sm font-medium text-ink hover:underline focus-visible:outline-2"
+                      className="min-w-0 flex-1 rounded-sm text-corpo font-medium text-ink hover:underline"
                     >
                       {p.name}
                     </Link>

@@ -10,6 +10,8 @@ import { createCapture } from "@/app/(app)/capturar/actions";
 import { createNotebook } from "@/app/(app)/conhecimento/actions";
 import { createFolder } from "@/app/(app)/drive/actions";
 import type { Category, Project } from "@/lib/database.types";
+import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 
 /**
  * "CRIAR AQUI" — o formulário do módulo de origem, já com o projeto preenchido.
@@ -140,7 +142,7 @@ function FormDeCaptura({
           onChange={(e) => setTitle(e.target.value)}
           maxLength={200}
           autoFocus
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
 
@@ -155,7 +157,7 @@ function FormDeCaptura({
           onChange={(e) => setContent(e.target.value)}
           maxLength={10_000}
           placeholder="O que passou pela cabeça agora."
-          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full")}
         />
       </div>
 
@@ -242,7 +244,7 @@ function FormDeNome({
           required
           autoFocus
           placeholder={tipo === "caderno" ? "Pesquisa de fornecedores" : "Orçamentos"}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
         <p className="mt-1.5 text-legenda text-ink-subtle">
           {tipo === "caderno"
@@ -252,7 +254,7 @@ function FormDeNome({
       </div>
 
       {erro && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {erro}
         </p>
       )}

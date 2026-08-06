@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SEGUNDO CÉREBRO — Design System 1.0</title>
+  <meta name="description" content="Design System do software Segundo Cérebro">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <style>
+    :root{
+      --canvas:#f5f5f2;--surface:#fff;--subtle:#fafaf8;--hover:#f0f0ed;
+      --ink:#111;--ink2:#62625e;--muted:#92928c;--line:#dcdcd6;--soft:#ecece8;
+      --success:#188564;--danger:#e5484d;--warning:#a96918;--info:#3f6fd8;
+      --work:#20b8a5;--personal:#8b5cf6;--r1:8px;--r2:12px;--r3:18px;--r4:24px;
+      --shadow:0 1px 2px rgba(17,17,17,.04),0 10px 28px -22px rgba(17,17,17,.34);
+    }
+    [data-theme="dark"]{--canvas:#0d0d0d;--surface:#151515;--subtle:#1a1a19;--hover:#222221;--ink:#f5f5f2;--ink2:#b8b8b2;--muted:#85857f;--line:#343431;--soft:#262624;--shadow:0 1px 2px rgba(0,0,0,.32),0 18px 36px -26px rgba(0,0,0,.88)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transition:background .18s,color .18s}.shell{display:grid;grid-template-columns:272px 1fr;min-height:100vh}.side{position:sticky;top:0;height:100vh;padding:28px 20px;background:var(--surface);border-right:1px solid var(--line)}.brand{display:flex;align-items:center;gap:12px;margin-bottom:38px}.brand svg{width:44px;height:44px;flex:none}.brand strong{display:block;font-size:16px}.brand span{display:block;color:var(--muted);font-size:14px;margin-top:2px}.eyebrow{font-size:12px;line-height:1;font-weight:650;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}nav{display:grid;gap:4px;margin-top:14px}.nav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;color:var(--ink2);text-decoration:none;font-weight:550;font-size:14px}.nav:hover{background:var(--hover);color:var(--ink)}.nav.active{background:var(--ink);color:var(--surface)}.dot-icon{width:18px;height:18px;border:1.7px solid currentColor;border-radius:5px;display:inline-block}.side-note{position:absolute;left:20px;right:20px;bottom:24px;padding:14px;border:1px solid var(--line);border-radius:14px;color:var(--ink2);font-size:12px;line-height:1.45}.main{padding:54px clamp(28px,5vw,72px) 90px}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;max-width:1100px}.hero h1{font-size:clamp(52px,6vw,84px);line-height:.92;letter-spacing:-.058em;margin:16px 0 18px;max-width:800px}.hero p{font-size:20px;line-height:1.48;color:var(--ink2);max-width:640px;margin:0}.theme{width:50px;height:50px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font-size:20px;cursor:pointer}.theme:hover{background:var(--hover)}.content{max-width:1100px;margin-top:72px}.section{padding:54px 0;border-top:1px solid var(--line)}.section-head{display:grid;grid-template-columns:200px 1fr;gap:28px;margin-bottom:32px}.section h2{font-size:32px;letter-spacing:-.035em;margin:0}.section-intro{color:var(--ink2);line-height:1.55;margin:0;max-width:680px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r3);box-shadow:var(--shadow);padding:24px}.card h3{margin:0 0 8px;font-size:19px;letter-spacing:-.02em}.card p{margin:0;color:var(--ink2);line-height:1.5}.mark-card{min-height:260px;display:grid;place-items:center}.mark-card svg{width:120px;height:120px}.lockup svg{width:min(100%,420px);height:auto}.color{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface)}.swatch{height:106px}.color-info{padding:14px}.color-info b,.color-info span{display:block}.color-info span{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);margin-top:4px}.type-display{font-size:64px;line-height:.94;letter-spacing:-.055em;font-weight:700;margin:0}.type-sub{font-size:20px;line-height:1.45;color:var(--ink2);margin:20px 0 0}.type-meta{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:650}.sample-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.btn{height:48px;padding:0 18px;border-radius:12px;font:600 15px inherit;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--surface)}.btn.ghost{border-color:transparent;background:transparent}.btn.danger{color:var(--danger)}.btn:focus-visible,.input:focus-visible{outline:3px solid color-mix(in srgb,var(--ink) 12%,transparent);outline-offset:2px;border-color:var(--ink)}.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:8px 14px;font-size:14px}.chip.active{background:var(--ink);color:var(--surface);border-color:var(--ink)}.input{height:52px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:0 16px;font:16px inherit;width:100%}.input::placeholder{color:var(--muted)}.mini-ui{display:grid;grid-template-columns:220px 1fr;min-height:440px;padding:0;overflow:hidden}.mini-side{padding:20px 14px;border-right:1px solid var(--line);background:var(--surface)}.mini-brand{display:flex;align-items:center;gap:9px;font-weight:700;margin:0 10px 20px}.mini-mark{width:30px;height:30px;background:#111;border-radius:8px;display:grid;place-items:center;color:white;font-weight:700}.mini-nav{padding:10px 11px;border-radius:10px;margin:4px 0;color:var(--ink2);font-size:13px}.mini-nav.sel{background:var(--ink);color:var(--surface)}.mini-main{padding:28px;background:var(--canvas)}.mini-main h3{font-size:38px;line-height:.96;letter-spacing:-.05em;max-width:360px;margin:9px 0 12px}.mini-main>p{color:var(--ink2);margin:0 0 28px}.task{display:flex;justify-content:space-between;gap:12px;padding:15px 0;border-bottom:1px solid var(--soft)}.task:last-child{border:0}.task b{font-size:14px}.task span{font-size:12px;color:var(--muted)}.semantic{display:flex;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--soft)}.semantic:last-child{border:0}.s-dot{width:10px;height:10px;border-radius:50%}.measure{display:flex;gap:8px;align-items:end;height:86px}.measure i{display:block;width:26px;background:var(--ink);border-radius:4px 4px 0 0;opacity:.86}.measure small{color:var(--muted)}.rule{padding-left:18px;color:var(--ink2);line-height:1.55}.rule li{margin:8px 0}.footer{padding-top:42px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:13px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted)}
+    @media(max-width:900px){.shell{grid-template-columns:1fr}.side{display:none}.main{padding:36px 22px 70px}.section-head{grid-template-columns:1fr;gap:10px}.grid,.grid3{grid-template-columns:1fr}.mini-ui{grid-template-columns:1fr}.mini-side{display:none}.hero h1{font-size:54px}.top{align-items:center}.type-display{font-size:48px}.footer{display:block}.footer span{display:block;margin-top:8px}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#111"/><path d="M18.5 20C18.5 15.858 21.858 12.5 26 12.5H35C41.627 12.5 47 17.873 47 24.5C47 28.253 45.245 31.791 42.255 34.056L21.5 49.5H47" stroke="#F7F7F4" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18.5" cy="20" r="3" fill="#111" stroke="#F7F7F4" stroke-width="1.5"/><circle cx="47" cy="49.5" r="3" fill="#111" stroke="#F7F7F4" stroke-width="1.5"/></svg>
+        <div><strong>Segundo</strong><span>Cérebro</span></div>
+      </div>
+      <div class="eyebrow">Design System 1.0</div>
+      <nav aria-label="Seções">
+        <a class="nav active" href="#foundation"><i class="dot-icon"></i>Fundamentos</a>
+        <a class="nav" href="#brand"><i class="dot-icon"></i>Marca</a>
+        <a class="nav" href="#colors"><i class="dot-icon"></i>Cores</a>
+        <a class="nav" href="#type"><i class="dot-icon"></i>Tipografia</a>
+        <a class="nav" href="#components"><i class="dot-icon"></i>Componentes</a>
+        <a class="nav" href="#layout"><i class="dot-icon"></i>Layout</a>
+        <a class="nav" href="#accessibility"><i class="dot-icon"></i>Acessibilidade</a>
+      </nav>
+      <div class="side-note">Regra de ouro<br><b style="color:var(--ink)">Neutro para navegar.<br>Cor para informar.</b></div>
+    </aside>
+    <main class="main">
+      <header class="top" id="foundation">
+        <div class="hero">
+          <div class="eyebrow">SEGUNDO CÉREBRO · SISTEMA VISUAL</div>
+          <h1>Um lugar para tudo o que importa.</h1>
+          <p>Uma linguagem visual silenciosa para tarefas, notas, agenda, arquivos, hábitos, projetos, finanças e informações pessoais viverem como partes do mesmo cérebro.</p>
+        </div>
+        <button class="theme" id="theme" aria-label="Alternar tema" title="Alternar tema">◐</button>
+      </header>
+
+      <div class="content">
+        <section class="section">
+          <div class="section-head"><h2>Princípios</h2><p class="section-intro">A interface atual já tem uma personalidade forte: muito espaço negativo, títulos editoriais, cards brancos e preto como decisão. O sistema abaixo formaliza isso.</p></div>
+          <div class="grid3">
+            <article class="card"><div class="eyebrow">01</div><h3 style="margin-top:16px">Menos interface</h3><p>O chrome recua. Conteúdo, contexto e próxima ação ficam em primeiro plano.</p></article>
+            <article class="card"><div class="eyebrow">02</div><h3 style="margin-top:16px">Preto é decisão</h3><p>CTA e seleção ativa usam preto. Cores vivas não competem com a hierarquia.</p></article>
+            <article class="card"><div class="eyebrow">03</div><h3 style="margin-top:16px">Cor tem significado</h3><p>Teal, violeta e estados semânticos aparecem somente quando carregam informação.</p></article>
+          </div>
+        </section>
+
+        <section class="section" id="brand">
+          <div class="section-head"><h2>Marca</h2><p class="section-intro">Um “2” contínuo com dois terminais. Ele combina a ideia de segundo cérebro com o fluxo captura → conexão → recuperação.</p></div>
+          <div class="grid">
+            <article class="card mark-card">
+              <svg viewBox="0 0 128 128" aria-label="Símbolo Segundo Cérebro"><rect width="128" height="128" rx="32" fill="#111"/><path d="M37 40C37 31.716 43.716 25 52 25H70C83.255 25 94 35.745 94 49C94 56.506 90.491 63.581 84.51 68.113L43 99H94" stroke="#F7F7F4" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="37" cy="40" r="6" fill="#111" stroke="#F7F7F4" stroke-width="3"/><circle cx="94" cy="99" r="6" fill="#111" stroke="#F7F7F4" stroke-width="3"/></svg>
+            </article>
+            <article class="card mark-card lockup">
+              <svg viewBox="0 0 512 128" aria-label="Logo Segundo Cérebro"><rect x="0" y="12" width="104" height="104" rx="26" fill="#111"/><path d="M30 44.5C30 37.596 35.596 32 42.5 32H58C69.046 32 78 40.954 78 52C78 58.255 75.076 64.151 70.092 67.927L35.5 93H78" stroke="#F7F7F4" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="44.5" r="5" fill="#111" stroke="#F7F7F4" stroke-width="2.5"/><circle cx="78" cy="93" r="5" fill="#111" stroke="#F7F7F4" stroke-width="2.5"/><text x="132" y="59" fill="var(--ink)" font-family="Inter,Arial,sans-serif" font-size="33" font-weight="700" letter-spacing="-1">Segundo</text><text x="132" y="92" fill="var(--ink2)" font-family="Inter,Arial,sans-serif" font-size="27" letter-spacing="-.5">Cérebro</text></svg>
+            </article>
+          </div>
+          <p class="mono" style="margin-top:14px">Clear space: ¼ do símbolo · mínimo: 24px símbolo / 136px lockup · sem gradientes</p>
+        </section>
+
+        <section class="section" id="colors">
+          <div class="section-head"><h2>Cores</h2><p class="section-intro">Base quente e quase monocromática. O off-white reduz dureza sem parecer bege; o preto cria foco. Use aproximadamente 90% de neutros e 10% de cor semântica.</p></div>
+          <div class="grid3">
+            <div class="color"><div class="swatch" style="background:#111"></div><div class="color-info"><b>Ink</b><span>#111111</span></div></div>
+            <div class="color"><div class="swatch" style="background:#f5f5f2"></div><div class="color-info"><b>Canvas</b><span>#F5F5F2</span></div></div>
+            <div class="color"><div class="swatch" style="background:#fff"></div><div class="color-info"><b>Surface</b><span>#FFFFFF</span></div></div>
+            <div class="color"><div class="swatch" style="background:#62625e"></div><div class="color-info"><b>Ink secondary</b><span>#62625E</span></div></div>
+            <div class="color"><div class="swatch" style="background:#92928c"></div><div class="color-info"><b>Muted</b><span>#92928C</span></div></div>
+            <div class="color"><div class="swatch" style="background:#dcdcd6"></div><div class="color-info"><b>Line</b><span>#DCDCD6</span></div></div>
+          </div>
+          <div class="card" style="margin-top:18px">
+            <h3>Semânticas</h3>
+            <div class="grid" style="gap:0 32px">
+              <div><div class="semantic"><i class="s-dot" style="background:var(--work)"></i><b>Trabalho</b><span class="mono">#20B8A5</span></div><div class="semantic"><i class="s-dot" style="background:var(--personal)"></i><b>Pessoal</b><span class="mono">#8B5CF6</span></div><div class="semantic"><i class="s-dot" style="background:var(--success)"></i><b>Sucesso</b><span class="mono">#188564</span></div></div>
+              <div><div class="semantic"><i class="s-dot" style="background:var(--danger)"></i><b>Erro / risco</b><span class="mono">#E5484D</span></div><div class="semantic"><i class="s-dot" style="background:var(--warning)"></i><b>Atenção</b><span class="mono">#A96918</span></div><div class="semantic"><i class="s-dot" style="background:var(--info)"></i><b>Informação</b><span class="mono">#3F6FD8</span></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="type">
+          <div class="section-head"><h2>Tipografia</h2><p class="section-intro">Inter mantém a proximidade com a interface atual. A personalidade vem do contraste entre display muito grande, labels pequenas e corpo confortável.</p></div>
+          <article class="card"><div class="type-meta">Display · 52–80 · 700 · −5.5%</div><p class="type-display">Tire isso<br>da cabeça.</p><p class="type-sub">Capture primeiro. Organize quando fizer sentido.</p></article>
+          <div class="grid" style="margin-top:18px"><article class="card"><div class="type-meta">Body large · 20 / 1.45</div><p style="font-size:20px;line-height:1.45">Tudo que importa, em um só lugar.</p></article><article class="card"><div class="type-meta">Eyebrow · 12 / 600 / +16%</div><p class="eyebrow" style="margin-top:22px">AGENDA UNIFICADA</p></article></div>
+        </section>
+
+        <section class="section" id="components">
+          <div class="section-head"><h2>Componentes</h2><p class="section-intro">Geometria única em todo o produto: controles com 12px, cards com 18px e pills totalmente arredondadas.</p></div>
+          <div class="grid">
+            <article class="card"><h3>Botões</h3><div class="sample-row" style="margin-top:22px"><button class="btn primary">+ Capturar</button><button class="btn">Nova pasta</button><button class="btn ghost">Cancelar</button><button class="btn danger">Excluir</button></div></article>
+            <article class="card"><h3>Filtros</h3><div class="chips" style="margin-top:22px"><span class="chip active">Todas</span><span class="chip">Trabalho</span><span class="chip">Estudos</span><span class="chip">Pessoal</span></div></article>
+            <article class="card"><h3>Inputs</h3><input class="input" style="margin-top:18px" placeholder="Buscar no seu cérebro" aria-label="Exemplo de busca"><p class="mono" style="margin-top:10px">52px · radius 12 · border 1px</p></article>
+            <article class="card"><h3>Card / empty state</h3><div style="text-align:center;padding:20px 8px"><div style="width:56px;height:56px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;margin:auto">✓</div><b style="display:block;margin-top:14px">Nada pendente agora</b><p style="font-size:14px;margin-top:6px">Você está em ordem. Capture uma nova ideia.</p></div></article>
+          </div>
+        </section>
+
+        <section class="section" id="layout">
+          <div class="section-head"><h2>Layout</h2><p class="section-intro">A navegação é estável; o conteúdo muda. Isso faz o software parecer um único sistema, mesmo abrigando áreas muito diferentes.</p></div>
+          <article class="card mini-ui">
+            <div class="mini-side"><div class="mini-brand"><span class="mini-mark">2</span>Segundo Cérebro</div><div class="mini-nav">⌂ &nbsp; Início</div><div class="mini-nav">＋ &nbsp; Capturar</div><div class="mini-nav sel">≡ &nbsp; Tarefas</div><div class="mini-nav">□ &nbsp; Calendário</div><div class="mini-nav">▱ &nbsp; Drive</div><div class="mini-nav">◎ &nbsp; Conhecimento</div></div>
+            <div class="mini-main"><div class="eyebrow">EXECUÇÃO</div><h3>Faça o que importa.</h3><p>Trabalho, estudos e vida pessoal na mesma visão.</p><div class="card" style="box-shadow:none"><div class="chips"><span class="chip active">Todas</span><span class="chip">Trabalho</span><span class="chip">Pessoal</span></div><div style="margin-top:18px"><div class="task"><div><b>Revisar planejamento</b><br><span>Hoje · 14:00</span></div><span>Trabalho</span></div><div class="task"><div><b>Leitura de 20 páginas</b><br><span>Todo dia</span></div><span>Pessoal</span></div></div></div></div>
+          </article>
+          <div class="grid3" style="margin-top:18px"><article class="card"><h3>Desktop</h3><p>Sidebar 320px · conteúdo até 1080px · padding 32–40px.</p></article><article class="card"><h3>Tablet</h3><p>Sidebar 256px · reduzir gaps antes de reduzir tipografia.</p></article><article class="card"><h3>Mobile</h3><p>≤760px · navegação fora do fluxo · display 44–52px · alvo ≥44px.</p></article></div>
+        </section>
+
+        <section class="section" id="accessibility">
+          <div class="section-head"><h2>Acessibilidade</h2><p class="section-intro">Minimalismo só funciona quando continua legível, operável e explícito.</p></div>
+          <div class="grid"><article class="card"><h3>Obrigatório</h3><ul class="rule"><li>Área interativa mínima de 44 × 44 px.</li><li>Foco visível em teclado.</li><li>WCAG AA para texto.</li><li>Ícones isolados com nome acessível.</li><li>Status nunca comunicado apenas por cor.</li></ul></article><article class="card"><h3>Movimento</h3><ul class="rule"><li>Hover: 120ms.</li><li>Transição de superfície: 180ms.</li><li>Easing: cubic-bezier(.2,.75,.25,1).</li><li>Respeitar prefers-reduced-motion.</li></ul></article></div>
+        </section>
+
+        <footer class="footer"><b style="color:var(--ink)">SEGUNDO CÉREBRO · DS 1.0</b><span>Fundação visual para produto, marca e novas funcionalidades.</span></footer>
+      </div>
+    </main>
+  </div>
+  <script>
+    const root=document.documentElement,btn=document.getElementById('theme');
+    btn.addEventListener('click',()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark'});
+  </script>
+</body>
+</html>

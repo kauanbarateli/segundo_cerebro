@@ -144,7 +144,7 @@ export function ClickUpPanel() {
             erro.motivo === "token_invalido" ? (
               <Link
                 href="/configuracoes"
-                className="inline-flex h-8 items-center rounded-sm border border-line-strong px-3 text-corpo font-medium text-ink hover:bg-surface-muted"
+                className="alvo-44 inline-flex h-8 items-center rounded-sm border border-line-strong px-3 text-legenda font-medium text-ink hover:bg-surface-muted"
               >
                 Abrir Configurações
               </Link>

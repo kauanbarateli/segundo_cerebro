@@ -1,4 +1,6 @@
 import type { Project } from "@/lib/database.types";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 
 /**
  * O seletor de projeto dos formulários que ATRIBUEM projeto.
@@ -37,7 +39,7 @@ export function SeletorDeProjeto({
         id={id}
         name="projectId"
         defaultValue={valorInicial ?? ""}
-        className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO, "w-full")}
       >
         <option value="">Sem projeto</option>
         {projetos.map((p) => (

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createLink, removeLink } from "@/app/(app)/vinculos/actions";
 import { pairForLink, RELATED_KIND_LABEL, type RelatedEntity, type RelatedItem } from "@/lib/links";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 import { cn } from "@/lib/utils";
 
 /**
@@ -250,7 +251,7 @@ export function RelatedSection({
         armadilha de foco do Modal de paradas de Tab a cada letra digitada.
       */}
       <div ref={containerRef} className="relative">
-        <label htmlFor={inputId} className="mb-1.5 block text-legenda font-medium text-ink-muted">
+        <label htmlFor={inputId} className="mb-1.5 block text-corpo font-medium text-ink-muted">
           Vincular a…
         </label>
         <input
@@ -287,7 +288,7 @@ export function RelatedSection({
             if (destino instanceof Node && containerRef.current?.contains(destino)) return;
             setAberto(false);
           }}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
 
         {/*

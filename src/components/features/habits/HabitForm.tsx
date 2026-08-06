@@ -9,6 +9,7 @@ import {
   DIAS_LONGOS,
   listarDiasFixos,
 } from "@/components/features/habits/Leitura";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 import { createHabit, updateHabit } from "@/app/(app)/habitos/actions";
 import type { Habit, HabitScheduleKind } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
@@ -108,7 +109,7 @@ export function HabitForm({
           required
           autoFocus
           placeholder="Ler 20 páginas"
-          className="h-11 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
 
@@ -151,7 +152,7 @@ export function HabitForm({
                   className={cn(
                     // 44px: um seletor de dia é tocado com o polegar, e errar o
                     // dia aqui distorce todo o histórico do hábito.
-                    "h-11 w-11 rounded-full border text-corpo font-medium transition-colors focus-visible:outline-2",
+                    "h-11 w-11 rounded-full border text-corpo font-medium transition-colors",
                     ativo
                       ? "border-transparent bg-accent text-accent-ink"
                       : "border-line-strong text-ink-muted hover:bg-surface-muted",
@@ -163,7 +164,7 @@ export function HabitForm({
             })}
           </div>
           {semDia && (
-            <p className="mt-1.5 text-legenda text-red-600 dark:text-red-400">
+            <p className="mt-1.5 text-legenda text-danger-ink">
               Escolha pelo menos um dia.
             </p>
           )}
@@ -180,7 +181,7 @@ export function HabitForm({
             value={weeklyTarget}
             aria-describedby="habito-alvo-ajuda"
             onChange={(e) => setWeeklyTarget(Number(e.target.value))}
-            className="h-11 w-24 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-24")}
           >
             {[1, 2, 3, 4, 5, 6, 7].map((n) => (
               <option key={n} value={n}>
@@ -208,7 +209,7 @@ export function HabitForm({
           aria-describedby="habito-inicio-ajuda"
           onChange={(e) => setStartedOn(e.target.value)}
           required
-          className="h-11 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={CLASSE_DO_CAMPO}
         />
         <p id="habito-inicio-ajuda" className="mt-1.5 text-legenda text-ink-subtle">
           Antes desta data nada é cobrado. É o que impede o painel de contar falha desde sempre.

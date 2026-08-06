@@ -1468,7 +1468,7 @@ export default function EditorDePagina({
                   .updateAttributes("codeBlock", { language: e.target.value })
                   .run()
               }
-              className="h-8 rounded-sm border border-line bg-surface px-2 text-legenda text-ink-muted"
+              className="h-11 rounded-md border border-line bg-surface px-3 text-legenda text-ink-muted"
             >
               {LINGUAGENS.map((l) => (
                 <option key={l.valor} value={l.valor}>
@@ -1560,14 +1560,14 @@ export default function EditorDePagina({
           {/* Descoberta do menu: sem esta linha, "/" é um recurso que só existe
               para quem já sabe que ele existe. */}
           <span className="text-legenda text-ink-subtle">
-            Digite <kbd className="rounded-[3px] border border-line px-1 font-mono">/</kbd> para
+            Digite <kbd className="rounded-xs border border-line px-1 font-mono">/</kbd> para
             inserir blocos
           </span>
           {estado === "erro" && (
             <button
               type="button"
               onClick={tentarDeNovo}
-              className="rounded-sm border border-line-strong px-2.5 py-1 text-legenda text-ink hover:bg-surface-muted"
+              className="alvo-44 rounded-sm border border-line-strong px-2.5 py-1 text-legenda text-ink hover:bg-surface-muted"
             >
               Tentar de novo
             </button>
@@ -1576,7 +1576,7 @@ export default function EditorDePagina({
             <button
               type="button"
               onClick={recarregar}
-              className="rounded-sm border border-line-strong px-2.5 py-1 text-legenda text-ink hover:bg-surface-muted"
+              className="alvo-44 rounded-sm border border-line-strong px-2.5 py-1 text-legenda text-ink hover:bg-surface-muted"
             >
               Recarregar a página
             </button>

@@ -11,6 +11,8 @@ import {
   serializeRecoveryKit,
   verifyRecoveryKitArtifact,
 } from "@/lib/crypto/recovery-kit";
+import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 import { replaceVaultMasterKey } from "@/app/(app)/cofre/actions";
 
 /**
@@ -470,7 +472,7 @@ function SeletorDeKit({
           // `e.target.files` é uma lista viva do input.
           onSelecionar(e.target.files?.[0] ?? null);
         }}
-        className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink file:mr-3 file:rounded-sm file:border-0 file:bg-surface-muted file:px-3 file:py-1 file:text-corpo file:text-ink focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full file:mr-3 file:rounded-sm file:border-0 file:bg-surface-muted file:px-3 file:py-1 file:text-corpo file:text-ink")}
       />
       {arquivo && <p className="mt-1 text-legenda text-ink-subtle">{arquivo.name}</p>}
     </div>
@@ -497,7 +499,7 @@ function CampoCodigo({ value, onChange }: { value: string; onChange: (v: string)
         spellCheck={false}
         autoComplete="off"
         placeholder="aB3d-Kk9Z-…"
-        className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 font-mono text-sm text-ink focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO, "w-full font-mono")}
       />
       <p className="mt-1 text-legenda text-ink-subtle">
         Hífens e espaços são opcionais. Maiúsculas e minúsculas importam.
@@ -530,7 +532,7 @@ function CampoSenha({
         autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO, "w-full")}
       />
     </div>
   );
@@ -538,7 +540,7 @@ function CampoSenha({
 
 function Alerta({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="flex items-start gap-2 text-corpo text-red-600 dark:text-red-400">
+    <p role="alert" className="flex items-start gap-2 text-corpo text-danger-ink">
       <Icon.Alert width={15} height={15} className="mt-0.5 shrink-0" />
       <span>{children}</span>
     </p>

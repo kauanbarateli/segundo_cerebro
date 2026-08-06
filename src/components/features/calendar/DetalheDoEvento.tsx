@@ -129,7 +129,7 @@ export function DetalheDoEvento({
           rel="noopener noreferrer"
           /* `min-h-11` = 44px, o alvo de toque mínimo. É o único link de saída
              do diálogo e ele é usado no celular, onde o modal ocupa a tela. */
-          className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong px-3.5 text-corpo font-medium text-ink transition-colors hover:bg-surface-muted focus-visible:outline-2"
+          className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong px-3.5 text-corpo font-medium text-ink transition-colors hover:bg-surface-muted"
         >
           <Icon.Calendar width={15} height={15} aria-hidden />
           Abrir no Google Agenda

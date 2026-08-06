@@ -142,7 +142,7 @@ export function KnowledgeSearch({
             aria-hidden="true"
             width={16}
             height={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-subtle"
           />
           <input
             type="search"

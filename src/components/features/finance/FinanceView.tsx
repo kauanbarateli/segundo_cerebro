@@ -122,7 +122,7 @@ export function FinanceView(props: FinanceViewProps) {
           >
             ‹
           </Button>
-          <span className="min-w-[9rem] text-center text-sm font-medium capitalize text-ink">
+          <span className="min-w-[9rem] text-center text-corpo font-medium capitalize text-ink">
             {monthLabel(month)}
           </span>
           <Button
@@ -138,7 +138,7 @@ export function FinanceView(props: FinanceViewProps) {
         <button
           type="button"
           onClick={() => setHidden((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-corpo text-ink-muted hover:text-ink"
+          className="alvo-44 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-legenda text-ink-muted hover:text-ink"
           aria-pressed={hidden}
         >
           {hidden ? <Icon.Eye width={14} height={14} /> : <Icon.EyeOff width={14} height={14} />}
@@ -266,7 +266,7 @@ function Dashboard({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-        <Card className="p-5">
+        <Card className="p-6">
           <h3 className="text-corpo-forte font-semibold text-ink">Despesas por categoria</h3>
           <p className="mt-0.5 text-legenda text-ink-subtle">
             {monthLabel(month)} · {current.transactionCount} lançamentos
@@ -278,7 +278,7 @@ function Dashboard({
             <ul className="mt-4 space-y-3">
               {byCategory.map((c) => (
                 <li key={c.categoryId ?? "none"}>
-                  <div className="mb-1 flex items-center justify-between text-corpo">
+                  <div className="mb-1 flex items-center justify-between text-legenda">
                     <span className="text-ink">{c.name}</span>
                     <span className="text-ink-muted">
                       {money(c.totalCents)}
@@ -300,7 +300,7 @@ function Dashboard({
           )}
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-6">
           <h3 className="text-corpo-forte font-semibold text-ink">Comparação</h3>
           <p className="mt-0.5 mb-4 text-legenda text-ink-subtle">
             {monthLabel(month)} vs. {monthLabel(previousMonthIso(month))}
@@ -345,12 +345,29 @@ function StatCard({
 }) {
   const good = delta == null ? null : positiveIsGood ? delta >= 0 : delta < 0;
   return (
-    <Card className="p-4" elevacao={destaque ? "destaque" : "cartao"}>
+    <Card className="p-5" elevacao={destaque ? "destaque" : "cartao"}>
       <p className="text-legenda text-ink-subtle">{label}</p>
+      {/*
+        AS DUAS SEMÂNTICAS, COM O SINAL SEMPRE JUNTO.
+
+        `success` e `danger` entram aqui porque este é o caso em que a cor
+        carrega informação de verdade (a fatia de 10% da regra do DS §3): num
+        painel financeiro, "sobrou" e "faltou" é a pergunta.
+
+        Mas a cor NUNCA vem sozinha — DS §9, e é o eixo vermelho/verde que a
+        discromatopsia mais comum não separa. Quem passa `tone` também passa um
+        valor que já traz o sinal na frente: veja `liquidoLabel` no Dashboard,
+        que monta "+R$ 1.234,00" ou "−R$ 1.234,00" antes de chegar aqui. Sem o
+        sinal no texto, esta cor precisa sair.
+      */}
       <p
         className={cn(
-          "mt-1 text-2xl font-semibold",
-          tone === "negative" ? "text-red-600 dark:text-red-400" : "text-ink",
+          "mt-1 text-titulo font-semibold tabular-nums",
+          tone === "negative"
+            ? "text-danger-ink"
+            : tone === "positive"
+              ? "text-success-ink"
+              : "text-ink",
         )}
       >
         {value}
@@ -358,9 +375,11 @@ function StatCard({
       {hint && <p className="mt-1 text-legenda text-ink-subtle">{hint}</p>}
       {delta != null && (
         <p
+          /* O triângulo é o sinal não-cromático desta linha: ele diz a direção
+             antes de qualquer cor, e continua dizendo em escala de cinza. */
           className={cn(
             "mt-1 text-legenda",
-            good ? "text-ink-muted" : "text-red-600 dark:text-red-400",
+            good ? "text-success-ink" : "text-danger-ink",
           )}
         >
           {delta >= 0 ? "▲" : "▼"} {Math.abs(delta * 100).toFixed(1)}% vs. mês anterior
@@ -384,7 +403,7 @@ function CompareRow({
   const max = Math.max(Math.abs(current), Math.abs(previous), 1);
   return (
     <div className="mb-4 last:mb-0">
-      <p className="mb-1.5 text-corpo font-medium text-ink">{label}</p>
+      <p className="mb-1.5 text-legenda font-medium text-ink">{label}</p>
       <div className="space-y-1.5">
         <Bar value={Math.abs(current)} max={max} caption={money(current)} strong />
         <Bar value={Math.abs(previous)} max={max} caption={money(previous)} />
@@ -538,7 +557,7 @@ function Transactions({
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">
+                  <p className="truncate text-corpo font-medium text-ink">
                     {descricaoSemParcela(tx)}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-legenda text-ink-subtle">
@@ -564,19 +583,23 @@ function Transactions({
                 <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
                   <span
                     className={cn(
-                      "shrink-0 text-sm font-semibold tabular-nums",
+                      "shrink-0 text-legenda font-semibold tabular-nums",
+                      /* Entrada em `success`, saída em `danger` — e os dois
+                         com reforço: o disco à esquerda da linha traz "+", "−"
+                         ou "⇄", e a saída ainda ganha o "−" colado ao valor,
+                         logo abaixo. Três sinais, um deles cromático. */
                       transfer
-                        ? "text-ink-subtle"
+                        ? "text-ink-muted"
                         : tx.kind === "income"
-                          ? "text-ink"
-                          : "text-red-600 dark:text-red-400",
+                          ? "text-success-ink"
+                          : "text-danger-ink",
                     )}
                   >
                     {tx.kind === "expense" && !transfer ? "−" : ""}
                     {money(tx.amount_cents)}
                   </span>
 
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex shrink-0 gap-3">
                     {!transfer && (
                       <button
                         type="button"
@@ -585,7 +608,7 @@ function Transactions({
                           setEditing(tx);
                           setFormOpen(true);
                         }}
-                        className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                        className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
                       >
                         Editar
                       </button>
@@ -594,7 +617,7 @@ function Transactions({
                       type="button"
                       aria-label="Excluir lançamento"
                       onClick={() => setTarget(tx)}
-                      className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-red-600 dark:hover:text-red-400"
+                      className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-danger-ink"
                     >
                       <Icon.Trash width={13} height={13} />
                     </button>
@@ -722,14 +745,14 @@ function faixaDeUso(percentual: number): FaixaDeUso {
 
 const BARRA_POR_FAIXA: Record<FaixaDeUso, string> = {
   normal: "bg-accent",
-  atencao: "bg-amber-500",
-  critico: "bg-red-500",
+  atencao: "bg-warning",
+  critico: "bg-danger",
 };
 
 const TEXTO_POR_FAIXA: Record<FaixaDeUso, string> = {
   normal: "text-ink-muted",
-  atencao: "text-amber-600 dark:text-amber-400",
-  critico: "text-red-600 dark:text-red-400",
+  atencao: "text-warning-ink",
+  critico: "text-danger-ink",
 };
 
 function Accounts({
@@ -859,24 +882,24 @@ function Accounts({
                 className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:flex-nowrap"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">{a.name}</p>
+                  <p className="truncate text-corpo font-medium text-ink">{a.name}</p>
                   <p className="truncate text-legenda text-ink-subtle">
                     {KIND_LABEL[a.kind] ?? a.kind}
                     {a.institution ? ` · ${a.institution}` : ""}
                   </p>
                 </div>
                 <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
+                  <span className="shrink-0 text-legenda font-semibold tabular-nums text-ink">
                     {money(balanceById.get(a.id)?.balance_cents ?? a.opening_balance_cents)}
                   </span>
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex shrink-0 gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         setEditing(a);
                         setFormOpen(true);
                       }}
-                      className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                      className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
                     >
                       Editar
                     </button>
@@ -884,7 +907,7 @@ function Accounts({
                       type="button"
                       aria-label={`Arquivar ${a.name}`}
                       onClick={() => setTarget(a)}
-                      className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
+                      className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
                     >
                       <Icon.Trash width={13} height={13} />
                     </button>
@@ -1042,20 +1065,20 @@ function CreditCardPanel({
   }
 
   return (
-    <Card className="flex flex-col gap-4 p-5">
+    <Card className="flex flex-col gap-4 p-6">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{card.name}</p>
+          <p className="truncate text-corpo-forte font-semibold text-ink">{card.name}</p>
           <p className="mt-0.5 text-legenda text-ink-subtle">
             {KIND_LABEL.credit_card}
             {card.institution ? ` · ${card.institution}` : ""}
           </p>
         </div>
-        <div className="flex shrink-0 gap-1">
+        <div className="flex shrink-0 gap-3">
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+            className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
           >
             Editar
           </button>
@@ -1063,7 +1086,7 @@ function CreditCardPanel({
             type="button"
             aria-label={`Arquivar ${card.name}`}
             onClick={onArchive}
-            className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
+            className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
           >
             <Icon.Trash width={13} height={13} />
           </button>
@@ -1084,21 +1107,21 @@ function CreditCardPanel({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Limite</p>
-          <p className="text-sm font-semibold tabular-nums text-ink sm:mt-0.5">
+          <p className="text-legenda font-semibold tabular-nums text-ink sm:mt-0.5">
             {temLimite ? money(limiteCents!) : "—"}
           </p>
         </div>
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Usado</p>
-          <p className="text-sm font-semibold tabular-nums text-ink sm:mt-0.5">{money(usadoCents)}</p>
+          <p className="text-legenda font-semibold tabular-nums text-ink sm:mt-0.5">{money(usadoCents)}</p>
         </div>
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Disponível</p>
           <p
             className={cn(
-              "text-sm font-semibold tabular-nums sm:mt-0.5",
+              "text-legenda font-semibold tabular-nums sm:mt-0.5",
               disponivelCents != null && disponivelCents < 0
-                ? "text-red-600 dark:text-red-400"
+                ? "text-danger-ink"
                 : "text-ink",
             )}
           >
@@ -1108,7 +1131,7 @@ function CreditCardPanel({
       </div>
 
       {percentual == null ? (
-        <p className="text-legenda text-ink-subtle">
+        <p className="text-corpo text-ink-subtle">
           Limite não cadastrado — edite o cartão para acompanhar quanto já foi comprometido.
         </p>
       ) : (
@@ -1127,7 +1150,7 @@ function CreditCardPanel({
               "h-2.5 w-full overflow-hidden rounded-full bg-surface-muted",
               // Segundo sinal do estouro, independente de cor: a caixa ganha
               // contorno. Quem não distingue vermelho ainda vê que algo mudou.
-              estourado && "ring-1 ring-red-500",
+              estourado && "ring-1 ring-danger",
             )}
           >
             <div
@@ -1147,7 +1170,7 @@ function CreditCardPanel({
           <p className="text-corpo font-medium capitalize text-ink">
             Fatura de {monthLabel(month)}
           </p>
-          <p className="text-sm font-semibold tabular-nums text-ink">
+          <p className="text-legenda font-semibold tabular-nums text-ink">
             {fatura ? money(fatura.totalCents) : "—"}
           </p>
         </div>
@@ -1172,7 +1195,7 @@ function CreditCardPanel({
             )}
           </>
         ) : (
-          <p className="mt-1 text-legenda text-red-600 dark:text-red-400">
+          <p className="mt-1 text-corpo text-danger-ink">
             Sem dia de fechamento cadastrado: não dá para saber a que fatura cada compra
             pertence. Edite o cartão.
           </p>
@@ -1224,8 +1247,8 @@ function CategoriesAndTags({
         ) : (
           <ul className="divide-y divide-line">
             {categories.map((c) => (
-              <li key={c.id} className="flex items-center gap-2 px-4 py-2.5">
-                <span className="min-w-0 flex-1 truncate text-sm text-ink">{c.name}</span>
+              <li key={c.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="min-w-0 flex-1 truncate text-corpo text-ink">{c.name}</span>
                 <Badge tone="outline">{c.kind === "income" ? "Receita" : "Despesa"}</Badge>
                 <button
                   type="button"
@@ -1233,7 +1256,7 @@ function CategoriesAndTags({
                     setEditingCat(c);
                     setCatOpen(true);
                   }}
-                  className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
                 >
                   Editar
                 </button>
@@ -1247,7 +1270,7 @@ function CategoriesAndTags({
                       else toast(r.error ?? "Erro", "error");
                     })
                   }
-                  className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-red-600"
+                  className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-danger-ink"
                 >
                   <Icon.Trash width={13} height={13} />
                 </button>
@@ -1276,15 +1299,15 @@ function CategoriesAndTags({
         ) : (
           <ul className="divide-y divide-line">
             {tags.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 px-4 py-2.5">
-                <span className="min-w-0 flex-1 truncate text-sm text-ink">#{t.name}</span>
+              <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="min-w-0 flex-1 truncate text-corpo text-ink">#{t.name}</span>
                 <button
                   type="button"
                   onClick={() => {
                     setEditingTag(t);
                     setTagOpen(true);
                   }}
-                  className="rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
                 >
                   Editar
                 </button>
@@ -1298,7 +1321,7 @@ function CategoriesAndTags({
                       else toast(r.error ?? "Erro", "error");
                     })
                   }
-                  className="rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-red-600"
+                  className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-danger-ink"
                 >
                   <Icon.Trash width={13} height={13} />
                 </button>
@@ -1389,7 +1412,7 @@ function Budgets({
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 {/* `min-w-0` + `truncate`: sem os dois, "Alimentação fora de casa"
                     empurrava o par gasto/limite para fora do cartão no celular. */}
-                <span className="min-w-0 truncate text-sm font-medium text-ink">{p.categoryName}</span>
+                <span className="min-w-0 truncate text-corpo font-medium text-ink">{p.categoryName}</span>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="text-legenda text-ink-muted">
                     {money(p.spentCents)} / {money(p.budget.limit_cents)}
@@ -1404,7 +1427,7 @@ function Budgets({
                         else toast(r.error ?? "Erro", "error");
                       })
                     }
-                    className="rounded-sm border border-line-strong p-1 text-ink-subtle hover:text-red-600"
+                    className="alvo-44 rounded-sm border border-line-strong p-1 text-ink-subtle hover:text-danger-ink"
                   >
                     <Icon.Trash width={12} height={12} />
                   </button>
@@ -1414,13 +1437,13 @@ function Budgets({
                 <div
                   className={cn(
                     "h-full rounded-full",
-                    p.over ? "bg-red-500" : "bg-accent",
+                    p.over ? "bg-danger" : "bg-accent",
                   )}
                   style={{ width: `${Math.min(100, Math.max(2, p.ratio * 100))}%` }}
                 />
               </div>
               {p.over && (
-                <p className="mt-1 text-legenda text-red-600 dark:text-red-400">
+                <p className="mt-1 text-legenda text-danger-ink">
                   Estourou em {money(p.spentCents - p.budget.limit_cents)}
                 </p>
               )}

@@ -127,7 +127,7 @@ export function CompromissosDeHoje({
           type="button"
           onClick={() => setExpandido((v) => !v)}
           aria-expanded={expandido}
-          className="mt-2 flex min-h-11 w-full items-center justify-center rounded-md border border-line px-3 text-corpo font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2"
+          className="mt-2 flex min-h-11 w-full items-center justify-center rounded-md border border-line px-3 text-corpo font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
         >
           {expandido ? "Mostrar menos" : `+${plural(restante, "compromisso", "compromissos")}`}
         </button>

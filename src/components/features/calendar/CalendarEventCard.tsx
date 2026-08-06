@@ -65,7 +65,7 @@ export function CalendarEventCard({
 
   const titulo = event.summary ?? "(sem título)";
   const classeTitulo = cn(
-    "text-sm font-medium text-ink",
+    "text-corpo font-medium text-ink",
     cancelled && "line-through",
     compact && "truncate",
   );
@@ -98,7 +98,7 @@ export function CalendarEventCard({
             <button
               type="button"
               onClick={onOpen}
-              className={cn(classeTitulo, "min-w-0 rounded-sm text-left hover:underline focus-visible:outline-2")}
+              className={cn(classeTitulo, "min-w-0 rounded-sm text-left hover:underline")}
             >
               {titulo}
             </button>
@@ -124,7 +124,7 @@ export function CalendarEventCard({
             </span>
           )}
           {accountLabel && <span>{accountLabel}</span>}
-          {cancelled && <span className="text-red-500">Cancelado</span>}
+          {cancelled && <span className="text-danger-ink">Cancelado</span>}
           <LinkCountBadge count={linkCount} />
         </div>
         {!compact && (event.organizer || link) && (

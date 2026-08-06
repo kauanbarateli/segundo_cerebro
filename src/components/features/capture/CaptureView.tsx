@@ -19,6 +19,8 @@ import {
   lerRascunho,
   limparResiduoLegado,
 } from "@/lib/capture-draft";
+import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 import {
   archiveCapture,
   convertCaptureToTask,
@@ -268,7 +270,7 @@ export function CaptureView({
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
       {/* Composer */}
-      <Card className="p-5">
+      <Card className="p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             {TYPES.map((t) => (
@@ -289,7 +291,7 @@ export function CaptureView({
           placeholder="Título (opcional)"
           value={draft.title}
           onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-          className="mb-3 h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full mb-3")}
         />
 
         <textarea
@@ -298,7 +300,7 @@ export function CaptureView({
           value={draft.content}
           onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
           rows={10}
-          className="w-full resize-none rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full resize-none")}
         />
 
         {/*
@@ -316,7 +318,7 @@ export function CaptureView({
               aria-label="Categoria"
               value={draft.categoryId}
               onChange={(e) => setDraft((d) => ({ ...d, categoryId: e.target.value }))}
-              className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+              className={CLASSE_DO_CAMPO}
             >
               <option value="">Sem categoria</option>
               {categories.map((c) => (
@@ -333,7 +335,7 @@ export function CaptureView({
                 aria-label="Projeto"
                 value={draft.projectId}
                 onChange={(e) => setDraft((d) => ({ ...d, projectId: e.target.value }))}
-                className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+                className={CLASSE_DO_CAMPO}
               >
                 <option value="">Sem projeto</option>
                 {projetos.map((p) => (
@@ -355,7 +357,7 @@ export function CaptureView({
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <div>
             <p className="eyebrow">Sem organizar</p>
-            <p className="text-sm font-semibold text-ink">Caixa de entrada</p>
+            <p className="text-corpo-forte font-semibold text-ink">Caixa de entrada</p>
           </div>
           <Badge>{captures.length} itens</Badge>
         </div>
@@ -392,7 +394,7 @@ export function CaptureView({
                 <button
                   type="button"
                   onClick={() => openCapture(c.id)}
-                  className="w-full rounded-sm text-left focus-visible:outline-2"
+                  className="w-full rounded-sm text-left"
                 >
                   <span className="mb-1 flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5">
@@ -405,7 +407,7 @@ export function CaptureView({
                       {formatDayLabel(c.captured_at)}
                     </span>
                   </span>
-                  {c.title && <span className="block text-sm font-medium text-ink">{c.title}</span>}
+                  {c.title && <span className="block text-corpo font-medium text-ink">{c.title}</span>}
                   {c.content && (
                     <span className="line-clamp-2 text-corpo text-ink-muted">{c.content}</span>
                   )}
@@ -623,7 +625,7 @@ function CaptureDetailBody({
         // whitespace-pre-wrap porque o compositor é um textarea: as quebras de
         // linha são as que a pessoa digitou e são a única formatação que existe
         // aqui. break-words segura URLs e palavras longas dentro do painel.
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-muted">
+        <p className="whitespace-pre-wrap break-words text-legenda leading-relaxed text-ink-muted">
           {capture.content}
         </p>
       ) : (
@@ -687,7 +689,7 @@ function CaptureEditFields({
         placeholder="Título (opcional)"
         value={draft.title}
         onChange={(e) => onChange({ title: e.target.value })}
-        className="mb-3 h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO, "w-full mb-3")}
       />
 
       <textarea
@@ -696,14 +698,14 @@ function CaptureEditFields({
         value={draft.content}
         onChange={(e) => onChange({ content: e.target.value })}
         rows={8}
-        className="w-full resize-none rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full resize-none")}
       />
 
       <select
         aria-label="Categoria"
         value={draft.categoryId}
         onChange={(e) => onChange({ categoryId: e.target.value })}
-        className="mt-3 h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+        className={cn(CLASSE_DO_CAMPO, "w-full mt-3")}
       >
         <option value="">Sem categoria</option>
         {categories.map((c) => (
@@ -718,7 +720,7 @@ function CaptureEditFields({
           aria-label="Projeto"
           value={draft.projectId}
           onChange={(e) => onChange({ projectId: e.target.value })}
-          className="mt-3 h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full mt-3")}
         >
           <option value="">Sem projeto</option>
           {projetos.map((p) => (

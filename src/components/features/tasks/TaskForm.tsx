@@ -6,6 +6,8 @@ import { useToast } from "@/components/ui/Toast";
 import type { Category, Project, Task } from "@/lib/database.types";
 import { SeletorDeProjeto } from "@/components/features/projects/SeletorDeProjeto";
 import { createTask, updateTask } from "@/app/(app)/tarefas/actions";
+import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 
 const PRIORITIES = [
   { value: "low", label: "Baixa" },
@@ -91,7 +93,7 @@ export function TaskForm({
           name="title"
           required
           defaultValue={task?.title ?? ""}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
 
@@ -104,7 +106,7 @@ export function TaskForm({
           name="description"
           rows={3}
           defaultValue={task?.description ?? ""}
-          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full")}
         />
       </div>
 
@@ -125,7 +127,7 @@ export function TaskForm({
             id="categoryId"
             name="categoryId"
             defaultValue={task?.category_id ?? ""}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full")}
           >
             <option value="">Sem categoria</option>
             {categories.map((c) => (
@@ -156,7 +158,7 @@ export function TaskForm({
             id="priority"
             name="priority"
             defaultValue={task?.priority ?? "medium"}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full")}
           >
             {PRIORITIES.map((p) => (
               <option key={p.value} value={p.value}>
@@ -180,7 +182,7 @@ export function TaskForm({
             name="dueAt"
             type="datetime-local"
             defaultValue={toLocalInput(task?.due_at ?? null)}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full")}
           />
         </div>
         <div>
@@ -192,7 +194,7 @@ export function TaskForm({
             name="scheduledStartAt"
             type={allDay ? "date" : "datetime-local"}
             defaultValue={toLocalInput(task?.scheduled_start_at ?? null)}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full")}
           />
         </div>
       </div>
@@ -204,13 +206,13 @@ export function TaskForm({
           value="true"
           checked={allDay}
           onChange={(e) => setAllDay(e.target.checked)}
-          className="h-4 w-4 rounded border-line-strong"
+          className="h-4 w-4 rounded-xs border-line-strong"
         />
         Dia inteiro
       </label>
 
       {error && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {error}
         </p>
       )}

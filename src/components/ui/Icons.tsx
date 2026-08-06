@@ -1,14 +1,26 @@
 import type { SVGProps } from "react";
 
-/** Minimal linear icon set (stroke-based, currentColor). */
+/**
+ * Conjunto de ícones lineares (traço, `currentColor`).
+ *
+ * 20px e traço de 1.75 são os números do DS §7. Eram 18px e 1.6 — o traço fino
+ * some no tema escuro, onde a linha clara sobre fundo #0d0d0d perde presença
+ * bem mais rápido que a escura sobre branco. Subir os dois juntos é o que
+ * mantém a densidade ótica: um ícone maior com traço fino parece um contorno
+ * vazio.
+ *
+ * Estes são os PADRÕES; cada chamada pode sobrescrever com `width`/`height`, e
+ * muitas fazem isso onde o ícone acompanha texto pequeno. Mudar aqui muda todos
+ * os ícones do produto que não pedem tamanho — que é a maioria dos da navegação.
+ */
 function base(props: SVGProps<SVGSVGElement>) {
   return {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.6,
+    strokeWidth: 1.75,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     ...props,

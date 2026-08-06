@@ -9,6 +9,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 import { CSS } from "@dnd-kit/utilities";
 import { useSensoresDeArrastar } from "@/components/ui/arrastar";
 import { Button } from "@/components/ui/Button";
@@ -108,7 +109,7 @@ export function ProfilePanel({
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <h2 className="text-corpo-forte font-semibold text-ink">Perfil</h2>
       <p className="mt-1 text-corpo text-ink-subtle">
         O nome aparece na saudação da tela Início.
@@ -179,7 +180,7 @@ export function ProfilePanel({
             onChange={(e) => setName(e.target.value)}
             maxLength={60}
             required
-            className="h-10 w-full max-w-sm rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full max-w-sm")}
           />
           <p className="mt-1.5 text-legenda text-ink-subtle">
             Prévia: <span className="text-ink">Bom dia, {name.trim() || "…"}.</span>
@@ -190,7 +191,7 @@ export function ProfilePanel({
           <input
             value={email}
             disabled
-            className="h-10 w-full max-w-sm rounded-md border border-line bg-surface-muted px-3 text-sm text-ink-subtle"
+            className={cn(CLASSE_DO_CAMPO, "w-full max-w-sm")}
           />
         </div>
         <Button type="submit" variant="primary" size="sm" disabled={pending}>
@@ -210,7 +211,7 @@ export function ModulesPanel({ enabled }: { enabled: string[] }) {
   const enabledSet = new Set(enabled);
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <h2 className="text-corpo-forte font-semibold text-ink">Abas</h2>
       <p className="mt-1 text-corpo text-ink-subtle">
         Desative o que não usa. Abas essenciais não podem ser removidas.
@@ -224,7 +225,7 @@ export function ModulesPanel({ enabled }: { enabled: string[] }) {
             <li key={m.key} className="flex items-center gap-3 py-3">
               <Glyph width={18} height={18} className="shrink-0 text-ink-muted" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink">
+                <p className="text-corpo font-medium text-ink">
                   {m.label}
                   {m.core && (
                     <span className="ml-2 text-meta font-normal text-ink-subtle">essencial</span>
@@ -309,14 +310,14 @@ export function NotificationsPanel({
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <h2 className="text-corpo-forte font-semibold text-ink">Notificações de reunião</h2>
       <p className="mt-1 text-corpo text-ink-subtle">
         Aviso antes dos eventos do Google Calendar.
       </p>
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-sm text-ink">Avisar sobre reuniões</span>
+        <span className="text-legenda text-ink">Avisar sobre reuniões</span>
         <button
           type="button"
           role="switch"
@@ -540,7 +541,7 @@ export function SocialLinksPanel({ links }: { links: SocialLink[] }) {
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-corpo-forte font-semibold text-ink">Links do perfil</h2>
@@ -672,7 +673,7 @@ function LinhaDeLink({
         // `aria-roledescription`, e o nome acessível precisa dizer QUAL link
         // está sendo movido — "sortable" sozinho não ajuda ninguém.
         aria-label={`Reordenar ${item.label}`}
-        className="shrink-0 cursor-grab rounded-sm p-1 text-ink-subtle hover:text-ink focus-visible:outline-2 active:cursor-grabbing"
+        className="alvo-44 shrink-0 cursor-grab rounded-sm p-1 text-ink-subtle hover:text-ink active:cursor-grabbing"
       >
         <Icon.Dots width={16} height={16} className="rotate-90" />
       </button>
@@ -680,7 +681,7 @@ function LinhaDeLink({
       <SocialLinkIcon url={item.url} className="shrink-0 text-ink-muted" />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink">{item.label}</p>
+        <p className="truncate text-corpo font-medium text-ink">{item.label}</p>
         <p className="truncate text-legenda text-ink-subtle">{item.url}</p>
       </div>
 
@@ -691,7 +692,7 @@ function LinhaDeLink({
         type="button"
         onClick={onRemover}
         aria-label={`Remover ${item.label}`}
-        className="shrink-0 rounded-sm p-1.5 text-ink-subtle hover:text-red-600 focus-visible:outline-2 dark:hover:text-red-400"
+        className="alvo-44 shrink-0 rounded-sm p-1.5 text-ink-subtle hover:text-danger-ink"
       >
         <Icon.Trash width={16} height={16} />
       </button>
@@ -762,7 +763,7 @@ function FormularioDeLink({
           maxLength={TAMANHO_MAXIMO_DO_LABEL}
           placeholder="Rótulo (ex.: Meu GitHub)"
           aria-label="Rótulo do link"
-          className="h-9 w-full min-w-0 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2 sm:w-40"
+          className={cn(CLASSE_DO_CAMPO, "w-full min-w-0 sm:w-40")}
         />
         <input
           value={url}
@@ -771,11 +772,11 @@ function FormularioDeLink({
           inputMode="url"
           placeholder="https://instagram.com/voce"
           aria-label="Endereço do link"
-          className="h-9 w-full min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full min-w-0 flex-1")}
         />
       </div>
       {erro && (
-        <p role="alert" className="text-legenda text-red-600 dark:text-red-400">
+        <p role="alert" className="text-legenda text-danger-ink">
           {erro}
         </p>
       )}
@@ -802,11 +803,11 @@ export function PrivacyPanel({ hideValues }: { hideValues: boolean }) {
   const [hide, setHide] = useState(hideValues);
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <h2 className="text-corpo-forte font-semibold text-ink">Privacidade</h2>
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-ink">Ocultar valores financeiros</p>
+          <p className="text-legenda text-ink">Ocultar valores financeiros</p>
           <p className="mt-0.5 text-legenda text-ink-subtle">
             Mascara os valores na tela até você revelar. É privacidade visual —
             não substitui criptografia.

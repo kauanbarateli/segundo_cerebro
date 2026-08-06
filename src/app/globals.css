@@ -3,34 +3,191 @@
 @tailwind utilities;
 
 /* =========================================================================
-   Design tokens — monochrome. Light is default; `.dark` on <html> flips them.
-   Values are space-separated RGB channels so Tailwind's <alpha-value> works.
+   DESIGN TOKENS — Design System 1.0
+   =========================================================================
+   Light é o padrão; a classe `.dark` no <html> troca tudo. Os valores são
+   CANAIS RGB SEPARADOS POR ESPAÇO, e não hexadecimal, porque é o formato que
+   o `<alpha-value>` do Tailwind exige. Sem ele, `bg-black/30`, `border-line/60`
+   e o `rgb(var(--sb-ink) / 0.07)` do realce de sintaxe param de funcionar.
+   O DS 1.0 entrega hexadecimal; a conversão está registrada em comentário ao
+   lado de cada token para conferência.
+
+   -------------------------------------------------------------------------
+   EQUIVALÊNCIA COM O DS 1.0 (`--sc-*` do tokens.css de origem)
+   -------------------------------------------------------------------------
+   O projeto mantém o prefixo `--sb-*` de propósito: ele aparece em ~350 pontos
+   e renomear seria churn puro, com risco de erro de digitação silencioso e zero
+   ganho visual. Esta tabela é o contrato entre os dois vocabulários.
+
+     --sb-canvas        ↔  --sc-canvas
+     --sb-surface       ↔  --sc-surface
+     --sb-surface-muted ↔  --sc-surface-subtle
+     --sb-surface-hover ↔  --sc-surface-hover
+     --sb-ink           ↔  --sc-ink
+     --sb-ink-muted     ↔  --sc-ink-secondary
+     --sb-ink-subtle    ↔  --sc-ink-muted
+     --sb-line          ↔  --sc-line-SOFT     ⚠️ cruzado — ver abaixo
+     --sb-line-strong   ↔  --sc-line          ⚠️ cruzado — ver abaixo
+     --sb-accent        ↔  --sc-ink           (preto é decisão: CTA e ativo)
+     --sb-accent-ink    ↔  --sc-brand-paper
+     --sb-disabled      ↔  --sc-disabled
+     --sb-disabled-bg   ↔  --sc-disabled-bg
+
+   O MAPEAMENTO DAS BORDAS É CRUZADO, e isso é intencional. O DS tem `line`
+   (forte) e `line-soft` (fraca); o projeto tem `line` (a borda comum) e
+   `line-strong` (a borda do cartão em destaque). Casar pelo NOME inverteria a
+   hierarquia em 122 pontos de uso — o cartão comum ficaria com a borda mais
+   pesada e o destaque com a mais leve. Casar pelo PAPEL preserva exatamente o
+   que já está na tela.
+
+   -------------------------------------------------------------------------
+   HIERARQUIA DE TEXTO — e o único desvio de VALOR em relação ao DS
+   -------------------------------------------------------------------------
+   Contraste medido (WCAG 2.1) contra o PIOR dos quatro fundos de cada tema —
+   `surface`, `canvas`, `surface-muted` E `surface-hover`:
+
+     ink         claro 16.54 · escuro 14.58   AA ✓
+     ink-muted   claro  5.37 · escuro  7.99   AA ✓
+     ink-subtle  claro  4.63 · escuro  4.53   AA ✓   ⚠️ valor próprio
+
+   ⚠️ NÃO ESQUEÇA O `surface-hover` AO MEDIR. Ele é o fundo mais escuro do tema
+   claro (#F0F0ED) e o mais claro do escuro (#222221), então é ele quem define o
+   pior caso — e é fundo de TEXTO de verdade: item de navegação e item de menu
+   suspenso passam por ele em cada hover. Medir só contra `surface` e `canvas`
+   dá números 0.2–0.3 melhores do que a realidade, o suficiente para aprovar um
+   par que reprova na tela.
+
+   ⚠️ `--sb-ink-subtle` é #6C6C66 no claro e #898983 no escuro. O DS entrega
+   #92928C e #85857F.
+
+   O hex claro do DS tem 2.86 de contraste sobre o canvas — reprova em AA como
+   texto e reprova até no piso de 3:1 de componente. O escuro (#85857F) dá 4.29
+   sobre o hover, também abaixo. Isso não seria problema se o degrau fosse
+   decorativo, mas neste código ele pinta ~190 pedaços de TEXTO REAL: data de
+   lançamento, contador de itens, rótulo de campo, texto de ajuda sob o
+   formulário, "Salvo automaticamente", "Limite / Usado / Disponível". Nada disso
+   é enfeite; é o segundo dado da linha.
+
+   Havia dois caminhos. Reclassificar os ~190 usos para `ink-muted` colapsaria a
+   hierarquia de três níveis em dois — o metadado passaria a ter o mesmo peso da
+   descrição, e a linha densa perderia o degrau que a organiza. Escurecer o token
+   conserta os 190 de uma vez e preserva os três níveis.
+
+   Os dois valores são o EXTREMO da rampa que ainda passa em 4.5:1 contra o pior
+   fundo do seu tema, mantendo o neutro quente do DS (mesma relação R=G, com B
+   seis pontos abaixo). Não são gosto: são o limite, medido.
+
+   O DS §9 exige "contraste mínimo WCAG AA para texto". O desvio existe para
+   CUMPRIR essa regra, não para contrariá-la — é o próprio documento resolvendo
+   uma contradição entre a §3 (a tabela de cores) e a §9 (a de acessibilidade).
    ========================================================================= */
 :root {
-  --sb-canvas: 244 244 241; /* #f4f4f1 */
-  --sb-surface: 255 255 255;
-  --sb-surface-muted: 249 249 247;
-  --sb-ink: 20 20 20; /* #141414 */
-  --sb-ink-muted: 92 92 88;
-  --sb-ink-subtle: 140 140 135;
-  --sb-line: 226 226 221; /* #e2e2dd */
-  --sb-line-strong: 208 208 202;
-  --sb-accent: 20 20 20;
-  --sb-accent-ink: 250 250 249;
+  --sb-canvas: 245 245 242; /* #f5f5f2 */
+  --sb-surface: 255 255 255; /* #ffffff */
+  --sb-surface-muted: 250 250 248; /* #fafaf8 */
+  --sb-surface-hover: 240 240 237; /* #f0f0ed */
+  --sb-ink: 17 17 17; /* #111111 */
+  --sb-ink-muted: 98 98 94; /* #62625e */
+  --sb-ink-subtle: 108 108 102; /* #6c6c66 — desvio medido, ver o bloco acima */
+  --sb-line: 236 236 232; /* #ecece8 — line-soft do DS */
+  --sb-line-strong: 220 220 214; /* #dcdcd6 — line do DS */
+  --sb-accent: 17 17 17; /* #111111 */
+  --sb-accent-ink: 247 247 244; /* #f7f7f4 */
+  --sb-disabled: 146 146 142; /* #92928e */
+  --sb-disabled-bg: 233 233 229; /* #e9e9e5 */
+
+  /* Elevação — ver o bloco 3 do tailwind.config.ts.
+     Cada tema tem a SUA sombra. Antes havia uma só, preta, e sobre o fundo
+     #0d0d0d do escuro ela era literalmente invisível: o cartão perdia o nível de
+     elevação e ficava indistinguível do painel encostado no fundo. */
+  --sb-shadow-card: 0 1px 2px rgb(17 17 17 / 0.04), 0 10px 28px -22px rgb(17 17 17 / 0.34);
+  --sb-shadow-float: 0 12px 32px -18px rgb(17 17 17 / 0.34);
+
+  /* -----------------------------------------------------------------------
+     SEMÂNTICAS — dois papéis, não um
+     -----------------------------------------------------------------------
+     O DS entrega UM hex por semântica. Medido, esse hex serve como PONTO ou
+     BARRA, mas reprova em AA como TEXTO no tema claro (danger 3.91, personal
+     4.23, work 2.48 sobre #ffffff). Adotá-lo para as duas coisas produziria
+     texto ilegível — então cada semântica tem dois degraus:
+
+       --sb-{nome}      preenchimento: ponto, barra, moldura, fundo de chip
+       --sb-{nome}-ink  TEXTO e ícone que carrega significado
+
+     No tema escuro os dois degraus coincidem, porque o valor já clareado passa
+     nos dois papéis. Contraste medido contra o PIOR dos quatro fundos de cada
+     tema (surface, canvas, surface-muted e surface-hover):
+
+                  ponto (≥3:1)              texto (≥4.5:1)
+       success    claro 4.02 ✓ escuro 5.34  claro 4.82 ✓  escuro 5.34 ✓
+       danger     claro 3.43 ✓ escuro 5.14  claro 5.09 ✓  escuro 5.14 ✓
+       warning    claro 3.90 ✓ escuro 5.42  claro 5.43 ✓  escuro 5.42 ✓
+       info       claro 4.11 ✓ escuro 4.64  claro 5.64 ✓  escuro 4.64 ✓
+       work       claro 2.17 ⚠️ escuro 6.42  claro 4.89 ✓  escuro 6.42 ✓
+       personal   claro 3.71 ✓ escuro 4.91  claro 5.38 ✓  escuro 4.91 ✓
+
+     ⚠️ O teal do DS (#20B8A5) tem 2.17 sobre o fundo claro mais desfavorável.
+     Ele NÃO alcança 3:1 nem como ponto isolado. É o valor da marca e foi
+     mantido, mas com a condição do próprio DS §7: cor de categoria sempre
+     acompanha rótulo textual, nunca é a única informação. O ponto de 2–3px é
+     reforço visual, não o dado — e é por isso que `calendar-colors.ts` devolve
+     o rótulo junto do tom, no mesmo módulo.
+
+     Regra 90/10 do DS §3: ~90% da interface segue neutra. Estes tokens entram
+     só nos 10% que carregam informação. */
+  --sb-success: 24 133 100; /* #188564 */
+  --sb-success-ink: 18 119 90; /* #12775a */
+  --sb-danger: 229 72 77; /* #e5484d */
+  --sb-danger-ink: 192 42 48; /* #c02a30 */
+  --sb-warning: 169 105 24; /* #a96918 */
+  --sb-warning-ink: 138 85 17; /* #8a5511 */
+  --sb-info: 63 111 216; /* #3f6fd8 */
+  --sb-info-ink: 45 89 187; /* #2d59bb */
+  --sb-work: 32 184 165; /* #20b8a5 */
+  --sb-work-ink: 15 117 104; /* #0f7568 */
+  --sb-personal: 139 92 246; /* #8b5cf6 */
+  --sb-personal-ink: 112 56 232; /* #7038e8 */
+
   color-scheme: light;
 }
 
 .dark {
   --sb-canvas: 13 13 13; /* #0d0d0d */
-  --sb-surface: 24 24 24;
-  --sb-surface-muted: 31 31 31;
-  --sb-ink: 240 240 238;
-  --sb-ink-muted: 168 168 163;
-  --sb-ink-subtle: 118 118 114;
-  --sb-line: 42 42 42;
-  --sb-line-strong: 60 60 60;
-  --sb-accent: 244 244 242;
-  --sb-accent-ink: 18 18 18;
+  --sb-surface: 21 21 21; /* #151515 */
+  --sb-surface-muted: 26 26 25; /* #1a1a19 */
+  --sb-surface-hover: 34 34 33; /* #222221 */
+  --sb-ink: 245 245 242; /* #f5f5f2 */
+  --sb-ink-muted: 184 184 178; /* #b8b8b2 */
+  --sb-ink-subtle: 137 137 131; /* #898983 — desvio medido, ver o bloco acima */
+  --sb-line: 38 38 36; /* #262624 — line-soft do DS */
+  --sb-line-strong: 52 52 49; /* #343431 — line do DS */
+  --sb-accent: 245 245 242; /* #f5f5f2 */
+  --sb-accent-ink: 17 17 17; /* #111111 */
+  --sb-disabled: 111 111 106; /* #6f6f6a */
+  --sb-disabled-bg: 38 38 36; /* #262624 */
+
+  --sb-shadow-card: 0 1px 2px rgb(0 0 0 / 0.32), 0 18px 36px -26px rgb(0 0 0 / 0.88);
+  --sb-shadow-float: 0 18px 48px -24px rgb(0 0 0 / 0.9);
+
+  /* Semânticas clareadas para o fundo escuro. Os valores do DS reprovam aqui:
+     #a96918 (warning) sobre #151515 dá 4.11 e #3f6fd8 (info) dá 3.89 — os dois
+     abaixo de AA. Cada degrau abaixo foi escolhido como o PRIMEIRO da rampa que
+     passa em 4.5:1 contra o pior fundo escuro (--sb-surface-muted, #1a1a19),
+     preservando o matiz. `work` é a exceção: o valor do DS já dá 7.02 aqui, e
+     manter o teal idêntico nos dois temas mantém a categoria reconhecível. */
+  --sb-success: 46 168 130; /* #2ea882 */
+  --sb-success-ink: 46 168 130;
+  --sb-danger: 240 101 106; /* #f0656a */
+  --sb-danger-ink: 240 101 106;
+  --sb-warning: 201 138 43; /* #c98a2b */
+  --sb-warning-ink: 201 138 43;
+  --sb-info: 92 136 230; /* #5c88e6 */
+  --sb-info-ink: 92 136 230;
+  --sb-work: 32 184 165; /* #20b8a5 — o mesmo do claro */
+  --sb-work-ink: 32 184 165;
+  --sb-personal: 157 120 248; /* #9d78f8 */
+  --sb-personal-ink: 157 120 248;
+
   color-scheme: dark;
 }
 
@@ -46,20 +203,91 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Focus visibility for keyboard navigation (accessibility). */
+/* FOCO DE TECLADO — DS §7 ("Inputs · Focus") e §9.
+ *
+ * O DS pede DOIS sinais: a borda do controle vira `ink` e um anel externo de 3px
+ * a 10% de preto aparece em volta. Aqui os dois saem de `outline` + `box-shadow`,
+ * e a escolha de qual propriedade faz o quê importa:
+ *
+ *   `outline`     desenha o contorno FORTE, e é a propriedade certa porque
+ *                 acompanha o formato real do elemento (inclusive o raio) e não
+ *                 participa do layout — nada se desloca quando o foco entra.
+ *   `box-shadow`  desenha o anel largo por fora, com `spread` de 3px. Sombra
+ *                 também não ocupa espaço.
+ *
+ * O `border-radius: 6px` que existia aqui era o problema silencioso da regra
+ * antiga: ele FORÇAVA 6px em todo elemento focado, então um campo de 12px de raio
+ * e um chip totalmente arredondado ganhavam um contorno de canto quase reto,
+ * flutuando por cima da própria forma. `outline` já herda o raio do elemento —
+ * a linha não precisava existir, e tirá-la conserta o desenho em toda a interface
+ * de uma vez.
+ *
+ * A cor é `--sb-ink`, que troca com o tema: no escuro o anel fica claro sobre
+ * fundo escuro, em vez de um preto invisível. O anel a 10% some quase por
+ * completo em superfícies escuras, e é por isso que ele é o SEGUNDO sinal e não
+ * o primeiro — quem carrega a legibilidade é o outline de 2px.
+ *
+ * ⚠️ `:focus-visible` e não `:focus`: o contorno aparece para quem navega por
+ * teclado e não a cada clique de ponteiro. Quem quiser um controle sem contorno
+ * precisa justificar por escrito (ver `.sb-editor-conteudo` mais abaixo, que é o
+ * único caso do projeto).
+ */
 :focus-visible {
-  outline: 2px solid rgb(var(--sb-ink) / 0.55);
-  outline-offset: 2px;
-  border-radius: 6px;
+  outline: 2px solid rgb(var(--sb-ink));
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgb(var(--sb-ink) / 0.1);
 }
 
-/* Eyebrow — small uppercase label used on page headers. */
+/* Eyebrow — rótulo curto em caixa alta, acima do título da página.
+   É o degrau Eyebrow do DS §4: 12px, peso 600, tracking 0.16em, entrelinha 1.
+   A entrelinha é 1 porque o eyebrow é sempre UMA linha e o espaço abaixo dele é
+   dado por margem, não por entrelinha — com 1.5 herdado o rótulo ficava boiando
+   longe demais do título que ele apresenta.
+   A cor é `ink-muted`, e não `ink-subtle`: em caixa alta e 12px este texto ainda
+   é conteúdo que se lê, e `ink-subtle` reprova em AA no tema claro (2.86). */
 .eyebrow {
-  font-size: 0.6875rem;
-  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgb(var(--sb-ink-subtle));
-  font-weight: 500;
+  color: rgb(var(--sb-ink-muted));
+  font-weight: 600;
+}
+
+/* ALVO DE TOQUE DE 44px SEM MUDAR O DESENHO — DS §9.
+ *
+ * O mínimo de 44×44 é inegociável, mas nem todo controle pode MEDIR 44px na
+ * tela: uma barra com seis chips de filtro, ou uma linha de lista com editar e
+ * excluir no canto, estoura se cada alvo ocupar 44px de altura visual.
+ *
+ * Esta classe resolve os dois lados. O `::before` é um retângulo invisível
+ * centrado no controle, com 44px em cada eixo; ele recebe o toque porque está
+ * por cima, e não desloca nada porque é `position: absolute`. O controle
+ * continua com 40px (ou 32) de desenho e 44px de alvo.
+ *
+ * `min-width`/`min-height` em vez de `width`/`height`: num botão que já é MAIOR
+ * que 44px o pseudo-elemento acompanha a caixa (inset 0) em vez de encolher para
+ * 44 e deixar as bordas do controle sem resposta ao toque.
+ *
+ * ⚠️ Exige `position: relative` no elemento — está embutido aqui, não deixado a
+ * cargo de quem usa. E o pseudo-elemento não pode ganhar fundo nem borda: ele é
+ * área de toque, não decoração. Se dois controles vizinhos ficarem a menos de
+ * 4px um do outro, as áreas se sobrepõem e o clique vai para o que estiver por
+ * cima na ordem do documento — nesse caso, aumente o `gap`, não a classe.
+ */
+.alvo-44 {
+  position: relative;
+}
+.alvo-44::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
 }
 
 /* Thin scrollbars that match the theme. */
@@ -122,7 +350,12 @@ body {
 
 .sb-editor-conteudo {
   outline: none;
-  font-size: 15px;
+  /* 16px é o Body do DS §4, e o editor é o lugar do produto em que a pessoa
+     mais LÊ em sequência. Eram 15px — um degrau que não existia na escala e que
+     deixava o documento menor que o corpo da interface em volta dele. A
+     entrelinha de 1.7 é maior que o 1.5 do Body de propósito: parágrafo corrido
+     de várias linhas pede mais respiro que rótulo de interface. */
+  font-size: 16px;
   line-height: 1.7;
   color: rgb(var(--sb-ink));
 }
@@ -233,7 +466,9 @@ body {
   /* Linha longa rola DENTRO do bloco. Sem isto o bloco alarga o editor inteiro
      e a página ganha rolagem horizontal. */
   overflow-x: auto;
-  font-size: 13px;
+  /* 14px = o degrau Small. Código é o que se CONSULTA, não o que se lê em
+     sequência, e a fonte monoespaçada já ocupa mais largura por caractere. */
+  font-size: 14px;
   line-height: 1.6;
   tab-size: 2;
 }

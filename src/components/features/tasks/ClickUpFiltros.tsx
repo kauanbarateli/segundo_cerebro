@@ -51,7 +51,7 @@ function Seletor({
         id={id}
         value={valor}
         onChange={(e) => aoMudar(e.target.value)}
-        className="h-8 max-w-[11rem] rounded-md border border-line-strong bg-surface px-2 text-legenda text-ink focus-visible:outline-2"
+        className="h-11 max-w-[11rem] rounded-md border border-line bg-surface px-3 text-legenda text-ink"
       >
         {children}
       </select>
@@ -179,7 +179,7 @@ export function ClickUpFiltros({
           <button
             type="button"
             onClick={() => aoMudar(FILTRO_VAZIO)}
-            className="rounded-sm text-legenda text-ink-muted underline hover:text-ink focus-visible:outline-2"
+            className="rounded-sm text-legenda text-ink-muted underline hover:text-ink"
           >
             Limpar filtros
           </button>

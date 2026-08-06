@@ -16,6 +16,7 @@ import {
   posicaoEntre,
   rotuloDaPagina,
 } from "@/lib/knowledge";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 import { cn, plural } from "@/lib/utils";
 import type { KnowledgeNotebook, KnowledgePageSummary } from "@/lib/database.types";
 import {
@@ -127,7 +128,7 @@ function BotaoDeLinha({
         */
         "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-ink-subtle transition-colors",
         "sm:h-6 sm:w-6",
-        perigo ? "hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400" : "hover:bg-line hover:text-ink",
+        perigo ? "hover:bg-danger/10 hover:text-danger-ink" : "hover:bg-line hover:text-ink",
       )}
     >
       {children}
@@ -195,11 +196,11 @@ function FormularioDeNome({
           autoFocus
           required
           maxLength={maximo}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
       {erro && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {erro}
         </p>
       )}
@@ -580,7 +581,7 @@ export function KnowledgeSidebar({ cadernos, cadernoAtivoId, paginas, paginaAtiv
                   onFocus={() => setFocoId(id)}
                   className={cn(
                     "group flex items-center gap-1 rounded-md pr-1 outline-none",
-                    "focus-visible:outline-2",
+                   "",
                     aberta ? "bg-surface-muted" : "hover:bg-surface-muted",
                   )}
                   // O recuo por nível vive aqui e não numa `<ul>` aninhada: a
@@ -914,7 +915,7 @@ function FormularioDeMover({
           id="destino-da-pagina"
           value={destino}
           onChange={(e) => setDestino(e.target.value)}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         >
           <optgroup label="Topo de um caderno">
             {cadernos.map((c) => (
@@ -938,7 +939,7 @@ function FormularioDeMover({
         </p>
       </div>
       {erro && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {erro}
         </p>
       )}

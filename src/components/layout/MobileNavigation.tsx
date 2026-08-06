@@ -102,8 +102,8 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
   const itemDaFolha = (href: string) =>
     cn(
       // py-3 + 20px de linha = 44px de alvo, o piso de toque do projeto.
-      "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium",
-      ativo(href) ? "bg-surface-muted text-ink" : "text-ink-muted",
+      "flex items-center gap-3 rounded-md px-3 py-3 text-legenda font-medium",
+      ativo(href) ? "bg-surface-hover text-ink" : "text-ink-muted",
     );
 
   return (
@@ -152,7 +152,7 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
                     aria-current={ativo(item.href) ? "page" : undefined}
                     className={itemDaFolha(item.href)}
                   >
-                    <Glyph width={18} height={18} className="shrink-0" />
+                    <Glyph width={20} height={20} className="shrink-0" />
                     {item.label}
                   </Link>
                 );
@@ -162,11 +162,11 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
                   no celular não existe rodapé de barra nenhum, e esta gaveta é o
                   único lugar da navegação onde eles cabem. */}
               <Link href="/configuracoes" className={itemDaFolha("/configuracoes")}>
-                <Icon.Settings width={18} height={18} className="shrink-0" />
+                <Icon.Settings width={20} height={20} className="shrink-0" />
                 Configurações
               </Link>
               <Link href="/ajuda" className={itemDaFolha("/ajuda")}>
-                <Icon.Help width={18} height={18} className="shrink-0" />
+                <Icon.Help width={20} height={20} className="shrink-0" />
                 Ajuda e atalhos
               </Link>
             </nav>
@@ -183,7 +183,7 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
               /*
                 `aria-label` explícito porque o rótulo visível é TRUNCADO: com
                 seis fatias num aparelho de 320px sobram ~53px por item, e
-                "Calendário" a 11px não cabe. Sem `truncate` o rótulo quebraria
+                "Calendário" a 12px não cabe. Sem `truncate` o rótulo quebraria
                 em duas linhas, e como a barra é `items-stretch` isso deixaria
                 TODAS as fatias mais altas por causa de uma. O texto encurta na
                 tela, o nome inteiro continua sendo anunciado.
@@ -195,7 +195,7 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
                 aria-label={item.label}
                 className={cn(
                   "flex min-w-0 flex-1 flex-col items-center gap-1 py-2.5 text-meta font-medium transition-colors",
-                  ativo(item.href) ? "text-ink" : "text-ink-subtle",
+                  ativo(item.href) ? "text-ink" : "text-ink-muted",
                 )}
               >
                 <Glyph width={20} height={20} className="shrink-0" />
@@ -215,7 +215,7 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
                 "flex min-w-0 flex-1 flex-col items-center gap-1 py-2.5 text-meta font-medium transition-colors",
                 // Fica marcado quando a rota atual é um dos escondidos — senão a
                 // barra inteira pareceria "em lugar nenhum" dentro deles.
-                aberto || overflow.some((i) => ativo(i.href)) ? "text-ink" : "text-ink-subtle",
+                aberto || overflow.some((i) => ativo(i.href)) ? "text-ink" : "text-ink-muted",
               )}
             >
               <Icon.Dots width={20} height={20} className="shrink-0" />

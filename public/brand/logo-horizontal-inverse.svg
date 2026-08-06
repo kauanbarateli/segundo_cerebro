@@ -1,0 +1,9 @@
+<svg width="512" height="128" viewBox="0 0 512 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Segundo Cérebro — logo horizontal inverso</title>
+  <rect x="0" y="12" width="104" height="104" rx="26" fill="#F7F7F4"/>
+  <path d="M30 44.5C30 37.596 35.596 32 42.5 32H58C69.046 32 78 40.954 78 52C78 58.255 75.076 64.151 70.092 67.927L35.5 93H78" stroke="#111111" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="30" cy="44.5" r="5" fill="#F7F7F4" stroke="#111111" stroke-width="2.5"/>
+  <circle cx="78" cy="93" r="5" fill="#F7F7F4" stroke="#111111" stroke-width="2.5"/>
+  <text x="132" y="59" fill="#F7F7F4" font-family="Inter, Arial, sans-serif" font-size="33" font-weight="700" letter-spacing="-1">Segundo</text>
+  <text x="132" y="92" fill="#B8B8B2" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="450" letter-spacing="-0.5">Cérebro</text>
+</svg>

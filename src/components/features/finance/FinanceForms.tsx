@@ -26,7 +26,7 @@ import {
 } from "@/app/(app)/financeiro/actions";
 
 const inputCls =
-  "h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2";
+  "h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-corpo text-ink";
 
 /*
   PARES DE CAMPOS — por que todo `grid-cols-2` deste arquivo tem `grid-cols-1`
@@ -64,7 +64,7 @@ function Field({
 function ErrorText({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+    <p role="alert" className="text-corpo text-danger-ink">
       {message}
     </p>
   );
@@ -334,7 +334,7 @@ export function TransactionForm({
           aria-live="polite"
         >
           {previa.erro ? (
-            <span className="text-red-600 dark:text-red-400">
+            <span className="text-danger-ink">
               {numeroDeParcelas} parcelas para {formatBRL(centavos ?? 0)} deixaria parcela de
               zero centavo. Reduza o número de parcelas.
             </span>
@@ -404,7 +404,7 @@ export function TransactionForm({
             type="checkbox"
             name="isPaid"
             defaultChecked={transaction?.is_paid ?? true}
-            className="h-4 w-4 rounded border-line-strong"
+            className="h-4 w-4 rounded-xs border-line-strong"
           />
           Já pago / recebido
         </label>

@@ -18,9 +18,12 @@ export const metadata: Metadata = {
   description: "Tudo que importa, em um só lugar.",
 };
 
+/* Os dois valores são o `--sb-canvas` de cada tema, em hexadecimal porque a
+   meta tag não enxerga variável CSS. Mudou o canvas em globals.css, muda aqui —
+   senão a barra do navegador no celular fica de uma cor e a página de outra. */
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f1" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f5f2" },
     { media: "(prefers-color-scheme: dark)", color: "#0d0d0d" },
   ],
 };

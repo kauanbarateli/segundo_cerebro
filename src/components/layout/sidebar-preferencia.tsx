@@ -128,6 +128,13 @@ export function guardarPreferenciaRecolhida(recolhida: boolean): void {
  * A especificidade sai de graça e a favor: o seletor tem duas partes (0,2,0) e
  * por isso vence `w-64`, `flex` e companhia (0,1,0) independentemente da ordem em
  * que o Tailwind emitir as regras.
+ *
+ * ⚠️ ISSO PASSOU A SUSTENTAR UMA SEGUNDA COISA. Desde o DS 1.0 a barra tem duas
+ * larguras (`w-64 2xl:w-80` — ver AppSidebar.tsx), e o estado recolhido precisa
+ * ser 4rem nos DOIS regimes. Não existe um `2xl:` na regra de recolhimento
+ * justamente porque estes (0,2,0) já vencem o `2xl:w-80`, que é (0,1,0) — media
+ * query não acrescenta especificidade. Escrever o par `2xl:` seria redundante;
+ * baixar a especificidade daqui quebraria a barra recolhida acima de 1536px.
  */
 
 /** Some quando a barra recolhe: rótulos, textos de apoio, o bloco de conta. */
@@ -136,9 +143,14 @@ export const AO_RECOLHER_OCULTA = "[[data-sidebar=recolhida]_&]:hidden";
 /**
  * Linha de navegação que vira só ícone.
  *
- * `h-11` = 44px, o alvo de toque mínimo do projeto. O item recolhido é o menor
- * alvo da barra e é justamente onde o piso precisa ser respeitado — sem ele
- * sobrariam os 40px do estado expandido, onde o rótulo dá mais área de clique.
+ * `h-13` = 52px, a MESMA altura do item expandido (DS §7). A altura é fixada aqui
+ * porque o `px-0` abaixo zera o padding horizontal, e sem uma altura declarada o
+ * item recolhido passaria a depender só do `py-4` — que sobrevive, mas deixa a
+ * medida do trilho refém de uma classe que mora noutro arquivo.
+ *
+ * Igualar os dois estados é o ponto: recolher a barra não pode mudar a altura das
+ * linhas, senão a lista inteira salta no clique e o olho perde o item que estava
+ * seguindo. Fica acima dos 44px de alvo mínimo por consequência, não por sorte.
  */
 export const AO_RECOLHER_SO_ICONE =
-  "[[data-sidebar=recolhida]_&]:h-11 [[data-sidebar=recolhida]_&]:justify-center [[data-sidebar=recolhida]_&]:gap-0 [[data-sidebar=recolhida]_&]:px-0";
+  "[[data-sidebar=recolhida]_&]:h-13 [[data-sidebar=recolhida]_&]:justify-center [[data-sidebar=recolhida]_&]:gap-0 [[data-sidebar=recolhida]_&]:px-0";

@@ -66,7 +66,7 @@ export function CartaoClickUp({
         <button
           type="button"
           onClick={aoAbrir}
-          className="min-w-0 flex-1 rounded-sm text-left text-sm font-medium text-ink hover:underline focus-visible:outline-2"
+          className="min-w-0 flex-1 rounded-sm text-left text-corpo font-medium text-ink hover:underline"
         >
           {subtarefa && (
             /*
@@ -138,7 +138,7 @@ export function CartaoClickUp({
           </span>
         )}
         {tarefa.prazo && (
-          <span className={cn("inline-flex items-center gap-1", vencida && "text-red-500")}>
+          <span className={cn("inline-flex items-center gap-1", vencida && "text-danger-ink")}>
             <Icon.Clock width={12} height={12} />
             {formatDayLabel(tarefa.prazo)}
             {!compacto && ` ${formatTime(tarefa.prazo)}`}

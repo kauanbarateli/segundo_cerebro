@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createProject, updateProject } from "@/app/(app)/projetos/actions";
 import type { Project } from "@/lib/database.types";
+import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 
 export function ProjectForm({
   projeto,
@@ -51,7 +53,7 @@ export function ProjectForm({
           required
           autoFocus
           placeholder="Reforma do apartamento"
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
 
@@ -66,7 +68,7 @@ export function ProjectForm({
           onChange={(e) => setDescription(e.target.value)}
           maxLength={2_000}
           placeholder="O que este projeto é, e quando ele acaba."
-          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full")}
         />
       </div>
 

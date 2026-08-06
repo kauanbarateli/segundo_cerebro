@@ -36,9 +36,10 @@ import type { CelulaDoCalendario, ResumoDeHabito } from "@/lib/habits";
  *   3. a linha de taxa e falhas, que resume por escrito o que o mapa mostra.
  *
  * ⚠️ A sequência é `font-light`, e isso é escolha, não descuido. Num sistema
- * monocromático o tamanho já basta para dominar: 36px ao lado de 12px não
- * precisa de peso. Um número enorme em semibold GRITA, e este módulo mede
- * rotina, não desempenho — a decisão de "não celebrar demais" começa aqui.
+ * monocromático o tamanho já basta para dominar: os 32px do `text-h2` ao lado
+ * dos 14px da unidade não precisam de peso. Um número enorme em semibold GRITA,
+ * e este módulo mede rotina, não desempenho — a decisão de "não celebrar demais"
+ * começa aqui.
  */
 export function HabitoCard({
   habito,
@@ -64,7 +65,7 @@ export function HabitoCard({
   const sequencia = resumo.sequenciaAtual;
 
   return (
-    <Card className="flex flex-col gap-4 p-4 sm:p-5">
+    <Card className="flex flex-col gap-4 p-5 sm:p-6">
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-corpo-forte font-medium text-ink">{habito.name}</h3>
@@ -104,7 +105,7 @@ export function HabitoCard({
       </header>
 
       <p className="flex items-baseline gap-2">
-        <span className="text-4xl font-light leading-none tracking-tight text-ink tabular-nums">
+        <span className="text-h2 font-light leading-none text-ink tabular-nums">
           {sequencia}
         </span>
         <span className="text-legenda text-ink-muted">

@@ -4,8 +4,10 @@ import { useActionState } from "react";
 import { signIn } from "@/app/(auth)/actions";
 import type { AuthState } from "@/lib/action-types";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icons";
+import { Logotipo } from "@/components/ui/Logotipo";
 import { isSupabaseConfigured } from "@/lib/env";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 
 const initialState: AuthState = { error: null };
 
@@ -16,16 +18,30 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-md border border-line-strong text-ink">
-            <Icon.Vault width={20} height={20} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-ink">Segundo Cérebro</h1>
-            <p className="mt-1 text-corpo text-ink-muted">
-              Tudo que importa, em um só lugar.
-            </p>
-          </div>
+        {/*
+          A MARCA, e não mais um cadeado.
+
+          Aqui havia um `Icon.Vault` — o ícone do módulo Cofre — dentro de um
+          quadrado com borda, servindo de logotipo. Ele dizia a coisa errada em
+          duas frentes: prometia um gerenciador de senhas na primeira tela de um
+          produto que é um segundo cérebro, e repetia, com outro desenho, um
+          ícone que a barra lateral usa para significar outra coisa.
+
+          Esta é a primeira tela que qualquer pessoa vê, e a única em que o
+          lockup completo cabe sem disputar espaço. O `<h1>` continua existindo
+          como texto — o `sr-only` abaixo — porque a página precisa de um título
+          de nível 1 para o leitor de tela e para o esboço do documento; o que
+          saiu foi a DUPLICAÇÃO visual do nome, que agora está desenhado no
+          lockup.
+
+          `size={52}` dá ao lockup ~190px de largura, acima do mínimo de 136px do
+          kit da marca. A área de proteção (¼ do símbolo = 13px) é coberta com
+          folga pelo `mb-8` abaixo e pelo centramento da coluna.
+        */}
+        <div className="mb-8 flex flex-col items-center gap-4 text-center">
+          <h1 className="sr-only">Segundo Cérebro</h1>
+          <Logotipo variante="horizontal" size={52} />
+          <p className="text-corpo-forte text-ink-muted">Tudo que importa, em um só lugar.</p>
         </div>
 
         {!configured && (
@@ -35,7 +51,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form action={formAction} className="space-y-3 rounded-lg border border-line bg-surface p-5 shadow-subtle">
+        <form action={formAction} className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-subtle">
           <div>
             <label htmlFor="email" className="mb-1.5 block text-corpo font-medium text-ink">
               E-mail
@@ -46,7 +62,7 @@ export default function LoginPage() {
               type="email"
               autoComplete="email"
               required
-              className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+              className={cn(CLASSE_DO_CAMPO, "w-full")}
             />
           </div>
           <div>
@@ -59,12 +75,12 @@ export default function LoginPage() {
               type="password"
               autoComplete="current-password"
               required
-              className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+              className={cn(CLASSE_DO_CAMPO, "w-full")}
             />
           </div>
 
           {state.error && (
-            <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+            <p role="alert" className="text-corpo text-danger-ink">
               {state.error}
             </p>
           )}
@@ -74,7 +90,7 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <p className="mt-4 text-center text-legenda text-ink-subtle">
+        <p className="mt-5 text-center text-legenda text-ink-muted">
           O cadastro público está desativado. Contas são criadas pelo proprietário no Supabase.
         </p>
       </div>

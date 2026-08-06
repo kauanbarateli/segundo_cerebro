@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { buscarAnexaveis, vincularAoProjeto } from "@/app/(app)/projetos/actions";
 import { ANEXAVEL, type ItemAnexavel, type TipoAnexavel } from "@/components/features/projects/anexaveis";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
+import { cn } from "@/lib/utils";
 
 /**
  * ESCOLHER ITENS PARA UM PROJETO — o inverso de `SeletorDeProjeto`.
@@ -162,7 +164,7 @@ export function VincularExistente({
           maxLength={80}
           autoFocus
           placeholder={`Nome ou trecho d${def.artigo} ${def.singular}`}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
 
@@ -177,7 +179,7 @@ export function VincularExistente({
       </div>
 
       {erro && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {erro}
         </p>
       )}
@@ -203,7 +205,7 @@ export function VincularExistente({
                     type="checkbox"
                     checked={marcado}
                     onChange={() => alternar(item)}
-                    className="h-4 w-4 shrink-0 rounded border-line-strong"
+                    className="h-4 w-4 shrink-0 rounded-xs border-line-strong"
                   />
                   <span className="min-w-0 flex-1 truncate text-corpo text-ink">{item.rotulo}</span>
                   {item.projetoAtual && (

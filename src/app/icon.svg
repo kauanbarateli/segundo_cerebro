@@ -1,0 +1,7 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Segundo Cérebro</title>
+  <rect width="64" height="64" rx="16" fill="#111111"/>
+  <path d="M18.5 20C18.5 15.858 21.858 12.5 26 12.5H35C41.627 12.5 47 17.873 47 24.5C47 28.253 45.245 31.791 42.255 34.056L21.5 49.5H47" stroke="#F7F7F4" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="18.5" cy="20" r="3" fill="#111111" stroke="#F7F7F4" stroke-width="1.5"/>
+  <circle cx="47" cy="49.5" r="3" fill="#111111" stroke="#F7F7F4" stroke-width="1.5"/>
+</svg>

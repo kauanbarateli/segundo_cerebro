@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icons";
 import { Avatar } from "@/components/ui/Avatar";
+import { Logotipo } from "@/components/ui/Logotipo";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/(auth)/actions";
 import { limparRascunhosDeCaptura } from "@/lib/capture-draft";
@@ -103,29 +104,55 @@ export function AppSidebar({
     // teto do que ainda lê como resposta direta ao clique; sob
     // `prefers-reduced-motion` o bloco de globals.css zera a duração e a barra
     // troca de largura em corte seco, que é o comportamento correto.
+    //
+    // LARGURA: 16rem até 1535px, 20rem a partir de 1536px (`2xl`).
+    //
+    // O DS §5 pede 320px de barra no desktop e 256px no tablet, com o corte em
+    // 1024px. Os 320px foram adotados; o CORTE não — e o desvio é consciente.
+    // O corte de 1024px do design system foi pensado para separar tablet de
+    // desktop, mas a maioria dos notebooks tem 1366 ou 1440px de largura, e ali
+    // a barra de 320px sai direto da área de conteúdo: 104px a menos de espaço
+    // útil (~9%) para exibir exatamente a mesma navegação que 256px já exibe.
+    // Em 1536px ou mais, o conteúdo já bate no próprio teto e a barra maior sai
+    // de graça — é onde ela vale a pena.
+    //
+    // ⚠️ Mudar este `2xl` obriga a refazer a aritmética do `max-w` recolhido em
+    // (app)/layout.tsx, que tem um teto para CADA regime. Os dois números são o
+    // mesmo cálculo visto de dois lados.
     <aside
       id={ID_BARRA}
       className={cn(
-        "sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-line bg-surface md:flex",
+        "sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-line bg-surface md:flex 2xl:w-80",
         "transition-[width] duration-150 ease-out",
+        // Sem par `2xl:` aqui de propósito: o seletor de atributo dá a esta
+        // regra especificidade (0,2,0) contra os (0,1,0) do `2xl:w-80`, então
+        // ela vence em qualquer largura. Recolhida é 4rem nos dois regimes.
         "[[data-sidebar=recolhida]_&]:w-16",
       )}
     >
-      {/* A foto ocupa o lugar da marca. Canto arredondado (não círculo) porque
-          aqui ela lê como logotipo e acompanha os demais blocos da interface.
+      {/* A MARCA, no lugar onde estava a foto do usuário.
 
-          Recolhida, a linha vira coluna: a foto em cima, o botão de alternância
-          embaixo. Manter os dois lado a lado em 4rem espremeria os dois. */}
+          A foto identificava a CONTA num ponto onde a pergunta é "que produto é
+          este" — e a conta já é identificada duas vezes na mesma tela: no rodapé
+          desta barra (nome + e-mail) e no avatar do cabeçalho da página. O
+          símbolo aqui é o único lugar do aplicativo, fora do login, em que a
+          marca aparece.
+
+          Recolhida, a linha vira coluna: o símbolo em cima, o botão de
+          alternância embaixo. Manter os dois lado a lado em 4rem espremeria os
+          dois. O símbolo fica em 32px — acima do mínimo de 24px do kit da marca —
+          e é a única coisa que sobra do bloco, o que é justamente o caso de uso
+          para o qual o símbolo isolado existe. */}
       <div
         className={cn(
           "flex items-center gap-3 px-5 pt-6 pb-5",
           "[[data-sidebar=recolhida]_&]:flex-col [[data-sidebar=recolhida]_&]:gap-2 [[data-sidebar=recolhida]_&]:px-2 [[data-sidebar=recolhida]_&]:pt-4 [[data-sidebar=recolhida]_&]:pb-3",
         )}
       >
-        <Avatar name={displayName} url={avatarUrl} size={36} rounded="md" />
+        <Logotipo variante="simbolo" size={32} />
         <div className={cn("leading-tight", AO_RECOLHER_OCULTA)}>
-          <p className="text-corpo-forte font-semibold text-ink">Segundo</p>
-          <p className="text-corpo text-ink-subtle">Cérebro</p>
+          <p className="text-corpo font-bold tracking-tight text-ink">Segundo</p>
+          <p className="text-corpo text-ink-muted">Cérebro</p>
         </div>
 
         {/*
@@ -147,7 +174,7 @@ export function AppSidebar({
           aria-label={recolhida ? "Expandir menu lateral" : "Recolher menu lateral"}
           title={recolhida ? "Expandir menu" : "Recolher menu"}
           className={cn(
-            "ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-surface-muted hover:text-ink",
+            "ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink",
             "[[data-sidebar=recolhida]_&]:ml-0",
           )}
         >
@@ -155,11 +182,7 @@ export function AppSidebar({
               dependeria do React e voltaria a piscar na hidratação — a seta gira
               junto com a largura porque lê o mesmo atributo do <html>. Aponta
               para onde a barra VAI: para a esquerda quando há o que recolher. */}
-          <Icon.ChevronRight
-            width={18}
-            height={18}
-            className="rotate-180 transition-transform duration-150 ease-out [[data-sidebar=recolhida]_&]:rotate-0"
-          />
+          <Icon.ChevronRight className="rotate-180 transition-transform duration-150 ease-out [[data-sidebar=recolhida]_&]:rotate-0" />
         </button>
       </div>
 
@@ -193,15 +216,19 @@ export function AppSidebar({
               aria-current={active ? "page" : undefined}
               aria-label={item.label}
               title={recolhida ? item.label : undefined}
+              /* 52px de altura (py-4 + 20px de entrelinha), o número do DS §7.
+                 Eram 40px. Além de ser o alvo de toque confortável, a altura
+                 maior é o que faz a barra parecer navegação em vez de lista:
+                 dez itens colados a 40px leem como um índice. */
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-4 text-legenda font-medium transition-colors",
                 AO_RECOLHER_SO_ICONE,
                 active
                   ? "bg-accent text-accent-ink"
-                  : "text-ink-muted hover:bg-surface-muted hover:text-ink",
+                  : "text-ink-muted hover:bg-surface-hover hover:text-ink",
               )}
             >
-              <Glyph width={18} height={18} className="shrink-0" />
+              <Glyph className="shrink-0" />
               <span className={AO_RECOLHER_OCULTA}>{item.label}</span>
             </Link>
           );
@@ -228,7 +255,7 @@ export function AppSidebar({
             role="img"
             aria-label={resumoOrdem}
             title={resumoOrdem}
-            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line-strong text-meta font-semibold text-ink"
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line-strong text-meta font-semibold text-ink"
           >
             {organizedPercent}%
           </div>
@@ -252,11 +279,11 @@ export function AppSidebar({
           aria-label="Configurações"
           title={recolhida ? "Configurações" : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-corpo text-ink-muted hover:bg-surface-muted hover:text-ink",
+            "flex items-center gap-3 rounded-md px-3 py-3 text-legenda text-ink-muted hover:bg-surface-hover hover:text-ink",
             AO_RECOLHER_SO_ICONE,
           )}
         >
-          <Icon.Settings width={16} height={16} className="shrink-0" />
+          <Icon.Settings width={18} height={18} className="shrink-0" />
           <span className={AO_RECOLHER_OCULTA}>Configurações</span>
         </Link>
         <Link
@@ -264,33 +291,41 @@ export function AppSidebar({
           aria-label="Ajuda e atalhos"
           title={recolhida ? "Ajuda e atalhos" : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-corpo text-ink-muted hover:bg-surface-muted hover:text-ink",
+            "flex items-center gap-3 rounded-md px-3 py-3 text-legenda text-ink-muted hover:bg-surface-hover hover:text-ink",
             AO_RECOLHER_SO_ICONE,
           )}
         >
-          <Icon.Help width={16} height={16} className="shrink-0" />
+          <Icon.Help width={18} height={18} className="shrink-0" />
           <span className={AO_RECOLHER_OCULTA}>Ajuda e atalhos</span>
         </Link>
 
-        {/* Sem avatar aqui: ele já identifica a conta no topo da barra e no
-            cabeçalho da página. Repetir a mesma foto três vezes na mesma tela
-            é ruído. O que falta saber neste ponto é QUAL conta está aberta —
-            isso o nome e o e-mail resolvem.
+        {/* A FOTO VOLTOU PARA CÁ — e o motivo é o inverso do que estava escrito
+            aqui antes.
 
-            RECOLHIDA, essa mesma conta continua valendo e por isso o rodapé fica
-            só com o botão de sair: o nome e o e-mail não cabem em 4rem, e a foto
-            do topo — que continua na tela — já responde "qual conta". Pôr um
-            segundo avatar aqui embaixo contrariaria o parágrafo acima para
-            duplicar, a 12px de distância, o que já está visível. */}
+            Enquanto a foto ficava no TOPO, fazendo as vezes de logotipo, repeti-la
+            no rodapé seria a mesma imagem duas vezes na mesma coluna, a poucos
+            centímetros de distância. Com a marca ocupando o topo, o rodapé passou
+            a ser o único ponto da barra que responde "qual conta está aberta" — e
+            um nome com um e-mail, sem rosto, é justamente o bloco que o olho pula.
+
+            RECOLHIDA, o rodapé fica só com o botão de sair: nome, e-mail e foto
+            não cabem em 4rem, e o avatar do cabeçalho da página continua na tela
+            respondendo a mesma pergunta. */}
         <div
           className={cn(
             "mt-1 flex items-center gap-3 rounded-md px-3 py-2",
             "[[data-sidebar=recolhida]_&]:justify-center [[data-sidebar=recolhida]_&]:px-0",
           )}
         >
+          <Avatar
+            name={displayName}
+            url={avatarUrl}
+            size={36}
+            className={AO_RECOLHER_OCULTA}
+          />
           <div className={cn("min-w-0 flex-1 leading-tight", AO_RECOLHER_OCULTA)}>
             <p className="truncate text-corpo font-medium text-ink">{displayName}</p>
-            <p className="truncate text-legenda text-ink-subtle">{email}</p>
+            <p className="truncate text-legenda text-ink-muted">{email}</p>
           </div>
           {/*
             `onSubmit` limpa o que é do NAVEGADOR antes de a Server Action
@@ -311,13 +346,15 @@ export function AppSidebar({
               aria-label="Sair"
               title="Sair"
               className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-md text-ink-subtle hover:bg-surface hover:text-ink",
-                // Recolhido este vira o único controle do rodapé, e o rótulo ao
-                // lado (que dava área de mira ao conjunto) não existe mais.
-                "[[data-sidebar=recolhida]_&]:h-10 [[data-sidebar=recolhida]_&]:w-10",
+                // 44×44 REAIS, e não os 32 de antes. Este era o pior alvo do
+                // produto: um botão de sair de 32px, encostado na borda inferior
+                // da barra, do tamanho de metade de um polegar. O DS §9 põe o
+                // piso em 44, e aqui não há razão de densidade para negociá-lo —
+                // o rodapé tem espaço de sobra.
+                "flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink",
               )}
             >
-              <Icon.Logout width={16} height={16} />
+              <Icon.Logout width={18} height={18} />
             </button>
           </form>
         </div>

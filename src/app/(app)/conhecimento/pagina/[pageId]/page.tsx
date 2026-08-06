@@ -72,7 +72,7 @@ export default async function PaginaDeConhecimento({
           {caminho.length > 1 && (
             <nav
               aria-label="Caminho"
-              className="mb-4 flex flex-wrap items-center gap-1 text-corpo text-ink-subtle"
+              className="mb-4 flex flex-wrap items-center gap-1 text-legenda text-ink-subtle"
             >
               {caminho.map((no, i) => (
                 <span key={no.id} className="flex items-center gap-1">

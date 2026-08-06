@@ -183,7 +183,7 @@ export default async function HomePage() {
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <span className="text-corpo text-ink-subtle">
+        <span className="text-legenda text-ink-subtle">
           {plural(openCount, "tarefa aberta", "tarefas abertas")}
           {" · "}
           {/* "hoje", não "à frente": o número agora conta o dia, não o futuro. */}
@@ -198,7 +198,7 @@ export default async function HomePage() {
           <section>
             <div className="mb-3">
               <p className="eyebrow">Agora</p>
-              <h2 className="text-lg font-semibold text-ink">Seu próximo movimento</h2>
+              <h2 className="text-titulo font-semibold text-ink">Seu próximo movimento</h2>
             </div>
 
             {/*
@@ -221,7 +221,7 @@ export default async function HomePage() {
                 <p className="mb-6 text-meta uppercase tracking-widest opacity-70">Em foco</p>
                 <div className="flex items-end justify-between gap-4">
                   <div>
-                    <h3 className="text-xl font-semibold">{nextMove.title}</h3>
+                    <h3 className="text-corpo-forte font-semibold">{nextMove.title}</h3>
                     <p className="mt-1 text-corpo opacity-70">
                       {nextMove.category_id ? catById.get(nextMove.category_id) : "Sem categoria"}
                       {" · "}
@@ -288,11 +288,11 @@ export default async function HomePage() {
             recorte agora é o dia civil de São Paulo (ver `getEventsForToday`), e
             um dia vazio aparece vazio em vez de tomar emprestado o dia seguinte.
           */}
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="eyebrow">Agenda</p>
-                <p className="text-sm font-semibold text-ink">Compromissos marcados hoje</p>
+                <p className="text-corpo-forte font-semibold text-ink">Compromissos marcados hoje</p>
               </div>
               <Link href="/calendario" className="shrink-0 text-corpo text-ink-muted hover:text-ink">
                 Ver tudo
@@ -316,7 +316,7 @@ export default async function HomePage() {
           )}
 
           {/* Resumo do cérebro */}
-          <Card className="p-5">
+          <Card className="p-6">
             <p className="eyebrow mb-3">Resumo do cérebro</p>
             {/* `grid-cols-1 sm:grid-cols-2`: sem o prefixo, duas colunas de ~150px
                 no celular espremiam "Capturas s/ organizar" em três linhas ao lado
@@ -393,7 +393,7 @@ function SocialLinksStrip({ links }: { links: SocialLink[] }) {
               href={l.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-corpo text-ink-muted transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink focus-visible:outline-2"
+              className="alvo-44 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-legenda text-ink-muted transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink"
             >
               <SocialLinkIcon url={l.url} size={15} className="shrink-0 text-ink-subtle" />
               {l.label}
@@ -409,7 +409,7 @@ function SocialLinksStrip({ links }: { links: SocialLink[] }) {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-md border border-line bg-surface-muted px-3 py-2.5">
-      <dd className="text-2xl font-semibold text-ink">{value}</dd>
+      <dd className="text-titulo font-semibold text-ink">{value}</dd>
       <dt className="text-legenda text-ink-subtle">{label}</dt>
     </div>
   );

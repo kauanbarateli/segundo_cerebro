@@ -73,7 +73,14 @@ export function PageHeader({
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="order-1 min-w-0 flex-1">
           <p className="eyebrow">{eyebrow}</p>
-          <h1 className="mt-2 text-4xl font-bold tracking-tight text-ink sm:text-5xl">{title}</h1>
+          {/* `text-display` já traz o clamp, a entrelinha 0.96 e o tracking de
+              −0.055em do DS §4. O par `text-4xl sm:text-5xl` que estava aqui
+              tinha DOIS degraus e um ponto de quebra; o clamp acompanha a
+              largura continuamente e resolve o teto de 44–52px que o DS §9 pede
+              no mobile sem precisar de breakpoint. `tracking-tight` saiu porque
+              venceria o tracking do degrau — ver a nota de precedência em
+              tailwind.config.ts. */}
+          <h1 className="mt-2 text-display font-bold text-ink">{title}</h1>
           {subtitle && <p className="mt-2 text-corpo-forte text-ink-muted">{subtitle}</p>}
         </div>
 
@@ -83,12 +90,12 @@ export function PageHeader({
           <ThemeToggle />
           <Link
             href="/capturar"
-            className="flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90"
+            className="flex h-11 items-center gap-2.5 rounded-md bg-accent px-4 text-corpo font-medium text-accent-ink transition-opacity hover:opacity-90"
           >
-            <Icon.Capture width={16} height={16} /> Capturar
+            <Icon.Capture width={18} height={18} /> Capturar
           </Link>
           <Link href="/configuracoes" aria-label="Configurações do perfil">
-            <Avatar name={user.name} url={user.avatarUrl} size={40} />
+            <Avatar name={user.name} url={user.avatarUrl} size={44} />
           </Link>
         </div>
       </div>

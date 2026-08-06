@@ -87,7 +87,7 @@ export function ResumoFinanceiro({
   if (snapshot.accounts.length === 0) {
     return (
       <section aria-labelledby="resumo-financeiro">
-        <h2 id="resumo-financeiro" className="mb-3 text-lg font-semibold text-ink">
+        <h2 id="resumo-financeiro" className="mb-3 text-titulo font-semibold text-ink">
           Como o mês está
         </h2>
         <Card>
@@ -172,7 +172,7 @@ export function ResumoFinanceiro({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="eyebrow">Dinheiro</p>
-          <h2 id="resumo-financeiro" className="text-lg font-semibold text-ink">
+          <h2 id="resumo-financeiro" className="text-titulo font-semibold text-ink">
             Como o mês está
           </h2>
         </div>
@@ -181,7 +181,7 @@ export function ResumoFinanceiro({
         </Link>
       </div>
 
-      <Card className="space-y-5 p-5">
+      <Card className="space-y-5 p-6">
         {/* Saldo consolidado. Os MESMOS três números do módulo Financeiro, com
             os mesmos nomes: dois nomes para o mesmo valor é como duas telas
             passam a discordar sobre quanto se tem. */}
@@ -249,7 +249,7 @@ function Numero({
         destaque ? "border-line-strong" : "border-line",
       )}
     >
-      <dd className={cn("text-lg font-semibold", alerta ? "text-red-600 dark:text-red-400" : "text-ink")}>
+      <dd className={cn("text-titulo font-semibold", alerta ? "text-danger-ink" : "text-ink")}>
         {valor}
       </dd>
       <dt className="text-legenda text-ink-subtle">{rotulo}</dt>
@@ -290,7 +290,12 @@ function BarrasDoMes({
         <p className="eyebrow">Entradas e saídas · {monthLabel(mes)}</p>
         <p className="text-legenda text-ink-subtle">
           resultado{" "}
-          <span className={cn("font-medium", resultado < 0 ? "text-red-600 dark:text-red-400" : "text-ink")}>
+          <span
+            className={cn(
+              "font-medium tabular-nums",
+              resultado < 0 ? "text-danger-ink" : "text-success-ink",
+            )}
+          >
             {dinheiro(resultado)}
           </span>
         </p>

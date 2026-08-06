@@ -263,10 +263,10 @@ export function Modal({
     */
     <div
       /*
-        `animate-overlay-in`: o véu escuro só esmaece para dentro (140ms). Ele
-        não desliza — o fundo escuro não vem de canto nenhum da tela, ele
-        simplesmente passa a existir. Movimento no véu chamaria atenção para a
-        decoração em vez de para o diálogo.
+        `animate-overlay-in`: o véu escuro só esmaece para dentro, nos 180ms de
+        troca de superfície do DS §8. Ele não desliza — o fundo escuro não vem de
+        canto nenhum da tela, ele simplesmente passa a existir. Movimento no véu
+        chamaria atenção para a decoração em vez de para o diálogo.
       */
       className="fixed inset-0 z-[90] flex animate-overlay-in items-center justify-center bg-black/40 p-4"
       onMouseDown={(e) => {
@@ -296,7 +296,10 @@ export function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "max-h-[90dvh] w-full overflow-y-auto rounded-lg border border-line bg-surface p-5 shadow-raised outline-none",
+          // `rounded-xl` (24px) e não o `rounded-lg` (18px) do cartão: o DS §6 dá um
+          // raio próprio à superfície grande. A diferença é o que separa "isto
+          // flutua sobre a página" de "isto é mais um cartão dentro dela".
+          "max-h-[90dvh] w-full overflow-y-auto rounded-xl border border-line bg-surface p-6 shadow-raised outline-none",
           /*
             `animate-modal-in`: esmaece subindo 8px, em 180ms. É o nível 4 de
             elevação (ver tailwind.config.ts) e o deslocamento é o que o
@@ -312,7 +315,7 @@ export function Modal({
           SIZE_CLASS[size],
         )}
       >
-        <h2 id={titleId} className="mb-4 text-corpo-forte font-semibold text-ink">
+        <h2 id={titleId} className="mb-5 text-titulo font-semibold text-ink">
           {title}
         </h2>
         {children}

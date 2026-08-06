@@ -25,6 +25,7 @@ import {
   toggleStar,
   getDownloadUrl,
 } from "@/app/(app)/drive/actions";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 
 const BUCKET = "drive";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -210,7 +211,7 @@ export function DriveView({
   return (
     <div className="space-y-5">
       {/* Uso de armazenamento */}
-      <Card className="p-4">
+      <Card className="p-5">
         {/* `flex-wrap`: "Armazenamento" + "512,3 MB de 1 GB · 1234 arquivos"
             passa de 300px em 13px, que é toda a largura do cartão em 375px. */}
         <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-corpo">
@@ -223,7 +224,7 @@ export function DriveView({
           <div
             className={cn(
               "h-full rounded-full",
-              usedBytes / QUOTA_BYTES > 0.9 ? "bg-red-500" : "bg-accent",
+              usedBytes / QUOTA_BYTES > 0.9 ? "bg-danger" : "bg-accent",
             )}
             style={{ width: `${Math.min(100, Math.max(1, (usedBytes / QUOTA_BYTES) * 100))}%` }}
           />
@@ -252,7 +253,7 @@ export function DriveView({
         <div className="flex flex-wrap gap-2">
           <Link
             href="/drive/lixeira"
-            className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-corpo text-ink-muted hover:text-ink"
+            className="alvo-44 inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-legenda text-ink-muted hover:text-ink"
           >
             <Icon.Trash width={14} height={14} /> Lixeira
           </Link>
@@ -298,7 +299,7 @@ export function DriveView({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-ink">{u.name}</p>
                 {u.progress === "error" && (
-                  <p className="mt-0.5 text-legenda text-red-600 dark:text-red-400">{u.error}</p>
+                  <p className="mt-0.5 text-legenda text-danger-ink">{u.error}</p>
                 )}
               </div>
               {u.progress === "error" ? (
@@ -347,7 +348,7 @@ export function DriveView({
                   <Icon.Folder width={18} height={18} className="shrink-0 text-ink-muted" />
                   <Link
                     href={`/drive?folder=${f.id}`}
-                    className="min-w-0 flex-1 truncate text-sm font-medium text-ink hover:underline"
+                    className="min-w-0 flex-1 truncate text-corpo font-medium text-ink hover:underline"
                   >
                     {f.name}
                   </Link>
@@ -392,7 +393,7 @@ export function DriveView({
                   <button
                     type="button"
                     onClick={() => void download(file)}
-                    className="min-w-0 flex-1 truncate text-left text-sm text-ink hover:underline"
+                    className="min-w-0 flex-1 truncate text-left text-legenda text-ink hover:underline"
                   >
                     {file.name}
                   </button>
@@ -569,7 +570,7 @@ function IconButton({
         */
         "inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-sm border border-line-strong px-3 text-meta text-ink-muted transition-colors",
         "sm:h-7 sm:min-w-0 sm:px-2",
-        danger ? "hover:text-red-600 dark:hover:text-red-400" : "hover:text-ink",
+        danger ? "hover:text-danger-ink" : "hover:text-ink",
       )}
     >
       {children}
@@ -612,11 +613,11 @@ function NameForm({
           autoFocus
           required
           maxLength={120}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         />
       </div>
       {error && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {error}
         </p>
       )}
@@ -678,7 +679,7 @@ function MoveForm({
         <select
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2"
+          className={cn(CLASSE_DO_CAMPO, "w-full")}
         >
           <option value="">Drive (raiz)</option>
           {folders.map((f) => (
@@ -689,7 +690,7 @@ function MoveForm({
         </select>
       </div>
       {error && (
-        <p role="alert" className="text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="text-corpo text-danger-ink">
           {error}
         </p>
       )}

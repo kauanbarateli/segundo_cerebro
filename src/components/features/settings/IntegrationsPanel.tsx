@@ -13,6 +13,7 @@ import {
   desconectarClickUp,
   testarClickUp,
 } from "@/app/(app)/configuracoes/clickup-actions";
+import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 import type { ClickUpConnection } from "@/lib/database.types";
 import { formatDayLabel, formatTime, cn } from "@/lib/utils";
 
@@ -66,7 +67,7 @@ export function IntegrationsPanel({
 
   if (!conectado) {
     return (
-      <Card className="p-5">
+      <Card className="p-6">
         <Cabecalho />
 
         <p className="mt-3 text-corpo text-ink-muted">
@@ -88,7 +89,7 @@ export function IntegrationsPanel({
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 font-mono text-sm text-ink focus-visible:outline-2"
+            className={cn(CLASSE_DO_CAMPO, "w-full font-mono")}
           />
           <p className="mt-1.5 text-legenda text-ink-subtle">
             No ClickUp:{" "}
@@ -102,7 +103,7 @@ export function IntegrationsPanel({
         <BlocoDoQueOAppFaz />
 
         {erro && (
-          <p role="alert" className="mt-3 flex items-start gap-2 text-corpo text-red-600 dark:text-red-400">
+          <p role="alert" className="mt-3 flex items-start gap-2 text-corpo text-danger-ink">
             <Icon.Alert width={15} height={15} className="mt-0.5 shrink-0" />
             <span>{erro}</span>
           </p>
@@ -127,7 +128,7 @@ export function IntegrationsPanel({
   const tokenRecusado = conexao?.status === "invalid";
 
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <div className="flex items-start justify-between gap-3">
         <Cabecalho />
         {/*
@@ -149,7 +150,7 @@ export function IntegrationsPanel({
             })
           }
           className={cn(
-            "relative h-6 w-11 shrink-0 rounded-full border transition-colors focus-visible:outline-2",
+            "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
             conexao?.ativo ? "border-transparent bg-accent" : "border-line-strong bg-surface-muted",
           )}
         >
@@ -189,7 +190,7 @@ export function IntegrationsPanel({
       <BlocoDoQueOAppFaz />
 
       {erro && (
-        <p role="alert" className="mt-3 text-corpo text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-3 text-corpo text-danger-ink">
           {erro}
         </p>
       )}
@@ -243,7 +244,7 @@ function Cabecalho() {
   return (
     <div>
       <p className="eyebrow">Integrações</p>
-      <p className="text-sm font-semibold text-ink">ClickUp</p>
+      <p className="text-corpo-forte font-semibold text-ink">ClickUp</p>
     </div>
   );
 }

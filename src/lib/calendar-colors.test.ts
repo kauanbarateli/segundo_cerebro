@@ -37,21 +37,51 @@ describe("tomDaConta", () => {
 
   it("as classes são literais e completas — o Tailwind não acha nome montado", () => {
     /*
-      `bg-teal-${n}` montado em tempo de execução não é encontrado pela varredura
-      do Tailwind, e a cor simplesmente não existe no CSS final: sem erro, sem
-      aviso, e só na build de produção. Esta asserção não prova a ausência de
-      concatenação, mas trava a FORMA que a varredura precisa encontrar.
+      `bg-${categoria}` montado em tempo de execução não é encontrado pela
+      varredura do Tailwind, e a cor simplesmente não existe no CSS final: sem
+      erro, sem aviso, e só na build de produção. Esta asserção não prova a
+      ausência de concatenação, mas trava a FORMA que a varredura precisa
+      encontrar.
+
+      ⚠️ A forma mudou na migração para o DS 1.0. Antes era paleta crua com
+      degrau numérico (`bg-teal-500`); agora é token semântico (`bg-work`). O
+      que continua sendo verificado é o mesmo: nome de classe inteiro, escrito
+      à mão, sem interpolação.
     */
     for (const slot of [1, 2] as const) {
       const tom = tomDaConta(slot)!;
-      expect(tom.ponto).toMatch(/^bg-[a-z]+-\d{3} dark:bg-[a-z]+-\d{3}$/);
-      expect(tom.trilho).toMatch(/^border-l-2 border-l-[a-z]+-\d{3} dark:border-l-[a-z]+-\d{3}$/);
+      expect(tom.ponto).toMatch(/^bg-(work|personal)$/);
+      expect(tom.trilho).toMatch(/^border-l-2 border-l-(work|personal)$/);
+      expect(tom.texto).toMatch(/^text-(work|personal)-ink$/);
     }
   });
 
-  it("os dois têm variante dark — a cor de papel branco some em superfície escura", () => {
-    expect(tomDaConta(1)?.ponto).toContain("dark:");
-    expect(tomDaConta(2)?.ponto).toContain("dark:");
+  it("o texto usa o degrau -ink, que é o único que passa em AA", () => {
+    /*
+      Os dois papéis não são intercambiáveis. `--sb-work` é #20B8A5 e tem 2.48 de
+      contraste sobre branco: serve de PREENCHIMENTO (o ponto, o trilho) e seria
+      ilegível como texto. `--sb-work-ink` é #0F7568, com 5.11. Trocar um pelo
+      outro não quebra nada visível de imediato — só torna a legenda ilegível
+      para quem mais precisa dela. Ver globals.css.
+    */
+    for (const slot of [1, 2] as const) {
+      expect(tomDaConta(slot)!.texto).toContain("-ink");
+      expect(tomDaConta(slot)!.ponto).not.toContain("-ink");
+    }
+  });
+
+  it("o tom acompanha o tema sem variante `dark:` escrita à mão", () => {
+    /*
+      Antes cada tom carregava um par (`bg-teal-500 dark:bg-teal-400`), porque a
+      saturação que funciona sobre papel branco some sobre superfície escura.
+      Agora quem troca é a VARIÁVEL CSS, em `.dark` — e por isso um `dark:` aqui
+      seria um segundo lugar decidindo a mesma coisa, livre para divergir do
+      primeiro. A ausência dele é a garantia de que existe uma fonte só.
+    */
+    for (const slot of [1, 2] as const) {
+      const tom = tomDaConta(slot)!;
+      expect(`${tom.trilho} ${tom.ponto} ${tom.texto}`).not.toContain("dark:");
+    }
   });
 });
 
