@@ -168,7 +168,7 @@ export function CalendarViews({
           <Button variant="ghost" size="sm" onClick={() => navigate(1)} aria-label="Próximo período">
             ›
           </Button>
-          <span className="ml-1 truncate text-legenda font-medium text-ink">{title}</span>
+          <span className="ml-1 truncate text-sm font-medium text-ink">{title}</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {VIEWS.map((v) => (
@@ -412,15 +412,14 @@ function WeekView({
       {/* Desktop/tablet: 7 colunas. As colunas rolam horizontalmente se ficarem
           estreitas demais, em vez de espremer o conteúdo.
 
-          O piso subiu de 760px para 900px junto com a escala tipográfica do DS
-          1.0. A conta: 900 − 6 gaps de 8px = 852 ÷ 7 ≈ 121px por coluna. Em 14px
-          isso é ~15 caracteres por linha de título; com os 108px que 760px dava,
-          o mesmo título caía para ~13. Manter o piso antigo não teria quebrado
-          nada — o `overflow-x-auto` acima é justamente a rede —, mas teria
-          trocado rolagem por truncamento, que é o pior dos dois: a rolagem o
-          usuário desfaz, o corte no meio da palavra não. */}
+          O piso é 760px, o valor original. Ele chegou a subir para 900px porque
+          a escala do DS 1.0 aumentou o texto do título do evento; com os
+          tamanhos revertidos (ver a nota em tailwind.config.ts) o piso volta
+          junto — mantê-lo em 900px só produziria rolagem horizontal em telas
+          onde as colunas cabiam. A conta: 760 − 6 gaps de 8px = 712 ÷ 7 ≈ 102px
+          por coluna, que em 12px dá ~13 caracteres por linha de título. */}
       <div className="-mx-1 hidden overflow-x-auto px-1 pb-1 md:block">
-        <div className="grid min-w-[900px] grid-cols-7 items-start gap-2">
+        <div className="grid min-w-[760px] grid-cols-7 items-start gap-2">
           {byDay.map(({ day, isToday, events: dayEvents }) => (
             <div key={day.toISOString()} className="min-w-0">
               <div

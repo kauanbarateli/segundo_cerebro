@@ -251,7 +251,7 @@ export function RelatedSection({
         armadilha de foco do Modal de paradas de Tab a cada letra digitada.
       */}
       <div ref={containerRef} className="relative">
-        <label htmlFor={inputId} className="mb-1.5 block text-corpo font-medium text-ink-muted">
+        <label htmlFor={inputId} className="mb-1.5 block text-legenda font-medium text-ink-muted">
           Vincular a…
         </label>
         <input

@@ -36,7 +36,7 @@ export function EmptyState({
         <Glyph width={22} height={22} />
       </div>
       <div className="space-y-1.5">
-        <p className="text-corpo font-medium text-ink">{title}</p>
+        <p className="text-sm font-medium text-ink">{title}</p>
         {description && <p className="max-w-xs text-corpo text-ink-muted">{description}</p>}
       </div>
       {action}
@@ -63,7 +63,7 @@ export function ErrorState({
         <Icon.Alert width={22} height={22} />
       </div>
       <div className="space-y-1.5">
-        <p className="text-corpo font-medium text-ink">{title}</p>
+        <p className="text-sm font-medium text-ink">{title}</p>
         {description && <p className="max-w-sm text-corpo text-ink-muted">{description}</p>}
       </div>
       {action}

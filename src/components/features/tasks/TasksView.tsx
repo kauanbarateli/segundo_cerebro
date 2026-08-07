@@ -377,7 +377,7 @@ export function TasksView({
                           <button
                             onClick={() => openEdit(t)}
                             className={cn(
-                              "text-left text-legenda font-medium hover:underline",
+                              "text-left text-sm font-medium hover:underline",
                               t.status === "done" ? "text-ink-subtle line-through" : "text-ink",
                             )}
                           >
@@ -426,7 +426,7 @@ export function TasksView({
                   <button onClick={() => openEdit(t)} className="min-w-0 flex-1 text-left">
                     <p
                       className={cn(
-                        "text-corpo font-medium",
+                        "text-sm font-medium",
                         t.status === "done" ? "text-ink-subtle line-through" : "text-ink",
                       )}
                     >

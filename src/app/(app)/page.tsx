@@ -183,7 +183,7 @@ export default async function HomePage() {
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <span className="text-legenda text-ink-subtle">
+        <span className="text-corpo text-ink-subtle">
           {plural(openCount, "tarefa aberta", "tarefas abertas")}
           {" · "}
           {/* "hoje", não "à frente": o número agora conta o dia, não o futuro. */}
@@ -198,7 +198,7 @@ export default async function HomePage() {
           <section>
             <div className="mb-3">
               <p className="eyebrow">Agora</p>
-              <h2 className="text-titulo font-semibold text-ink">Seu próximo movimento</h2>
+              <h2 className="text-lg font-semibold text-ink">Seu próximo movimento</h2>
             </div>
 
             {/*
@@ -221,7 +221,7 @@ export default async function HomePage() {
                 <p className="mb-6 text-meta uppercase tracking-widest opacity-70">Em foco</p>
                 <div className="flex items-end justify-between gap-4">
                   <div>
-                    <h3 className="text-corpo-forte font-semibold">{nextMove.title}</h3>
+                    <h3 className="text-xl font-semibold">{nextMove.title}</h3>
                     <p className="mt-1 text-corpo opacity-70">
                       {nextMove.category_id ? catById.get(nextMove.category_id) : "Sem categoria"}
                       {" · "}
@@ -292,7 +292,7 @@ export default async function HomePage() {
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="eyebrow">Agenda</p>
-                <p className="text-corpo-forte font-semibold text-ink">Compromissos marcados hoje</p>
+                <p className="text-sm font-semibold text-ink">Compromissos marcados hoje</p>
               </div>
               <Link href="/calendario" className="shrink-0 text-corpo text-ink-muted hover:text-ink">
                 Ver tudo
@@ -393,7 +393,7 @@ function SocialLinksStrip({ links }: { links: SocialLink[] }) {
               href={l.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="alvo-44 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-legenda text-ink-muted transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink"
+              className="alvo-44 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-corpo text-ink-muted transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink"
             >
               <SocialLinkIcon url={l.url} size={15} className="shrink-0 text-ink-subtle" />
               {l.label}
@@ -409,7 +409,7 @@ function SocialLinksStrip({ links }: { links: SocialLink[] }) {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-md border border-line bg-surface-muted px-3 py-2.5">
-      <dd className="text-titulo font-semibold text-ink">{value}</dd>
+      <dd className="text-2xl font-semibold text-ink">{value}</dd>
       <dt className="text-legenda text-ink-subtle">{label}</dt>
     </div>
   );

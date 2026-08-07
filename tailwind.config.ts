@@ -9,62 +9,66 @@ import type { Config } from "tailwindcss";
  * que claro/escuro troquem com uma única classe no <html>.
  *
  * -----------------------------------------------------------------------------
- * 1. ESCALA TIPOGRÁFICA — três degraus abaixo de 20px, e o porquê
+ * 1. ESCALA TIPOGRÁFICA
  * -----------------------------------------------------------------------------
- * A escala anterior nomeava seis tamanhos, mas o produto usava SETE abaixo de
- * 22px: micro 10, meta 11, legenda 12, corpo 13, corpo-forte 15, mais 99 usos de
- * `text-sm` (14px) que nunca entraram na escala. Um pixel de diferença entre
- * `legenda` (12) e `text-sm` (14) e `corpo` (13) não comunica hierarquia —
- * comunica decisões tomadas em momentos diferentes. O defeito não era o tamanho,
- * era a QUANTIDADE de degraus.
+ * A interface usava 230 tamanhos arbitrários (`text-[13px]`, `text-[12px]`…)
+ * espalhados por 34 arquivos. Tamanho arbitrário tem dois defeitos: ninguém
+ * consegue responder "qual é o tamanho do texto secundário?" sem abrir o arquivo,
+ * e — o que é pior — `text-[13px]` define APENAS font-size. A altura de linha
+ * ficava por conta do `line-height: 1.5` que o preflight do Tailwind põe no
+ * <html>, ou seja, um número herdado que ninguém escolheu.
  *
- * O DS 1.0 tem três abaixo de 20px, e é esta a escala agora:
+ * A escala abaixo nomeia os seis tamanhos que o projeto REALMENTE usa — nenhum
+ * degrau foi inventado para o futuro — e cada um leva sua altura de linha junto.
  *
- *   text-micro       10px / 14px   EXCEÇÃO — ver abaixo
- *   text-meta        12px / 16px   Eyebrow: rótulo curto, categoria, sobrescrito
- *   text-legenda     14px / 20px   Small:  METADATA — o que se CONSULTA
- *   text-corpo       16px / 24px   Body:   CONTEÚDO — o que se LÊ
- *   text-corpo-forte 20px / 29px   Body L: subtítulo de página, destaque
- *   text-titulo      24px / 30px   H3:     título de cartão, de bloco, de doc
- *   text-h2          32px / 35px   H2:     título de seção
- *   text-display     52→80px       Display editorial de cabeçalho de página
+ *   text-micro       10px / 14px   contador em chip, rótulo de canto
+ *   text-meta        11px / 16px   metadado, sobrescrito, rótulo maiúsculo
+ *   text-legenda     12px / 18px   legenda, texto de apoio, distintivo
+ *   text-corpo       13px / 20px   CORPO PADRÃO da interface (o mais usado)
+ *   text-corpo-forte 15px / 22px   corpo em destaque: título de cartão, de modal
+ *   text-titulo      22px / 28px   título de documento (editor de conhecimento)
  *
- * ⚠️ ESTE BLOCO MUDOU DE NATUREZA. Até a migração para o DS 1.0 ele afirmava que
- * a escala reproduzia o que já estava na tela, com no máximo 1px de diferença —
- * ou seja, que a nomeação NÃO era um redesenho disfarçado. Isso deixou de ser
- * verdade: `corpo` subiu de 13 para 16px, `legenda` de 12 para 14, `corpo-forte`
- * de 15 para 20. A adoção do DS é, explicitamente, um redesenho tipográfico, e
- * este texto é a nova referência.
+ * Por que estas alturas de linha e não outras: elas reproduzem quase exatamente
+ * o que a tela já mostrava (o 1.5 herdado dava 15 / 16.5 / 18 / 19.5 / 22.5 / 33),
+ * com diferença de no máximo 1px nos cinco primeiros degraus.
  *
- * -----------------------------------------------------------------------------
- * A REGRA QUE SUSTENTA A ESCALA: `corpo` vs. `legenda`
- * -----------------------------------------------------------------------------
- * O DS separa Body ("conteúdo e controles") de Small ("metadata"). Os 195 usos do
- * antigo `text-corpo` de 13px cobriam OS DOIS PAPÉIS — título de cartão e carimbo
- * de data usavam o mesmo tamanho. A migração triou um a um pelo critério:
+ * As alturas são pares mas nem todas múltiplas de 4. Isso é deliberado: altura
+ * de linha é valor tipográfico, não token de espaçamento.
  *
- *   text-corpo (16px)    o que a pessoa LÊ
- *                        descrição de cartão, rótulo de formulário, texto de
- *                        botão, mensagem de estado vazio, parágrafo de ajuda
+ * =============================================================================
+ * ⚠️ ESTA ESCALA JÁ FOI MIGRADA PARA O DS 1.0 E REVERTIDA. NÃO REFAÇA SEM LER.
+ * =============================================================================
+ * A migração levou os degraus aos valores do DS (meta 12, legenda 14, corpo 16,
+ * corpo-forte 20, titulo 24, mais `h2` 32 e um `display` fluido de 52–80px), com
+ * triagem dos 195 usos de `text-corpo` entre Body e Small. Funcionou, e foi
+ * revertida por decisão de produto: a densidade do DS não serve a ESTE produto.
  *
- *   text-legenda (14px)  o que a pessoa CONSULTA
- *                        célula de tabela, data, contador, chip, valor
- *                        monetário em lista, metadado de linha, texto de apoio
+ * O motivo é estrutural e não vai mudar sozinho. As três telas de maior uso
+ * diário — a tabela de Tarefas, a semana do Calendário e o mapa de calor de
+ * Hábitos — são GRADE, não texto editorial. Nelas, caber mais uma linha na tela
+ * vale mais que o respiro. O DS foi desenhado a partir de uma página-documento,
+ * e nessa página ele está certo; aqui ele custa ~30% de itens por rolagem.
  *
- * Não é preferência: é o que contém o refluxo nas telas densas. Subir metadata de
- * 13 para 16px (+23%) estouraria a tabela do Financeiro e a semana do Calendário;
- * subir para 14px (+8%) cabe. Componente do mesmo tipo usa o mesmo degrau em
- * todas as telas — a regra vale por PADRÃO DE COMPONENTE, não por arquivo.
+ * O que ficou da migração, e continua valendo: cor, raio, elevação, movimento,
+ * espaçamento, marca e acessibilidade. Só o TAMANHO do texto voltou.
  *
- * EXCEÇÃO `text-micro` (10px): o DS não tem degrau abaixo de 12px. Ela sobrevive
- * porque o mapa de calor de Hábitos põe 13 rótulos de semana lado a lado numa
- * grade de 7 linhas; em 12px a grade estoura. São 7 usos, todos em rótulo de eixo
- * de gráfico, e nenhum deles é texto que se lê em sequência.
+ * Consequências que acompanharam a reversão, para não serem "corrigidas" por
+ * engano:
+ *   - `h2` e `display` saíram da escala: ficaram sem ponto de uso. Se o título
+ *     editorial voltar, os dois precisam voltar com ele.
+ *   - `text-sm`, `text-lg` e `text-xl` voltaram ao código. Eles foram
+ *     consolidados durante a migração e desconsolidados junto — `text-sm` (14px)
+ *     não tem degrau nomeado equivalente nesta escala.
+ *   - O piso da semana do Calendário voltou de 900px para 760px.
+ *   - `Logotipo.tsx` deixou de tirar o tamanho da palavra desta escala e passou
+ *     a derivá-lo do lado do símbolo. Foi o único defeito real que a reversão
+ *     expôs: uma decisão sobre corpo de texto de interface estava deformando a
+ *     marca. Não desfaça.
  *
  * ATENÇÃO ao mexer aqui: usamos `theme.extend.fontSize`, NUNCA `theme.fontSize`.
- * Substituir a chave inteira apagaria a escala padrão do Tailwind. A migração
- * eliminou os `text-sm` soltos, mas `text-2xl`/`text-3xl` ainda aparecem em
- * pontos isolados e sumiriam de uma vez, silenciosamente (a classe deixa de
+ * Substituir a chave inteira apagaria a escala padrão do Tailwind, e o projeto
+ * usa `text-sm`, `text-lg`, `text-xl`, `text-2xl` e `text-4xl` em várias telas —
+ * todas quebrariam de uma vez, silenciosamente (a classe simplesmente deixa de
  * existir e o texto volta ao tamanho herdado, sem nenhum erro de build).
  *
  * Precedência: `leading-*` e `tracking-*` continuam vencendo o que está definido
@@ -187,35 +191,51 @@ const config: Config = {
       },
 
       /**
-       * Escala tipográfica nomeada. Ver o bloco 1 no topo do arquivo, que traz o
-       * critério `corpo` (o que se lê) vs. `legenda` (o que se consulta).
+       * Escala tipográfica nomeada. Ver o bloco 1 no topo do arquivo.
+       *
+       * ⚠️ ESTES SÃO OS TAMANHOS ORIGINAIS DO PROJETO, e a reversão foi
+       * deliberada. A migração para o Design System 1.0 levou esta escala aos
+       * degraus do DS (12/14/16/20/24/32 + display fluido) e ela foi REVERTIDA
+       * a pedido: a densidade do DS não serve a este produto, que é feito de
+       * tabela, agenda e grade — superfícies onde caber mais linha na tela vale
+       * mais do que o respiro editorial. Todas as OUTRAS decisões do DS (cor,
+       * raio, elevação, movimento, espaçamento, marca, acessibilidade)
+       * continuam valendo; só o tamanho do texto voltou.
+       *
+       * Consequência a não esquecer: os degraus `h2` e `display` saíram junto,
+       * porque ficaram sem nenhum ponto de uso. Se algum dia o título editorial
+       * do DS voltar, os dois precisam voltar com ele — não basta a classe.
        *
        * A forma [tamanho, { lineHeight }] faz o Tailwind emitir font-size e
        * line-height na MESMA regra — é o que garante que não volte a existir
        * tamanho de texto sem entrelinha declarada.
-       *
-       * `letterSpacing` só aparece de `titulo` para cima. Ajuste ótico é
-       * necessário quando a letra é grande: sem ele, um display de 80px parece
-       * frouxo. Abaixo de 24px, apertar ou soltar mudaria a largura de centenas
-       * de elementos já posicionados sem ganho de leitura.
-       *
-       * `display` usa clamp e não breakpoint porque o tamanho precisa acompanhar
-       * a largura continuamente. O piso de 3.25rem (52px) é o teto que o DS §9
-       * pede para o mobile — em 390px o clamp já escolhe o piso, e o título cabe
-       * em duas linhas em vez das três ou quatro que 80px produziriam.
        */
       fontSize: {
         micro: ["10px", { lineHeight: "14px" }],
-        meta: ["12px", { lineHeight: "16px" }],
-        legenda: ["14px", { lineHeight: "20px" }],
-        corpo: ["16px", { lineHeight: "24px" }],
-        "corpo-forte": ["20px", { lineHeight: "29px" }],
-        titulo: ["24px", { lineHeight: "30px", letterSpacing: "-0.02em" }],
-        h2: ["32px", { lineHeight: "35px", letterSpacing: "-0.035em" }],
-        display: [
-          "clamp(3.25rem, 5.1vw, 5rem)",
-          { lineHeight: "0.96", letterSpacing: "-0.055em" },
-        ],
+        meta: ["11px", { lineHeight: "16px" }],
+        legenda: ["12px", { lineHeight: "18px" }],
+        corpo: ["13px", { lineHeight: "20px" }],
+        "corpo-forte": ["15px", { lineHeight: "22px" }],
+        titulo: ["22px", { lineHeight: "28px", letterSpacing: "-0.01em" }],
+
+        /**
+         * ⚠️ MÉTRICA DE CONTROLE, NÃO DEGRAU DE TEXTO. Não use em parágrafo,
+         * rótulo, título ou célula — o corpo da interface é `text-corpo`.
+         *
+         * Existe por um motivo funcional e não estético: o Safari do iOS DÁ
+         * ZOOM ao focar um campo com texto menor que 16px, e o zoom não volta
+         * sozinho — a pessoa termina de preencher o formulário com a página
+         * deslocada de lado. É o piso do navegador, não uma escolha nossa.
+         *
+         * Por isso ele NÃO acompanhou a reversão dos tamanhos: o estado
+         * anterior tinha os ~40 campos do produto em 14px e, com eles, o
+         * defeito. Reverter aqui teria trocado um bug de celular por 2px de
+         * densidade em formulário — e formulário não é a superfície densa que
+         * motivou a reversão (as densas são tabela, agenda e grade).
+         *
+         * Só `ui/estilos.ts` deve consumir. Ver o cabeçalho de lá.
+         */
+        campo: ["16px", { lineHeight: "24px" }],
       },
 
       /**

@@ -86,7 +86,7 @@ export default async function CalendarioPage({
       )}
 
       <section className="mb-6">
-        <h2 className="mb-3 text-titulo font-semibold text-ink">Contas conectadas</h2>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Contas conectadas</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {[1, 2].map((slot) => {
             const account = accountsBySlot.get(slot) ?? null;
@@ -104,7 +104,7 @@ export default async function CalendarioPage({
       </section>
 
       <section>
-        <h2 className="mb-3 text-titulo font-semibold text-ink">Eventos</h2>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Eventos</h2>
         <CalendarViews
           events={events}
           accounts={accounts}

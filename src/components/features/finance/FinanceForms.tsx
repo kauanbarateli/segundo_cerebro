@@ -26,7 +26,7 @@ import {
 } from "@/app/(app)/financeiro/actions";
 
 const inputCls =
-  "h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-corpo text-ink";
+  "h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink";
 
 /*
   PARES DE CAMPOS — por que todo `grid-cols-2` deste arquivo tem `grid-cols-1`

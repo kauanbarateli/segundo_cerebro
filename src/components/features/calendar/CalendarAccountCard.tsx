@@ -47,7 +47,7 @@ export function CalendarAccountCard({
             <p className="eyebrow">Conta {slot}</p>
             <Badge tone="outline">Vazio</Badge>
           </div>
-          <p className="text-corpo font-medium text-ink">Nenhuma conta conectada</p>
+          <p className="text-sm font-medium text-ink">Nenhuma conta conectada</p>
           <p className="mt-1 text-corpo text-ink-subtle">
             Conecte uma conta Google para ver os compromissos aqui.
           </p>
@@ -55,7 +55,7 @@ export function CalendarAccountCard({
         {googleConfigured ? (
           <a
             href={connectHref}
-            className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-accent px-4 text-legenda font-medium text-accent-ink hover:opacity-90"
+            className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90"
           >
             <Icon.Google width={16} height={16} /> Conectar conta Google
           </a>
@@ -91,7 +91,7 @@ export function CalendarAccountCard({
           <Icon.Google width={16} height={16} />
         </div>
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 truncate text-corpo font-medium text-ink">
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
             {/*
               A LEGENDA. É aqui que se dá o apelido à conta, então é aqui que a
               cor precisa ser vista ao lado do nome — sem isso, o ponto teal na
@@ -198,7 +198,7 @@ export function CalendarAccountCard({
         </Button>
         <a
           href={connectHref}
-          className="alvo-44 inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-legenda font-medium text-ink hover:bg-surface-muted"
+          className="alvo-44 inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-corpo font-medium text-ink hover:bg-surface-muted"
         >
           Reconectar
         </a>

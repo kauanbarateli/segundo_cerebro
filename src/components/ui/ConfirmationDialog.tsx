@@ -56,7 +56,7 @@ export function ConfirmationDialog({
         className="w-full max-w-sm animate-modal-in rounded-xl border border-line bg-surface p-6 shadow-raised outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-titulo font-semibold text-ink">{title}</h2>
+        <h2 className="text-corpo-forte font-semibold text-ink">{title}</h2>
         {description && <p className="mt-2 text-corpo text-ink-muted">{description}</p>}
         {children}
         {/*

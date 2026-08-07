@@ -102,7 +102,7 @@ export function MobileNavigation({ items }: { items: ModuleDef[] }) {
   const itemDaFolha = (href: string) =>
     cn(
       // py-3 + 20px de linha = 44px de alvo, o piso de toque do projeto.
-      "flex items-center gap-3 rounded-md px-3 py-3 text-legenda font-medium",
+      "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium",
       ativo(href) ? "bg-surface-hover text-ink" : "text-ink-muted",
     );
 

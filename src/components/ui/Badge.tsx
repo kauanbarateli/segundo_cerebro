@@ -88,7 +88,7 @@ export function PillButton({
       type="button"
       aria-pressed={active}
       className={cn(
-        "alvo-44 inline-flex h-10 items-center gap-2 rounded-full px-4 text-legenda font-medium leading-none",
+        "alvo-44 inline-flex h-10 items-center gap-2 rounded-full px-4 text-corpo font-medium leading-none",
         // Mesmo estado `pressed` do Button, e pelo mesmo motivo — ver o
         // comentário lá. `aria-pressed` acima já diz o estado ao leitor de tela;
         // isto é o sinal visual que faltava para o resto das pessoas.

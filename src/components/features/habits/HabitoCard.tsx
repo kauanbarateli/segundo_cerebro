@@ -36,8 +36,8 @@ import type { CelulaDoCalendario, ResumoDeHabito } from "@/lib/habits";
  *   3. a linha de taxa e falhas, que resume por escrito o que o mapa mostra.
  *
  * ⚠️ A sequência é `font-light`, e isso é escolha, não descuido. Num sistema
- * monocromático o tamanho já basta para dominar: os 32px do `text-h2` ao lado
- * dos 14px da unidade não precisam de peso. Um número enorme em semibold GRITA,
+ * monocromático o tamanho já basta para dominar: os 36px do `text-4xl` ao lado
+ * dos 12px da unidade não precisam de peso. Um número enorme em semibold GRITA,
  * e este módulo mede rotina, não desempenho — a decisão de "não celebrar demais"
  * começa aqui.
  */
@@ -105,7 +105,7 @@ export function HabitoCard({
       </header>
 
       <p className="flex items-baseline gap-2">
-        <span className="text-h2 font-light leading-none text-ink tabular-nums">
+        <span className="text-4xl font-light leading-none tracking-tight text-ink tabular-nums">
           {sequencia}
         </span>
         <span className="text-legenda text-ink-muted">

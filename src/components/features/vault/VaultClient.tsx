@@ -277,7 +277,7 @@ function LockedView({
             <Icon.Lock width={20} height={20} />
           </div>
           <div>
-            <h2 className="text-titulo font-semibold text-ink">Cofre criado</h2>
+            <h2 className="text-lg font-semibold text-ink">Cofre criado</h2>
             <p className="text-corpo text-ink-subtle">
               Guarde a senha mestra num gerenciador de senhas. Depois, gere o kit de recuperação.
             </p>
@@ -303,7 +303,7 @@ function LockedView({
         <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink">
           <Icon.Lock width={20} height={20} />
         </div>
-        <h2 className="text-titulo font-semibold text-ink">Sem kit de recuperação</h2>
+        <h2 className="text-lg font-semibold text-ink">Sem kit de recuperação</h2>
 
         <div className="my-4 rounded-md border border-line bg-surface-muted px-4 py-3 text-left">
           <p className="text-corpo font-medium text-ink">
@@ -337,7 +337,7 @@ function LockedView({
             <Icon.Lock width={20} height={20} />
           </div>
           <div>
-            <h2 className="text-titulo font-semibold text-ink">Recuperar com o kit</h2>
+            <h2 className="text-lg font-semibold text-ink">Recuperar com o kit</h2>
             <p className="text-corpo text-ink-subtle">
               Para quando a senha mestra se perdeu.
             </p>
@@ -361,7 +361,7 @@ function LockedView({
           <Icon.Lock width={20} height={20} />
         </div>
         <div>
-          <h2 className="text-titulo font-semibold text-ink">
+          <h2 className="text-lg font-semibold text-ink">
             {hasMasterKey ? "Cofre bloqueado" : "Criar cofre"}
           </h2>
           <p className="text-corpo text-ink-subtle">
@@ -545,7 +545,7 @@ function UnlockedView({
                         {item.data.name.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-corpo font-medium text-ink">{item.data.name}</p>
+                        <p className="truncate text-sm font-medium text-ink">{item.data.name}</p>
                         <p className="truncate text-legenda text-ink-subtle">
                           {item.data.username || item.data.email || item.data.accountNumber || "—"}
                         </p>
@@ -636,7 +636,7 @@ function UnlockedView({
         </Card>
         <Card className="p-6">
           <p className="eyebrow mb-2">Itens</p>
-          <p className="text-h2 font-semibold text-ink">{items.length}</p>
+          <p className="text-3xl font-semibold text-ink">{items.length}</p>
           <p className="text-legenda text-ink-subtle">protegidos com AES-256-GCM</p>
         </Card>
 

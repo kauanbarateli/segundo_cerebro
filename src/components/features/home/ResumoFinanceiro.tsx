@@ -87,7 +87,7 @@ export function ResumoFinanceiro({
   if (snapshot.accounts.length === 0) {
     return (
       <section aria-labelledby="resumo-financeiro">
-        <h2 id="resumo-financeiro" className="mb-3 text-titulo font-semibold text-ink">
+        <h2 id="resumo-financeiro" className="mb-3 text-lg font-semibold text-ink">
           Como o mês está
         </h2>
         <Card>
@@ -172,7 +172,7 @@ export function ResumoFinanceiro({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="eyebrow">Dinheiro</p>
-          <h2 id="resumo-financeiro" className="text-titulo font-semibold text-ink">
+          <h2 id="resumo-financeiro" className="text-lg font-semibold text-ink">
             Como o mês está
           </h2>
         </div>
@@ -249,7 +249,7 @@ function Numero({
         destaque ? "border-line-strong" : "border-line",
       )}
     >
-      <dd className={cn("text-titulo font-semibold", alerta ? "text-danger-ink" : "text-ink")}>
+      <dd className={cn("text-lg font-semibold", alerta ? "text-danger-ink" : "text-ink")}>
         {valor}
       </dd>
       <dt className="text-legenda text-ink-subtle">{rotulo}</dt>

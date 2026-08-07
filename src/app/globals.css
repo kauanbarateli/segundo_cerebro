@@ -239,14 +239,18 @@ body {
 }
 
 /* Eyebrow — rótulo curto em caixa alta, acima do título da página.
-   É o degrau Eyebrow do DS §4: 12px, peso 600, tracking 0.16em, entrelinha 1.
+   ⚠️ O TAMANHO é o original do projeto (11px), não os 12px do degrau Eyebrow do
+   DS §4: os tamanhos de texto do DS foram revertidos: ver a nota na escala em
+   tailwind.config.ts. O peso 600, o tracking de 0.16em e a entrelinha 1 SÃO do
+   DS e continuam valendo — nenhum dos três é tamanho.
    A entrelinha é 1 porque o eyebrow é sempre UMA linha e o espaço abaixo dele é
    dado por margem, não por entrelinha — com 1.5 herdado o rótulo ficava boiando
    longe demais do título que ele apresenta.
-   A cor é `ink-muted`, e não `ink-subtle`: em caixa alta e 12px este texto ainda
-   é conteúdo que se lê, e `ink-subtle` reprova em AA no tema claro (2.86). */
+   A cor é `ink-muted`, e não `ink-subtle`: em caixa alta este texto ainda é
+   conteúdo que se lê, e `ink-subtle` reprova em AA no tema claro (2.86). Isto é
+   correção de acessibilidade e não acompanha a reversão. */
 .eyebrow {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   line-height: 1;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -350,12 +354,13 @@ body {
 
 .sb-editor-conteudo {
   outline: none;
-  /* 16px é o Body do DS §4, e o editor é o lugar do produto em que a pessoa
-     mais LÊ em sequência. Eram 15px — um degrau que não existia na escala e que
-     deixava o documento menor que o corpo da interface em volta dele. A
-     entrelinha de 1.7 é maior que o 1.5 do Body de propósito: parágrafo corrido
-     de várias linhas pede mais respiro que rótulo de interface. */
-  font-size: 16px;
+  /* 15px, o valor original. Chegou a ser 16px (o Body do DS §4) e voltou junto
+     com o resto dos tamanhos — ver a nota na escala em tailwind.config.ts.
+     Continua sendo o maior corpo de leitura do produto, que é o que este lugar
+     pede: é onde a pessoa mais LÊ em sequência. A entrelinha de 1.7 é maior que
+     a do corpo da interface de propósito — parágrafo corrido de várias linhas
+     pede mais respiro que rótulo. */
+  font-size: 15px;
   line-height: 1.7;
   color: rgb(var(--sb-ink));
 }
@@ -466,9 +471,10 @@ body {
   /* Linha longa rola DENTRO do bloco. Sem isto o bloco alarga o editor inteiro
      e a página ganha rolagem horizontal. */
   overflow-x: auto;
-  /* 14px = o degrau Small. Código é o que se CONSULTA, não o que se lê em
-     sequência, e a fonte monoespaçada já ocupa mais largura por caractere. */
-  font-size: 14px;
+  /* 13px, o valor original — chegou a ser 14px e voltou com os demais tamanhos.
+     Código é o que se CONSULTA, não o que se lê em sequência, e a fonte
+     monoespaçada já ocupa mais largura por caractere. */
+  font-size: 13px;
   line-height: 1.6;
   tab-size: 2;
 }

@@ -472,7 +472,7 @@ function SeletorDeKit({
           // `e.target.files` é uma lista viva do input.
           onSelecionar(e.target.files?.[0] ?? null);
         }}
-        className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full file:mr-3 file:rounded-sm file:border-0 file:bg-surface-muted file:px-3 file:py-1 file:text-corpo file:text-ink")}
+        className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full file:mr-3 file:rounded-sm file:border-0 file:bg-surface-muted file:px-3 file:py-1 file:text-sm file:text-ink")}
       />
       {arquivo && <p className="mt-1 text-legenda text-ink-subtle">{arquivo.name}</p>}
     </div>

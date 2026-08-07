@@ -61,7 +61,7 @@ export default function ConhecimentoError({
               abrir outra página. */}
           <Link
             href="/conhecimento"
-            className="alvo-44 inline-flex h-8 items-center rounded-sm border border-line-strong px-3 text-legenda font-medium text-ink hover:bg-surface-muted"
+            className="alvo-44 inline-flex h-8 items-center rounded-sm border border-line-strong px-3 text-corpo font-medium text-ink hover:bg-surface-muted"
           >
             Voltar aos cadernos
           </Link>

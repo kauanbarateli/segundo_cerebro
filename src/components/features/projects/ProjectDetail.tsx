@@ -172,7 +172,7 @@ export function ProjectDetail({
                       setDesvinculando({ tipo: "tarefa", id: t.id, rotulo: t.title })
                     }
                   >
-                    <span className="min-w-0 flex-1 truncate text-legenda text-ink">{t.title}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{t.title}</span>
                     <span className="shrink-0 text-legenda text-ink-subtle">
                       {formatDayLabel(t.due_at ?? t.scheduled_start_at)}
                     </span>
@@ -201,7 +201,7 @@ export function ProjectDetail({
                       }
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-legenda text-ink">{rotulo}</p>
+                        <p className="truncate text-sm text-ink">{rotulo}</p>
                         {c.converted_task_id && (
                           /* O selo torna VISÍVEL a divergência que a regra de
                              desempate aceita: esta captura virou tarefa, e a
@@ -239,7 +239,7 @@ export function ProjectDetail({
                     }
                   >
                     <Icon.Book width={14} height={14} className="shrink-0 text-ink-subtle" />
-                    <span className="min-w-0 flex-1 truncate text-legenda text-ink">{c.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{c.name}</span>
                   </LinhaVinculada>
                 ))}
               </ul>
@@ -261,7 +261,7 @@ export function ProjectDetail({
                         className="flex min-h-11 items-center gap-3 px-4 py-3 hover:bg-surface-muted"
                       >
                         <Icon.File width={14} height={14} className="shrink-0 text-ink-subtle" />
-                        <span className="min-w-0 flex-1 truncate text-legenda text-ink">
+                        <span className="min-w-0 flex-1 truncate text-sm text-ink">
                           {rotuloDaPagina(p.title)}
                         </span>
                         <span className="shrink-0 text-legenda text-ink-subtle">
@@ -292,7 +292,7 @@ export function ProjectDetail({
                     }
                   >
                     <Icon.Folder width={14} height={14} className="shrink-0 text-ink-subtle" />
-                    <span className="min-w-0 flex-1 truncate text-legenda text-ink">{f.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{f.name}</span>
                   </LinhaVinculada>
                 ))}
               </ul>
@@ -415,7 +415,7 @@ function Secao({
   return (
     <section>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-titulo font-semibold text-ink">{def.tituloDaSecao}</h2>
+        <h2 className="text-lg font-semibold text-ink">{def.tituloDaSecao}</h2>
         <div className="flex flex-wrap items-center gap-1.5">
           <Button variant="secondary" size="sm" onClick={aoCriar}>
             <Icon.Capture width={14} height={14} aria-hidden />
@@ -429,7 +429,7 @@ function Secao({
           </Button>
           <Link
             href={def.rotaDoModulo}
-            className="alvo-44 rounded-sm px-2 py-1 text-legenda text-ink-muted hover:text-ink"
+            className="alvo-44 rounded-sm px-2 py-1 text-corpo text-ink-muted hover:text-ink"
           >
             Abrir módulo
           </Link>

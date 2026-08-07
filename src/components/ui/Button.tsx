@@ -97,9 +97,12 @@ const sizes: Record<Size, string> = {
   // `alvo-44` só no `sm`: é o único que desenha menos de 44px. Nos outros dois
   // a classe seria inócua (a caixa já é maior que o mínimo) e ainda assim
   // custaria um `position: relative` em todo botão do produto.
-  sm: "alvo-44 h-10 px-3.5 text-legenda rounded-md gap-2",
-  md: "h-11 px-4 text-corpo rounded-md gap-2.5",
-  lg: "h-13 px-5 text-corpo rounded-md gap-2.5",
+  // Os TAMANHOS DE TEXTO são os originais do projeto (13/14/15), não os do DS —
+  // ver a nota na escala em tailwind.config.ts. As ALTURAS são as do DS e
+  // continuam valendo: elas são o que põe o `sm` acima do piso de toque.
+  sm: "alvo-44 h-10 px-3.5 text-corpo rounded-md gap-2",
+  md: "h-11 px-4 text-sm rounded-md gap-2.5",
+  lg: "h-13 px-5 text-corpo-forte rounded-md gap-2.5",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

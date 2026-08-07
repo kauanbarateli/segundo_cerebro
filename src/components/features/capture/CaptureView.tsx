@@ -357,7 +357,7 @@ export function CaptureView({
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <div>
             <p className="eyebrow">Sem organizar</p>
-            <p className="text-corpo-forte font-semibold text-ink">Caixa de entrada</p>
+            <p className="text-sm font-semibold text-ink">Caixa de entrada</p>
           </div>
           <Badge>{captures.length} itens</Badge>
         </div>
@@ -407,7 +407,7 @@ export function CaptureView({
                       {formatDayLabel(c.captured_at)}
                     </span>
                   </span>
-                  {c.title && <span className="block text-corpo font-medium text-ink">{c.title}</span>}
+                  {c.title && <span className="block text-sm font-medium text-ink">{c.title}</span>}
                   {c.content && (
                     <span className="line-clamp-2 text-corpo text-ink-muted">{c.content}</span>
                   )}
@@ -625,7 +625,7 @@ function CaptureDetailBody({
         // whitespace-pre-wrap porque o compositor é um textarea: as quebras de
         // linha são as que a pessoa digitou e são a única formatação que existe
         // aqui. break-words segura URLs e palavras longas dentro do painel.
-        <p className="whitespace-pre-wrap break-words text-legenda leading-relaxed text-ink-muted">
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-muted">
           {capture.content}
         </p>
       ) : (

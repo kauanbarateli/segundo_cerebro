@@ -41,7 +41,7 @@ export default function LoginPage() {
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
           <h1 className="sr-only">Segundo Cérebro</h1>
           <Logotipo variante="horizontal" size={52} />
-          <p className="text-corpo-forte text-ink-muted">Tudo que importa, em um só lugar.</p>
+          <p className="text-corpo text-ink-muted">Tudo que importa, em um só lugar.</p>
         </div>
 
         {!configured && (

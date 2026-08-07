@@ -54,7 +54,7 @@ export function ProjectsView({ projetos }: { projetos: Project[] }) {
                   <div className="flex items-start justify-between gap-2">
                     <Link
                       href={`/projetos/${p.id}`}
-                      className="min-w-0 flex-1 rounded-sm text-corpo font-medium text-ink hover:underline"
+                      className="min-w-0 flex-1 rounded-sm text-sm font-medium text-ink hover:underline"
                     >
                       {p.name}
                     </Link>

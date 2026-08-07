@@ -31,7 +31,7 @@ export default async function AjudaPage() {
             key={s.keys}
             className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
           >
-            <span className="text-legenda font-medium text-ink">{s.keys}</span>
+            <span className="text-sm font-medium text-ink">{s.keys}</span>
             <span className="text-corpo text-ink-subtle sm:text-right">{s.desc}</span>
           </div>
         ))}

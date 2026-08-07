@@ -231,7 +231,7 @@ export function TarefasDeHoje({
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 className="text-titulo font-semibold text-ink">Tarefas de hoje</h2>
+        <h2 className="text-lg font-semibold text-ink">Tarefas de hoje</h2>
         {/*
           O indicador de carregamento é uma FRASE, e não um giro: ele diz o que
           está acontecendo (falta o ClickUp) para que a lista já visível não
@@ -273,7 +273,7 @@ export function TarefasDeHoje({
 
 function LinhaDeTarefa({ linha }: { linha: Linha }) {
   const classeTitulo = cn(
-    "text-corpo font-medium",
+    "text-sm font-medium",
     linha.concluida ? "text-ink-subtle line-through" : "text-ink",
   );
 
@@ -373,7 +373,7 @@ function FalhaDoClickUp({
       {erro.motivo === "token_invalido" ? (
         <Link
           href="/configuracoes"
-          className="alvo-44 inline-flex h-8 shrink-0 items-center rounded-sm border border-line-strong px-3 text-legenda font-medium text-ink hover:bg-surface-muted"
+          className="alvo-44 inline-flex h-8 shrink-0 items-center rounded-sm border border-line-strong px-3 text-corpo font-medium text-ink hover:bg-surface-muted"
         >
           Abrir Configurações
         </Link>

@@ -225,7 +225,7 @@ export function ModulesPanel({ enabled }: { enabled: string[] }) {
             <li key={m.key} className="flex items-center gap-3 py-3">
               <Glyph width={18} height={18} className="shrink-0 text-ink-muted" />
               <div className="min-w-0 flex-1">
-                <p className="text-corpo font-medium text-ink">
+                <p className="text-sm font-medium text-ink">
                   {m.label}
                   {m.core && (
                     <span className="ml-2 text-meta font-normal text-ink-subtle">essencial</span>
@@ -317,7 +317,7 @@ export function NotificationsPanel({
       </p>
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-legenda text-ink">Avisar sobre reuniões</span>
+        <span className="text-sm text-ink">Avisar sobre reuniões</span>
         <button
           type="button"
           role="switch"
@@ -681,7 +681,7 @@ function LinhaDeLink({
       <SocialLinkIcon url={item.url} className="shrink-0 text-ink-muted" />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-corpo font-medium text-ink">{item.label}</p>
+        <p className="truncate text-sm font-medium text-ink">{item.label}</p>
         <p className="truncate text-legenda text-ink-subtle">{item.url}</p>
       </div>
 
@@ -807,7 +807,7 @@ export function PrivacyPanel({ hideValues }: { hideValues: boolean }) {
       <h2 className="text-corpo-forte font-semibold text-ink">Privacidade</h2>
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-legenda text-ink">Ocultar valores financeiros</p>
+          <p className="text-sm text-ink">Ocultar valores financeiros</p>
           <p className="mt-0.5 text-legenda text-ink-subtle">
             Mascara os valores na tela até você revelar. É privacidade visual —
             não substitui criptografia.

@@ -315,7 +315,7 @@ export function Modal({
           SIZE_CLASS[size],
         )}
       >
-        <h2 id={titleId} className="mb-5 text-titulo font-semibold text-ink">
+        <h2 id={titleId} className="mb-5 text-corpo-forte font-semibold text-ink">
           {title}
         </h2>
         {children}

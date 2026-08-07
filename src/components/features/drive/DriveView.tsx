@@ -253,7 +253,7 @@ export function DriveView({
         <div className="flex flex-wrap gap-2">
           <Link
             href="/drive/lixeira"
-            className="alvo-44 inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-legenda text-ink-muted hover:text-ink"
+            className="alvo-44 inline-flex h-8 items-center gap-1.5 rounded-sm border border-line-strong px-3 text-corpo text-ink-muted hover:text-ink"
           >
             <Icon.Trash width={14} height={14} /> Lixeira
           </Link>
@@ -348,7 +348,7 @@ export function DriveView({
                   <Icon.Folder width={18} height={18} className="shrink-0 text-ink-muted" />
                   <Link
                     href={`/drive?folder=${f.id}`}
-                    className="min-w-0 flex-1 truncate text-corpo font-medium text-ink hover:underline"
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-ink hover:underline"
                   >
                     {f.name}
                   </Link>
@@ -393,7 +393,7 @@ export function DriveView({
                   <button
                     type="button"
                     onClick={() => void download(file)}
-                    className="min-w-0 flex-1 truncate text-left text-legenda text-ink hover:underline"
+                    className="min-w-0 flex-1 truncate text-left text-sm text-ink hover:underline"
                   >
                     {file.name}
                   </button>

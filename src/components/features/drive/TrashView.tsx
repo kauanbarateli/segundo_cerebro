@@ -47,7 +47,7 @@ export function TrashView({ files }: { files: DriveFile[] }) {
               >
                 <Icon.File width={18} height={18} className="shrink-0 text-ink-subtle" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-legenda text-ink">{file.name}</p>
+                  <p className="truncate text-sm text-ink">{file.name}</p>
                   <p className="text-legenda text-ink-subtle">
                     Excluído {formatDayLabel(file.deleted_at)} · {formatBytes(file.size_bytes)}
                   </p>

@@ -151,7 +151,7 @@ export function AppSidebar({
       >
         <Logotipo variante="simbolo" size={32} />
         <div className={cn("leading-tight", AO_RECOLHER_OCULTA)}>
-          <p className="text-corpo font-bold tracking-tight text-ink">Segundo</p>
+          <p className="text-corpo-forte font-bold tracking-tight text-ink">Segundo</p>
           <p className="text-corpo text-ink-muted">Cérebro</p>
         </div>
 
@@ -221,7 +221,7 @@ export function AppSidebar({
                  maior é o que faz a barra parecer navegação em vez de lista:
                  dez itens colados a 40px leem como um índice. */
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-4 text-legenda font-medium transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-4 text-sm font-medium transition-colors",
                 AO_RECOLHER_SO_ICONE,
                 active
                   ? "bg-accent text-accent-ink"
@@ -279,7 +279,7 @@ export function AppSidebar({
           aria-label="Configurações"
           title={recolhida ? "Configurações" : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-3 text-legenda text-ink-muted hover:bg-surface-hover hover:text-ink",
+            "flex items-center gap-3 rounded-md px-3 py-3 text-corpo text-ink-muted hover:bg-surface-hover hover:text-ink",
             AO_RECOLHER_SO_ICONE,
           )}
         >
@@ -291,7 +291,7 @@ export function AppSidebar({
           aria-label="Ajuda e atalhos"
           title={recolhida ? "Ajuda e atalhos" : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-3 text-legenda text-ink-muted hover:bg-surface-hover hover:text-ink",
+            "flex items-center gap-3 rounded-md px-3 py-3 text-corpo text-ink-muted hover:bg-surface-hover hover:text-ink",
             AO_RECOLHER_SO_ICONE,
           )}
         >

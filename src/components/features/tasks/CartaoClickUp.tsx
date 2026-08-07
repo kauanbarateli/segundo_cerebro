@@ -66,7 +66,7 @@ export function CartaoClickUp({
         <button
           type="button"
           onClick={aoAbrir}
-          className="min-w-0 flex-1 rounded-sm text-left text-corpo font-medium text-ink hover:underline"
+          className="min-w-0 flex-1 rounded-sm text-left text-sm font-medium text-ink hover:underline"
         >
           {subtarefa && (
             /*

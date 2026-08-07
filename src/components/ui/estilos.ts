@@ -24,9 +24,14 @@
  * `line-strong`) — o suficiente para dois campos vizinhos, no mesmo formulário,
  * não se parecerem.
  *
- * Por que 16px de texto e não 14: além de ser o Body do DS §4, é o piso abaixo do
- * qual o Safari do iOS DÁ ZOOM ao focar o campo. O zoom não volta sozinho, e a
- * pessoa termina de preencher o formulário com a página deslocada de lado.
+ * Por que 16px de texto (`text-campo`) e não 13 ou 14: é o piso abaixo do qual o
+ * Safari do iOS DÁ ZOOM ao focar o campo. O zoom não volta sozinho, e a pessoa
+ * termina de preencher o formulário com a página deslocada de lado.
+ *
+ * ⚠️ ESTE É O ÚNICO TAMANHO DE TEXTO QUE NÃO VOLTOU quando a escala do DS 1.0 foi
+ * revertida aos valores originais do projeto (ver tailwind.config.ts). O estado
+ * anterior punha os campos em 14px e trazia o defeito junto. `text-campo` é
+ * métrica de controle, não degrau da escala — não use fora deste arquivo.
  *
  * `w-full` NÃO entra aqui: largura é decisão do layout onde o campo está, e
  * embutir obrigaria metade dos usos a desfazer com `max-w-*`. Quem quer largura
@@ -37,7 +42,7 @@
  * criaria uma segunda definição para divergir da primeira.
  */
 export const CLASSE_DO_CAMPO =
-  "h-13 rounded-md border border-line bg-surface px-4 text-corpo text-ink " +
+  "h-13 rounded-md border border-line bg-surface px-4 text-campo text-ink " +
   "placeholder:text-ink-muted disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:text-disabled";
 
 /**
@@ -45,7 +50,7 @@ export const CLASSE_DO_CAMPO =
  * `<textarea>` vem do atributo `rows`, e um `h-13` aqui brigaria com ele.
  */
 export const CLASSE_DO_CAMPO_MULTILINHA =
-  "rounded-md border border-line bg-surface px-4 py-3 text-corpo text-ink " +
+  "rounded-md border border-line bg-surface px-4 py-3 text-campo text-ink " +
   "placeholder:text-ink-muted disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:text-disabled";
 
 /**
@@ -63,5 +68,5 @@ export const CLASSE_DO_CAMPO_MULTILINHA =
  * `pl-9` deixavam o texto digitado encostando no ícone.
  */
 export const CLASSE_DO_CAMPO_DE_BUSCA =
-  "h-13 w-full rounded-md border border-line bg-surface pl-11 pr-4 text-corpo text-ink " +
+  "h-13 w-full rounded-md border border-line bg-surface pl-11 pr-4 text-campo text-ink " +
   "placeholder:text-ink-muted";

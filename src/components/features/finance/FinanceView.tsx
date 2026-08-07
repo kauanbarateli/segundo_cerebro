@@ -122,7 +122,7 @@ export function FinanceView(props: FinanceViewProps) {
           >
             ‹
           </Button>
-          <span className="min-w-[9rem] text-center text-corpo font-medium capitalize text-ink">
+          <span className="min-w-[9rem] text-center text-sm font-medium capitalize text-ink">
             {monthLabel(month)}
           </span>
           <Button
@@ -138,7 +138,7 @@ export function FinanceView(props: FinanceViewProps) {
         <button
           type="button"
           onClick={() => setHidden((v) => !v)}
-          className="alvo-44 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-legenda text-ink-muted hover:text-ink"
+          className="alvo-44 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-corpo text-ink-muted hover:text-ink"
           aria-pressed={hidden}
         >
           {hidden ? <Icon.Eye width={14} height={14} /> : <Icon.EyeOff width={14} height={14} />}
@@ -278,7 +278,7 @@ function Dashboard({
             <ul className="mt-4 space-y-3">
               {byCategory.map((c) => (
                 <li key={c.categoryId ?? "none"}>
-                  <div className="mb-1 flex items-center justify-between text-legenda">
+                  <div className="mb-1 flex items-center justify-between text-corpo">
                     <span className="text-ink">{c.name}</span>
                     <span className="text-ink-muted">
                       {money(c.totalCents)}
@@ -362,7 +362,7 @@ function StatCard({
       */}
       <p
         className={cn(
-          "mt-1 text-titulo font-semibold tabular-nums",
+          "mt-1 text-2xl font-semibold tabular-nums",
           tone === "negative"
             ? "text-danger-ink"
             : tone === "positive"
@@ -403,7 +403,7 @@ function CompareRow({
   const max = Math.max(Math.abs(current), Math.abs(previous), 1);
   return (
     <div className="mb-4 last:mb-0">
-      <p className="mb-1.5 text-legenda font-medium text-ink">{label}</p>
+      <p className="mb-1.5 text-corpo font-medium text-ink">{label}</p>
       <div className="space-y-1.5">
         <Bar value={Math.abs(current)} max={max} caption={money(current)} strong />
         <Bar value={Math.abs(previous)} max={max} caption={money(previous)} />
@@ -557,7 +557,7 @@ function Transactions({
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-corpo font-medium text-ink">
+                  <p className="truncate text-sm font-medium text-ink">
                     {descricaoSemParcela(tx)}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-legenda text-ink-subtle">
@@ -583,7 +583,7 @@ function Transactions({
                 <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
                   <span
                     className={cn(
-                      "shrink-0 text-legenda font-semibold tabular-nums",
+                      "shrink-0 text-sm font-semibold tabular-nums",
                       /* Entrada em `success`, saída em `danger` — e os dois
                          com reforço: o disco à esquerda da linha traz "+", "−"
                          ou "⇄", e a saída ainda ganha o "−" colado ao valor,
@@ -608,7 +608,7 @@ function Transactions({
                           setEditing(tx);
                           setFormOpen(true);
                         }}
-                        className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
+                        className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
                       >
                         Editar
                       </button>
@@ -882,14 +882,14 @@ function Accounts({
                 className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:flex-nowrap"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-corpo font-medium text-ink">{a.name}</p>
+                  <p className="truncate text-sm font-medium text-ink">{a.name}</p>
                   <p className="truncate text-legenda text-ink-subtle">
                     {KIND_LABEL[a.kind] ?? a.kind}
                     {a.institution ? ` · ${a.institution}` : ""}
                   </p>
                 </div>
                 <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
-                  <span className="shrink-0 text-legenda font-semibold tabular-nums text-ink">
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
                     {money(balanceById.get(a.id)?.balance_cents ?? a.opening_balance_cents)}
                   </span>
                   <div className="flex shrink-0 gap-3">
@@ -899,7 +899,7 @@ function Accounts({
                         setEditing(a);
                         setFormOpen(true);
                       }}
-                      className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
+                      className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
                     >
                       Editar
                     </button>
@@ -1068,7 +1068,7 @@ function CreditCardPanel({
     <Card className="flex flex-col gap-4 p-6">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-corpo-forte font-semibold text-ink">{card.name}</p>
+          <p className="truncate text-sm font-semibold text-ink">{card.name}</p>
           <p className="mt-0.5 text-legenda text-ink-subtle">
             {KIND_LABEL.credit_card}
             {card.institution ? ` · ${card.institution}` : ""}
@@ -1078,7 +1078,7 @@ function CreditCardPanel({
           <button
             type="button"
             onClick={onEdit}
-            className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
+            className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
           >
             Editar
           </button>
@@ -1107,19 +1107,19 @@ function CreditCardPanel({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Limite</p>
-          <p className="text-legenda font-semibold tabular-nums text-ink sm:mt-0.5">
+          <p className="text-sm font-semibold tabular-nums text-ink sm:mt-0.5">
             {temLimite ? money(limiteCents!) : "—"}
           </p>
         </div>
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Usado</p>
-          <p className="text-legenda font-semibold tabular-nums text-ink sm:mt-0.5">{money(usadoCents)}</p>
+          <p className="text-sm font-semibold tabular-nums text-ink sm:mt-0.5">{money(usadoCents)}</p>
         </div>
         <div className="flex items-baseline justify-between gap-2 sm:block">
           <p className="text-legenda text-ink-subtle">Disponível</p>
           <p
             className={cn(
-              "text-legenda font-semibold tabular-nums sm:mt-0.5",
+              "text-sm font-semibold tabular-nums sm:mt-0.5",
               disponivelCents != null && disponivelCents < 0
                 ? "text-danger-ink"
                 : "text-ink",
@@ -1131,7 +1131,7 @@ function CreditCardPanel({
       </div>
 
       {percentual == null ? (
-        <p className="text-corpo text-ink-subtle">
+        <p className="text-legenda text-ink-subtle">
           Limite não cadastrado — edite o cartão para acompanhar quanto já foi comprometido.
         </p>
       ) : (
@@ -1170,7 +1170,7 @@ function CreditCardPanel({
           <p className="text-corpo font-medium capitalize text-ink">
             Fatura de {monthLabel(month)}
           </p>
-          <p className="text-legenda font-semibold tabular-nums text-ink">
+          <p className="text-sm font-semibold tabular-nums text-ink">
             {fatura ? money(fatura.totalCents) : "—"}
           </p>
         </div>
@@ -1195,7 +1195,7 @@ function CreditCardPanel({
             )}
           </>
         ) : (
-          <p className="mt-1 text-corpo text-danger-ink">
+          <p className="mt-1 text-legenda text-danger-ink">
             Sem dia de fechamento cadastrado: não dá para saber a que fatura cada compra
             pertence. Edite o cartão.
           </p>
@@ -1248,7 +1248,7 @@ function CategoriesAndTags({
           <ul className="divide-y divide-line">
             {categories.map((c) => (
               <li key={c.id} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="min-w-0 flex-1 truncate text-corpo text-ink">{c.name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{c.name}</span>
                 <Badge tone="outline">{c.kind === "income" ? "Receita" : "Despesa"}</Badge>
                 <button
                   type="button"
@@ -1256,7 +1256,7 @@ function CategoriesAndTags({
                     setEditingCat(c);
                     setCatOpen(true);
                   }}
-                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
+                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
                 >
                   Editar
                 </button>
@@ -1300,14 +1300,14 @@ function CategoriesAndTags({
           <ul className="divide-y divide-line">
             {tags.map((t) => (
               <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="min-w-0 flex-1 truncate text-corpo text-ink">#{t.name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">#{t.name}</span>
                 <button
                   type="button"
                   onClick={() => {
                     setEditingTag(t);
                     setTagOpen(true);
                   }}
-                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-legenda text-ink-muted hover:text-ink"
+                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
                 >
                   Editar
                 </button>
@@ -1412,7 +1412,7 @@ function Budgets({
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 {/* `min-w-0` + `truncate`: sem os dois, "Alimentação fora de casa"
                     empurrava o par gasto/limite para fora do cartão no celular. */}
-                <span className="min-w-0 truncate text-corpo font-medium text-ink">{p.categoryName}</span>
+                <span className="min-w-0 truncate text-sm font-medium text-ink">{p.categoryName}</span>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="text-legenda text-ink-muted">
                     {money(p.spentCents)} / {money(p.budget.limit_cents)}

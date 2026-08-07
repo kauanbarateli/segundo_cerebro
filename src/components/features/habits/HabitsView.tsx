@@ -480,7 +480,7 @@ function LinhaDeHoje({
             é uma pergunta em aberto no meio da semana. */}
         {semanal && (
           <span className="flex shrink-0 flex-col items-end gap-1.5">
-            <span className="text-legenda tabular-nums text-ink-muted">
+            <span className="text-corpo tabular-nums text-ink-muted">
               {feitosNaSemana}/{alvo}
             </span>
             <MedidorSemanal feitos={feitosNaSemana} alvo={alvo} />

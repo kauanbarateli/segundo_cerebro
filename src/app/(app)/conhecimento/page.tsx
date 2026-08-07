@@ -198,7 +198,7 @@ export default async function ConhecimentoPage({
                           className="mt-0.5 shrink-0 text-ink-subtle"
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-legenda text-ink">
+                          <span className="block truncate text-sm text-ink">
                             <TituloComDestaque texto={rotuloDaPagina(hit.title)} termo={termo} />
                           </span>
                           {/* Caderno + data em vez de um trecho do texto: o
@@ -240,7 +240,7 @@ export default async function ConhecimentoPage({
                           aria-hidden="true"
                           className="shrink-0 text-ink-subtle"
                         />
-                        <span className="min-w-0 flex-1 truncate text-legenda text-ink">
+                        <span className="min-w-0 flex-1 truncate text-sm text-ink">
                           {rotuloDaPagina(pagina.title)}
                         </span>
                         <span className="shrink-0 text-legenda text-ink-subtle">

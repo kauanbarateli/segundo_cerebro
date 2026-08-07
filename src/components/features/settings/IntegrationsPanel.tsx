@@ -244,7 +244,7 @@ function Cabecalho() {
   return (
     <div>
       <p className="eyebrow">Integrações</p>
-      <p className="text-corpo-forte font-semibold text-ink">ClickUp</p>
+      <p className="text-sm font-semibold text-ink">ClickUp</p>
     </div>
   );
 }

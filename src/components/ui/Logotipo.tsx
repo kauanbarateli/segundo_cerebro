@@ -115,12 +115,32 @@ export function Logotipo({
 
     A hierarquia de peso e cor reproduz o lockup do kit: "Segundo" em 700 sobre
     `ink`, "Cérebro" em peso normal sobre `ink-muted`.
+
+    ⚠️ O TAMANHO DA PALAVRA SAI DE `lado`, NUNCA DE UM DEGRAU DA ESCALA.
+
+    Ela já usou `text-corpo-forte` / `text-corpo`, e isso estava errado por um
+    motivo que só apareceu quando aconteceu: a escala tipográfica foi revertida
+    aos tamanhos originais do projeto (ver tailwind.config.ts) e a palavra
+    encolheu de 20/16px para 15/13px enquanto o símbolo continuou nos mesmos
+    52px — o lockup saiu desenhado errado, e a largura mínima de 136px que o kit
+    exige deixou de ser garantida. Uma decisão sobre corpo de texto de interface
+    não pode deformar a marca.
+
+    As proporções vêm do próprio `logo-horizontal.svg`: com o símbolo em 104,
+    "Segundo" é 33 (≈0,317) e "Cérebro" é 27 (≈0,26). Derivando de `lado`, o
+    lockup fica correto em qualquer tamanho e imune ao que a interface faça com
+    a escala dela.
   */
+  const px = (proporcao: number) => `${Math.round(lado * proporcao)}px`;
+
   if (variante === "compacta") {
     return (
       <span className={cn("inline-flex items-center gap-2.5 text-ink", className)}>
         <Simbolo size={lado} />
-        <span className="text-corpo font-bold leading-none tracking-tight">
+        <span
+          className="font-bold leading-none tracking-tight"
+          style={{ fontSize: px(0.3) }}
+        >
           Segundo <span className="font-normal text-ink-muted">Cérebro</span>
         </span>
       </span>
@@ -131,10 +151,18 @@ export function Logotipo({
     <span className={cn("inline-flex items-center gap-3 text-ink", className)}>
       <Simbolo size={lado} />
       <span className="leading-none">
-        <span className="block text-corpo-forte font-bold leading-none tracking-tight">
+        <span
+          className="block font-bold leading-none tracking-tight"
+          style={{ fontSize: px(0.317) }}
+        >
           Segundo
         </span>
-        <span className="mt-1 block text-corpo leading-none text-ink-muted">Cérebro</span>
+        <span
+          className="mt-1 block leading-none text-ink-muted"
+          style={{ fontSize: px(0.26) }}
+        >
+          Cérebro
+        </span>
       </span>
     </span>
   );

@@ -65,7 +65,7 @@ export function CalendarEventCard({
 
   const titulo = event.summary ?? "(sem título)";
   const classeTitulo = cn(
-    "text-corpo font-medium text-ink",
+    "text-sm font-medium text-ink",
     cancelled && "line-through",
     compact && "truncate",
   );
