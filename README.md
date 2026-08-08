@@ -34,8 +34,12 @@ supabase/migrations/0001_second_brain_initial.sql   # schema + RLS + funções
 supabase/seed.sql                                    # backfill sem dados pessoais
 docs/database-setup.md                               # aplicar/validar/rollback
 docs/google-calendar-setup.md                        # Google Cloud + OAuth
+docs/papeis-e-admin.md                               # papéis, bloqueio, /admin
+docs/datas-e-fuso.md                                 # ⚠️ leia antes de mexer em data
+e2e/README.md                                        # os 5 fluxos e como rodá-los
 .env.example                                          # variáveis (placeholders)
 
+src/lib/tempo.ts                                     # ⚠️ a autoridade sobre fuso
 src/lib/supabase/{client,server,admin,middleware}.ts # 3 clientes Supabase
 src/lib/crypto/tokens.ts                             # AES-256-GCM (servidor)
 src/lib/crypto/vault.ts                              # Argon2id + AES-GCM (cliente)
@@ -80,6 +84,16 @@ npm run dev                  # http://localhost:3000
 
 Scripts: `npm run build`, `npm run start`, `npm run typecheck`,
 `npm run lint`, `npm run test`.
+
+Qualidade: `npm run coverage` (relatório local, sem meta global — serve para
+achar o arquivo com zero), `npm run camadas` (contrato de arquitetura; as quatro
+regras estão em `.dependency-cruiser.cjs`), `npm run morto` (código morto, em
+modo relatório), `npm run e2e` (os cinco fluxos — leia `e2e/README.md` antes:
+eles criam e apagam dado e **nunca** devem apontar para produção).
+
+⚠️ Rode a suíte também com `TZ=UTC` de vez em quando. É o fuso da Vercel, e foi
+onde um defeito de data se escondeu por meses — em máquina local o fuso do
+servidor coincide com o da tela e o ida-e-volta fecha. Ver `docs/datas-e-fuso.md`.
 
 ## 7. O que ainda depende de credenciais
 
