@@ -1,8 +1,16 @@
+import { FUSO_DO_APP } from "@/lib/tempo";
+
 export function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-const TIME_ZONE = "America/Sao_Paulo";
+/**
+ * Reexportado de `tempo.ts` em vez de redeclarado. Eram duas constantes com o
+ * mesmo valor — uma governando a EXIBIÇÃO (aqui) e nenhuma governando a
+ * ENTRADA, que era exatamente o buraco por onde o horário digitado voltava
+ * diferente. Uma definição só torna o ciclo fechado por construção.
+ */
+const TIME_ZONE = FUSO_DO_APP;
 
 export function formatDateLong(date: Date, locale = "pt-BR"): string {
   return new Intl.DateTimeFormat(locale, {

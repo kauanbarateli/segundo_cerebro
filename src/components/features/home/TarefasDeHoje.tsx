@@ -52,6 +52,16 @@ import { cn, formatDayLabel, formatTime, plural } from "@/lib/utils";
 const VALIDADE_MS = 60_000;
 
 /**
+ * Quantas tarefas a Início mostra antes de oferecer o resto.
+ *
+ * 5, o mesmo de `CompromissosDeHoje` — e o mesmo número nos dois cartões não é
+ * coincidência a ser tolerada, é o que faz a tela ter um ritmo só. Dois limites
+ * diferentes lado a lado dariam a impressão de que um dos cartões está cortando
+ * por outro critério.
+ */
+const LIMITE = 5;
+
+/**
  * O cache é de MÓDULO, não de `useRef` como no `ClickUpPanel` — e a diferença
  * importa.
  *
@@ -128,6 +138,7 @@ export function TarefasDeHoje({
   const [tarefasClickUp, setTarefasClickUp] = useState<TarefaClickUp[]>([]);
   const [carregando, setCarregando] = useState(clickupAtivo);
   const [erro, setErro] = useState<{ texto: string; motivo?: MotivoClickUp } | null>(null);
+  const [expandido, setExpandido] = useState(false);
 
   const buscar = useCallback(async (forcar = false) => {
     const guardado = cacheDoClickUp;
@@ -228,6 +239,25 @@ export function TarefasDeHoje({
 
   const vencidas = linhas.filter((l) => l.vencida).length;
 
+  /*
+    O MESMO limite e o mesmo botão de `CompromissosDeHoje`, copiados de
+    propósito em vez de extraídos para um `<ListaComLimite>`.
+
+    Duas ocorrências não sustentam uma abstração, e estas duas divergem no que
+    importa: lá a lista é de eventos e o corpo da linha é um `CalendarEventCard`;
+    aqui é uma mistura de tarefas locais e do ClickUp, com `chave` composta e
+    estado de carregamento no meio. O componente comum teria que receber o
+    render da linha, o rótulo no plural e a condição de vazio — três parâmetros
+    para poupar quinze linhas, e um lugar a mais para olhar quando uma das duas
+    telas precisar mudar. Se aparecer uma terceira lista assim, aí sim.
+
+    As linhas ordenadas é que são cortadas, nunca as brutas: `porUrgencia` já
+    rodou, então as 5 visíveis são as 5 mais urgentes — e não as 5 primeiras que
+    o banco devolveu.
+  */
+  const visiveis = expandido ? linhas : linhas.slice(0, LIMITE);
+  const restante = linhas.length - visiveis.length;
+
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -262,11 +292,32 @@ export function TarefasDeHoje({
             <EmptyState icon="Tasks" title="Sem tarefas para hoje" />
           )
         ) : (
-          linhas.map((linha) => <LinhaDeTarefa key={linha.chave} linha={linha} />)
+          visiveis.map((linha) => <LinhaDeTarefa key={linha.chave} linha={linha} />)
         )}
 
         {erro && <FalhaDoClickUp erro={erro} aoTentarDeNovo={() => void buscar(true)} />}
       </Card>
+
+      {(restante > 0 || expandido) && (
+        /*
+          O botão diz QUANTOS faltam, não "ver mais" — a mesma decisão de
+          `CompromissosDeHoje`, e vale repetir por quê: "+3 tarefas" responde à
+          pergunta antes do clique. Um "ver mais" genérico obriga a clicar para
+          descobrir se o que falta é uma tarefa ou dez.
+
+          O recolher precisa existir pelo mesmo motivo de lá: expandir num dia
+          de vinte tarefas empurraria hábitos e resumo para fora da tela sem
+          volta.
+        */
+        <button
+          type="button"
+          onClick={() => setExpandido((v) => !v)}
+          aria-expanded={expandido}
+          className="mt-2 flex min-h-11 w-full items-center justify-center rounded-md border border-line px-3 text-corpo font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+        >
+          {expandido ? "Mostrar menos" : `+${plural(restante, "tarefa", "tarefas")}`}
+        </button>
+      )}
     </section>
   );
 }

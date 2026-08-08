@@ -8,12 +8,14 @@ import { Logotipo } from "@/components/ui/Logotipo";
 import { isSupabaseConfigured } from "@/lib/env";
 import { CLASSE_DO_CAMPO } from "@/components/ui/estilos";
 import { cn } from "@/lib/utils";
+import { linkDeContato } from "@/lib/contato";
 
 const initialState: AuthState = { error: null };
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(signIn, initialState);
   const configured = isSupabaseConfigured();
+  const contato = linkDeContato();
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
@@ -90,9 +92,38 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-legenda text-ink-muted">
-          O cadastro público está desativado. Contas são criadas pelo proprietário no Supabase.
-        </p>
+        {/*
+          A frase anterior dizia "Contas são criadas pelo proprietário no
+          Supabase", e as duas metades tinham problema.
+
+          "Supabase" é detalhe de INFRAESTRUTURA numa tela pública e não
+          autenticada: para o usuário legítimo é ruído, e para quem está sondando
+          é o nome do banco, do provedor de autenticação e do formato de token,
+          de graça, antes do login. Nada aqui precisa dizer com o que o sistema
+          foi construído.
+
+          E a frase não oferecia SAÍDA. Quem não consegue entrar lê "contas são
+          criadas pelo proprietário" e continua sem saber como falar com ele —
+          que é a única coisa que essa pessoa queria descobrir.
+
+          Sem número configurado o link não é renderizado (ver `contato.ts`): a
+          frase sobre cadastro fechado continua valendo sozinha, e é honesta.
+        */}
+        <div className="mt-5 space-y-2 text-center text-legenda text-ink-muted">
+          <p>O cadastro público está desativado.</p>
+          {contato && (
+            <p>
+              <a
+                href={contato.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="alvo-44 inline-flex items-center rounded-sm underline underline-offset-2 hover:text-ink"
+              >
+                {contato.rotulo}
+              </a>
+            </p>
+          )}
+        </div>
       </div>
     </main>
   );

@@ -14,6 +14,7 @@ import {
   lerUuid,
   MAX_CENTAVOS,
 } from "./validation";
+import { diaCivilDe } from "./tempo";
 
 const CAPTURE_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const ACCOUNT_ID = "11111111-2222-4333-8444-555555555555";
@@ -38,6 +39,58 @@ describe("taskInputSchema", () => {
     const r = taskInputSchema.parse({ title: "X", dueAt: "2026-07-28T10:00" });
     expect(r.dueAt).toMatch(/^2026-07-28T/);
     expect(new Date(r.dueAt as string).toISOString()).toBe(r.dueAt);
+  });
+
+  /* ------------------------------------------------------------------ fuso */
+  /*
+    Os quatro casos do formulário (sem data, só data, data+hora, dia inteiro) e
+    a razão de cada um. Todos passam em qualquer fuso de máquina — rodar a suíte
+    com TZ=UTC é o que reproduz a Vercel, onde o defeito aparecia.
+  */
+
+  it("resolve o horário ingênuo no fuso do app, não no de quem executa", () => {
+    // 14h em São Paulo é 17h UTC. Antes, num servidor UTC, virava 14h UTC — e a
+    // tela, que formata em São Paulo, mostrava 11h de volta.
+    const r = taskInputSchema.parse({ title: "X", dueAt: "2026-08-07T14:00" });
+    expect(r.dueAt).toBe("2026-08-07T17:00:00.000Z");
+  });
+
+  it("dia inteiro grava a meia-noite de São Paulo e NÃO retrocede o dia", () => {
+    // A forma só-data é a que o campo emite quando "Dia inteiro" está marcado.
+    // `new Date("2026-08-07")` dava meia-noite UTC = 06/08 21h em São Paulo.
+    const r = taskInputSchema.parse({
+      title: "X",
+      scheduledStartAt: "2026-08-07",
+      allDay: true,
+    });
+    expect(r.scheduledStartAt).toBe("2026-08-07T03:00:00.000Z");
+    expect(diaCivilDe(r.scheduledStartAt)).toBe("2026-08-07");
+  });
+
+  it("preserva o dia civil na virada de mês e de ano", () => {
+    for (const dia of ["2026-01-01", "2026-03-01", "2026-12-31"]) {
+      const r = taskInputSchema.parse({ title: "X", dueAt: dia });
+      expect(diaCivilDe(r.dueAt)).toBe(dia);
+    }
+  });
+
+  it("aceita instante já qualificado sem mexer nele", () => {
+    const r = taskInputSchema.parse({ title: "X", dueAt: "2026-08-07T17:00:00.000Z" });
+    expect(r.dueAt).toBe("2026-08-07T17:00:00.000Z");
+  });
+
+  it("recusa data inexistente em vez de deixar o Postgres recusar", () => {
+    expect(taskInputSchema.safeParse({ title: "X", dueAt: "2026-02-31" }).success).toBe(false);
+    expect(taskInputSchema.safeParse({ title: "X", dueAt: "2026-13-01" }).success).toBe(false);
+  });
+
+  /*
+    O defeito SB-SEC-014 de novo, agora com o caminho novo: `safeParse` NÃO pode
+    lançar, nem para entrada que não é data nenhuma.
+  */
+  it("recusa lixo sem lançar", () => {
+    expect(() => taskInputSchema.safeParse({ title: "X", dueAt: "x" })).not.toThrow();
+    expect(taskInputSchema.safeParse({ title: "X", dueAt: "x" }).success).toBe(false);
   });
 });
 

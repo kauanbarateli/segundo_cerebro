@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { CriarNoProjeto } from "@/components/features/projects/CriarNoProjeto";
 import { VincularExistente } from "@/components/features/projects/VincularExistente";
+import { TarefaSheet } from "@/components/features/tasks/TarefaSheet";
 import { ANEXAVEL, type TipoAnexavel } from "@/components/features/projects/anexaveis";
 import { desvincularDoProjeto } from "@/app/(app)/projetos/actions";
 import type { ConteudoDoProjeto } from "@/lib/data";
@@ -90,6 +91,12 @@ export function ProjectDetail({
 
   const [criando, setCriando] = useState<TipoAnexavel | null>(null);
   const [vinculando, setVinculando] = useState<TipoAnexavel | null>(null);
+  /* A tarefa aberta no painel de detalhe. Guarda o OBJETO e não o id porque a
+     lista já está em memória: reencontrar por id a cada render seria uma busca
+     para chegar ao mesmo lugar. */
+  const [tarefaAberta, setTarefaAberta] = useState<ConteudoDoProjeto["tarefas"][number] | null>(
+    null,
+  );
   /* O alvo do desvínculo carrega o RÓTULO junto, e não só o id: a confirmação
      precisa dizer o nome da coisa, e depois de o item sair da lista revalidada
      não haveria onde reencontrá-lo para montar a frase. */
@@ -168,6 +175,7 @@ export function ProjectDetail({
                     key={t.id}
                     rotulo={t.title}
                     tipo="tarefa"
+                    aoAbrir={() => setTarefaAberta(t)}
                     aoDesvincular={() =>
                       setDesvinculando({ tipo: "tarefa", id: t.id, rotulo: t.title })
                     }
@@ -364,6 +372,27 @@ export function ProjectDetail({
         </Modal>
       )}
 
+      {tarefaAberta && (
+        <TarefaSheet
+          tarefa={tarefaAberta}
+          categorias={categorias}
+          projetos={projetos}
+          onFechar={() => setTarefaAberta(null)}
+          /*
+            Fecha o painel ANTES de abrir a confirmação, e não os empilha. São os
+            dois um `Modal`, cada um com sua armadilha de foco e sua tecla Esc —
+            sobrepostos, a primeira Esc fecharia um dos dois sem que o usuário
+            tenha como prever qual. O painel já cumpriu o papel dele aqui: levar
+            até a decisão.
+          */
+          onDesvincular={() => {
+            const alvo = tarefaAberta;
+            setTarefaAberta(null);
+            setDesvinculando({ tipo: "tarefa", id: alvo.id, rotulo: alvo.title });
+          }}
+        />
+      )}
+
       <ConfirmationDialog
         open={desvinculando !== null}
         title="Desvincular do projeto"
@@ -453,21 +482,45 @@ function Secao({
  * que ninguém pediu.
  *
  * O "x" não é vermelho. Ver o comentário do `ConfirmationDialog` lá em cima.
+ *
+ * `aoAbrir` é OPCIONAL, e a opcionalidade é o ponto: só a tarefa tem painel de
+ * detalhe. Caderno e pasta abrem o módulo, captura não tem tela própria. Uma
+ * linha que vira botão sem ter para onde levar é pior que uma linha inerte —
+ * ela promete navegação e devolve nada.
  */
 function LinhaVinculada({
   rotulo,
   tipo,
+  aoAbrir,
   aoDesvincular,
   children,
 }: {
   rotulo: string;
   tipo: TipoAnexavel;
+  aoAbrir?: () => void;
   aoDesvincular: () => void;
   children: ReactNode;
 }) {
+  const def = ANEXAVEL[tipo];
+
   return (
     <li className="flex items-center gap-2 py-0.5 pl-4 pr-1">
-      <div className="flex min-w-0 flex-1 items-center gap-3 py-2">{children}</div>
+      {aoAbrir ? (
+        /* `<button>` e não `<div onClick>`: o teclado precisa alcançar a linha,
+           e só o elemento nativo traz Enter, Espaço e foco visível de graça.
+           `-ml-4 pl-4` devolve o respiro que o `pl-4` do `<li>` dava, sem que a
+           área clicável comece depois da borda do cartão. */
+        <button
+          type="button"
+          onClick={aoAbrir}
+          aria-label={`Abrir ${def.singular} "${rotulo}"`}
+          className="-ml-4 flex min-w-0 flex-1 items-center gap-3 rounded-sm py-2 pl-4 text-left hover:bg-surface-muted"
+        >
+          {children}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-3 py-2">{children}</div>
+      )}
       <button
         type="button"
         onClick={aoDesvincular}

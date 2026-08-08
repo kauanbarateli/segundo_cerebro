@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LIMITE_DE_LINKS, urlSegura } from "@/lib/social";
+import { HORARIO_INGENUO, SO_DATA, instanteDe } from "@/lib/tempo";
 
 export const taskStatusSchema = z.enum(["todo", "in_progress", "done", "archived"]);
 export const taskPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
@@ -85,16 +86,41 @@ const textoOpcional = (max: number) =>
  *
  * O `.max(64)` é o outro lado: sem ele, uma string de dez megabytes chega até o
  * parser de datas antes de qualquer recusa. Nenhuma data ISO passa de 40.
+ *
+ * =============================================================================
+ * O SEGUNDO DEFEITO, CORRIGIDO DEPOIS (fuso)
+ * =============================================================================
+ * `new Date(v)` resolvia a string INGÊNUA — a que vem de um `<input>` e não traz
+ * fuso — no horário de quem executa. Quem executa é o SERVIDOR, e ele é UTC na
+ * Vercel, enquanto a tela formata fixada em São Paulo. O resultado era 14:00
+ * digitado voltando como 11:00 em produção, e a forma só-data ("2026-08-07",
+ * que o campo de "Dia inteiro" emite) voltando um DIA inteiro, porque o
+ * ECMAScript a lê como UTC e não como local.
+ *
+ * `instanteDe()` fecha os dois: resolve a parede sempre no fuso do app, o mesmo
+ * que `utils.ts` já usava para exibir. Ver `src/lib/tempo.ts` para a regra e a
+ * razão de o fuso ser fixo em vez de vir de `profiles.timezone`.
+ *
+ * A ORDEM CONTINUA VALENDO, e agora por dois motivos: `instanteDe` devolve
+ * `null` para entrada inválida em vez de lançar, mas o refine à frente garante
+ * que o transform nunca receba lixo — e é ele quem produz a mensagem em
+ * português. Uma string que JÁ traz deslocamento ("...Z", "...-03:00") não é
+ * ingênua: é instante, e passa por `Date` mesmo, que aí não tem o que adivinhar.
  */
+const ehParedeIngenua = (v: string) => SO_DATA.test(v) || HORARIO_INGENUO.test(v);
+
+const paraInstante = (v: string): string | null =>
+  ehParedeIngenua(v) ? instanteDe(v) : Number.isNaN(Date.parse(v)) ? null : new Date(v).toISOString();
+
 const optionalDateTime = z
   .string()
   .trim()
   .max(64, "Data inválida")
   .optional()
-  .refine((v) => v == null || v.length === 0 || !Number.isNaN(Date.parse(v)), {
+  .refine((v) => v == null || v.length === 0 || paraInstante(v) !== null, {
     message: "Data inválida",
   })
-  .transform((v) => (v && v.length > 0 ? new Date(v).toISOString() : null));
+  .transform((v) => (v && v.length > 0 ? paraInstante(v) : null));
 
 /**
  * Valor em centavos, com TETO.

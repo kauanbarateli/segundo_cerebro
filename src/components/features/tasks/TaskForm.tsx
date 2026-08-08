@@ -8,6 +8,7 @@ import { SeletorDeProjeto } from "@/components/features/projects/SeletorDeProjet
 import { createTask, updateTask } from "@/app/(app)/tarefas/actions";
 import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
 import { cn } from "@/lib/utils";
+import { paraCampoLocal } from "@/lib/tempo";
 
 const PRIORITIES = [
   { value: "low", label: "Baixa" },
@@ -16,12 +17,51 @@ const PRIORITIES = [
   { value: "urgent", label: "Urgente" },
 ];
 
-/** Converts a stored ISO datetime to the value a <input type=datetime-local> expects. */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
+/**
+ * Parte um instante guardado nas duas metades que o formulário edita.
+ *
+ * A separação é o que corrige o terceiro defeito do trio de data (ver
+ * `src/lib/tempo.ts` para os outros dois). Os campos eram NÃO CONTROLADOS, e
+ * alternar "Dia inteiro" troca o `type` do MESMO nó do DOM: o navegador
+ * revalida, descarta o valor que virou incompatível, e `defaultValue` não o
+ * repõe — ele só age na montagem. Marcar e desmarcar a caixa perdia o que
+ * tinha sido digitado.
+ *
+ * Guardando dia e hora em estados separados, a troca de `type` deixa de ser uma
+ * perda: o dia continua no estado e só a hora é descartada, que é exatamente o
+ * que "dia inteiro" significa.
+ */
+function partirInstante(iso: string | null | undefined): { dia: string; hora: string } {
+  const completo = paraCampoLocal(iso, "datetime");
+  if (!completo) return { dia: "", hora: "" };
+  const [dia, hora] = completo.split("T");
+  return { dia: dia ?? "", hora: hora ?? "" };
+}
+
+/**
+ * Remonta o valor para o campo, no formato que AQUELE `type` aceita.
+ *
+ * `<input type="date">` só aceita 10 caracteres e `datetime-local` só aceita 16.
+ * Entregar o formato errado não dá erro: o navegador esvazia o campo em
+ * silêncio, que era o defeito visível ao marcar "Dia inteiro" numa tarefa que já
+ * tinha data.
+ */
+function juntarInstante(dia: string, hora: string, diaInteiro: boolean): string {
+  if (!dia) return "";
+  return diaInteiro ? dia : `${dia}T${hora || "00:00"}`;
+}
+
+/**
+ * Lê o que o campo devolveu, seja ele `date` ou `datetime-local`.
+ *
+ * `horaAnterior` é o que preserva a hora ao voltar de "Dia inteiro": no modo
+ * data o campo não tem hora nenhuma para informar, e sem esta memória desmarcar
+ * a caixa devolveria 00:00 no lugar do horário que a pessoa tinha escolhido.
+ */
+function partirCampo(valor: string, horaAnterior: string): { dia: string; hora: string } {
+  if (!valor) return { dia: "", hora: horaAnterior };
+  const [dia, hora] = valor.split("T");
+  return { dia: dia ?? "", hora: hora ?? horaAnterior };
 }
 
 export function TaskForm({
@@ -66,6 +106,8 @@ export function TaskForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [allDay, setAllDay] = useState(task?.all_day ?? false);
+  const [vencimento, setVencimento] = useState(() => partirInstante(task?.due_at));
+  const [agendado, setAgendado] = useState(() => partirInstante(task?.scheduled_start_at));
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -180,8 +222,9 @@ export function TaskForm({
           <input
             id="dueAt"
             name="dueAt"
-            type="datetime-local"
-            defaultValue={toLocalInput(task?.due_at ?? null)}
+            type={allDay ? "date" : "datetime-local"}
+            value={juntarInstante(vencimento.dia, vencimento.hora, allDay)}
+            onChange={(e) => setVencimento(partirCampo(e.target.value, vencimento.hora))}
             className={cn(CLASSE_DO_CAMPO, "w-full")}
           />
         </div>
@@ -193,7 +236,8 @@ export function TaskForm({
             id="scheduledStartAt"
             name="scheduledStartAt"
             type={allDay ? "date" : "datetime-local"}
-            defaultValue={toLocalInput(task?.scheduled_start_at ?? null)}
+            value={juntarInstante(agendado.dia, agendado.hora, allDay)}
+            onChange={(e) => setAgendado(partirCampo(e.target.value, agendado.hora))}
             className={cn(CLASSE_DO_CAMPO, "w-full")}
           />
         </div>
