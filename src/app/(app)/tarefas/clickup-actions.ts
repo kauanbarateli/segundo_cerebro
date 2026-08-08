@@ -5,6 +5,7 @@ import {
   comentar,
   lerComentarios,
   listarMinhasTarefas,
+  mudarPrazo,
   mudarStatus,
   statusDaLista,
 } from "@/lib/clickup/client";
@@ -29,6 +30,7 @@ import {
   clickupIdSchema,
   clickupStatusSchema,
 } from "@/lib/validation";
+import { HORARIO_INGENUO, instanteDe } from "@/lib/tempo";
 import type { ActionResult } from "@/lib/action-types";
 
 /**
@@ -284,6 +286,78 @@ export async function mudarStatusClickUp(
     }
 
     await mudarStatus(credencial.token, idOk.data, statusOk.data);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: fraseDoErro(e) };
+  }
+}
+
+/**
+ * Muda o PRAZO de uma tarefa do ClickUp.
+ *
+ * =============================================================================
+ * ⚠️ O PRAZO CHEGA COMO HORÁRIO DE PAREDE, E É CONVERTIDO AQUI
+ * =============================================================================
+ * O `<input>` manda "2026-08-07T14:00" ou "2026-08-07" — string INGÊNUA, sem
+ * fuso. O ClickUp quer um instante em milissegundos. Entre as duas coisas há
+ * exatamente a armadilha que a correção de data/hora deste plano documentou:
+ * deixar o `new Date()` resolver a string faria a conversão acontecer no fuso do
+ * SERVIDOR (UTC na Vercel), e o prazo entraria no ClickUp três horas deslocado.
+ *
+ * Por isso a conversão passa por `instanteDe()`, o mesmo módulo que o
+ * formulário de tarefas internas usa. Uma segunda forma de converter data neste
+ * projeto seria uma segunda chance de errar do mesmo jeito.
+ *
+ * `comHora` sai do FORMATO recebido, não de um campo à parte: quem manda só a
+ * data está dizendo "dia inteiro", e quem manda hora está dizendo o contrário.
+ * Deduzir do formato elimina o estado inconsistente ("dia inteiro" marcado com
+ * hora preenchida) em vez de tratá-lo.
+ */
+export async function mudarPrazoClickUp(
+  taskId: unknown,
+  prazo: unknown,
+): Promise<ActionResult> {
+  const idOk = clickupIdSchema.safeParse(taskId);
+  if (!idOk.success) return { ok: false, error: "Tarefa inválida." };
+
+  // `""` e `null` significam LIMPAR o prazo — operação legítima.
+  const bruto = typeof prazo === "string" ? prazo.trim() : "";
+  const limpar = bruto.length === 0;
+
+  const comHora = HORARIO_INGENUO.test(bruto);
+  const instante = limpar ? null : instanteDe(bruto);
+
+  // `instanteDe` devolve `null` para data inexistente ("2026-02-31") e para
+  // qualquer coisa que não seja horário de parede. Sem esta linha, um valor
+  // desses viraria `due_date: null` — ou seja, LIMPARIA o prazo em silêncio no
+  // lugar de recusar.
+  if (!limpar && instante === null) return { ok: false, error: "Data inválida." };
+
+  try {
+    const user = await exigirUsuario();
+
+    const bloqueio = bloqueioPorLimite("clickup:escrita", user.id, {
+      maximo: 10,
+      janelaMs: 60_000,
+    });
+    if (bloqueio) return bloqueio;
+
+    const credencial = await lerCredencial(user.id);
+    if (!credencial) return { ok: false, error: "ClickUp não está conectado." };
+
+    /*
+      A MESMA guarda do status: só se escreve em tarefa da qual este usuário é
+      RESPONSÁVEL. Sem ela, o token — que é a chave do workspace inteiro —
+      permitiria mexer no prazo da tarefa de qualquer colega.
+    */
+    await garantirResponsavel(credencial.token, idOk.data, credencial.clickupUserId);
+
+    await mudarPrazo(
+      credencial.token,
+      idOk.data,
+      instante === null ? null : new Date(instante).getTime(),
+      comHora,
+    );
     return { ok: true };
   } catch (e) {
     return { ok: false, error: fraseDoErro(e) };

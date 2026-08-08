@@ -8,12 +8,14 @@ import { useToast } from "@/components/ui/Toast";
 import {
   comentarClickUp,
   detalharTarefaClickUp,
+  mudarPrazoClickUp,
   mudarStatusClickUp,
 } from "@/app/(app)/tarefas/clickup-actions";
 import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
 import { cn } from "@/lib/utils";
 import type { ComentarioClickUp, StatusPossivel, TarefaClickUp } from "@/lib/clickup/types";
 import { formatDayLabel, formatTime } from "@/lib/utils";
+import { paraCampoLocal } from "@/lib/tempo";
 import { ResponsaveisClickUp } from "@/components/features/tasks/ResponsaveisClickUp";
 
 /**
@@ -44,6 +46,55 @@ export function ClickUpTaskSheet({
   const [texto, setTexto] = useState("");
   const [enviando, iniciarEnvio] = useTransition();
   const [mudandoStatus, iniciarStatus] = useTransition();
+
+  /*
+    Dia e hora em estados SEPARADOS, exatamente como em `TaskForm`, e pela mesma
+    razão: alternar "Dia inteiro" troca o `type` do mesmo nó do DOM, e o
+    navegador descarta o valor que virou incompatível. Guardando as duas metades
+    aqui, a troca deixa de ser perda — o dia continua, e só a hora é ignorada.
+  */
+  const [prazoDia, setPrazoDia] = useState("");
+  const [prazoHora, setPrazoHora] = useState("");
+  const [prazoDiaInteiro, setPrazoDiaInteiro] = useState(false);
+  const [salvandoPrazo, iniciarPrazo] = useTransition();
+
+  /*
+    O prazo do ClickUp vem como instante; os campos querem horário de parede no
+    fuso do app. `paraCampoLocal` é a mesma função que o formulário interno usa —
+    uma segunda conversão de data neste projeto seria uma segunda chance de
+    errar do mesmo jeito.
+
+    Depende de `detalhe.prazo` e não de `tarefa.prazo` porque o detalhe chega
+    depois, pela busca do `useEffect` acima, e é ele que tem o valor autoritativo.
+  */
+  useEffect(() => {
+    const completo = paraCampoLocal(detalhe.prazo, "datetime");
+    const [dia, hora] = completo.split("T");
+    setPrazoDia(dia ?? "");
+    setPrazoHora(hora ?? "");
+    // "00:00" é o que o ClickUp devolve quando `due_date_time` é falso — ou
+    // seja, quando ninguém escolheu hora. Marcar a caixa nesse caso é ler o
+    // dado como ele é, em vez de mostrar uma meia-noite que não foi decidida.
+    setPrazoDiaInteiro(hora === "00:00" || !hora);
+  }, [detalhe.prazo]);
+
+  function salvarPrazo() {
+    const valor = prazoDia
+      ? prazoDiaInteiro
+        ? prazoDia
+        : `${prazoDia}T${prazoHora || "00:00"}`
+      : "";
+
+    iniciarPrazo(async () => {
+      const r = await mudarPrazoClickUp(detalhe.id, valor);
+      if (r.ok) {
+        toast(valor ? "Prazo atualizado no ClickUp" : "Prazo removido", "success");
+        onMudou();
+      } else {
+        toast(r.error ?? "Não foi possível mudar o prazo.", "error");
+      }
+    });
+  }
 
   useEffect(() => {
     let vivo = true;
@@ -123,11 +174,6 @@ export function ClickUpTaskSheet({
           {/* Contexto */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-ink-subtle">
             {detalhe.listaNome && <span>{detalhe.listaNome}</span>}
-            {detalhe.prazo && (
-              <span>
-                Prazo: {formatDayLabel(detalhe.prazo)} {formatTime(detalhe.prazo)}
-              </span>
-            )}
             {detalhe.prioridade && <span>Prioridade: {detalhe.prioridade}</span>}
             <ResponsaveisClickUp pessoas={detalhe.responsaveis} />
             {detalhe.url && (
@@ -140,6 +186,63 @@ export function ClickUpTaskSheet({
                 Abrir no ClickUp
               </a>
             )}
+          </div>
+
+          {/*
+            PRAZO — editável, e o único campo desta tela que ESCREVE data no
+            workspace de outra empresa.
+
+            ⚠️ O `type` acompanha "Dia inteiro" pelo mesmo motivo do formulário
+            de tarefas internas, e com a mesma correção: o valor é CONTROLADO e
+            a data é preservada ao alternar. Ver `TaskForm` — o defeito de
+            perder o que foi digitado ao trocar o `type` é do navegador, não
+            daquele componente, e aconteceria aqui igual.
+
+            O botão é separado do campo (não salva no `onChange`) porque isto sai
+            para o ClickUp e aparece para colegas: digitar "2026" no ano e ver
+            três requisições saindo enquanto se completa a data é o comportamento
+            errado para uma escrita externa.
+          */}
+          <div>
+            <label htmlFor="clickup-prazo" className="mb-1.5 block text-corpo font-medium text-ink">
+              Prazo
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                id="clickup-prazo"
+                type={prazoDiaInteiro ? "date" : "datetime-local"}
+                value={
+                  prazoDia ? (prazoDiaInteiro ? prazoDia : `${prazoDia}T${prazoHora || "00:00"}`) : ""
+                }
+                onChange={(e) => {
+                  const [dia, hora] = e.target.value.split("T");
+                  setPrazoDia(dia ?? "");
+                  if (hora) setPrazoHora(hora);
+                }}
+                className={cn(CLASSE_DO_CAMPO, "min-w-0 flex-1")}
+              />
+              <label className="flex items-center gap-2 text-legenda text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={prazoDiaInteiro}
+                  onChange={(e) => setPrazoDiaInteiro(e.target.checked)}
+                  className="h-4 w-4 rounded-xs border-line-strong"
+                />
+                Dia inteiro
+              </label>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={salvarPrazo}
+                disabled={salvandoPrazo}
+              >
+                {salvandoPrazo ? "Salvando…" : "Salvar prazo"}
+              </Button>
+            </div>
+            <p className="mt-1 text-legenda text-ink-subtle">
+              Isto altera a tarefa no ClickUp e seus colegas veem a mudança. Deixe em branco para
+              tirar o prazo.
+            </p>
           </div>
 
           {/* Status — o seletor é populado pela LISTA desta tarefa. Cada Space

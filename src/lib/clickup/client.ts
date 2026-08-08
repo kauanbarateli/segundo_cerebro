@@ -164,6 +164,53 @@ export async function mudarStatus(token: string, taskId: string, status: string)
 }
 
 /**
+ * 7b. Mudar o PRAZO — e só o prazo.
+ *
+ * =============================================================================
+ * ⚠️ `due_date_time` NÃO É OPCIONAL, e ignorá-lo repete o defeito da Etapa 1
+ * =============================================================================
+ * O ClickUp guarda o prazo como um instante em milissegundos e usa um segundo
+ * campo para dizer se a HORA foi escolhida por alguém:
+ *
+ *   due_date_time: true   → "vence dia 7 às 14h"
+ *   due_date_time: false  → "vence dia 7", sem hora
+ *
+ * Mandar só `due_date` faz o ClickUp assumir `false`, e toda tarefa com hora
+ * marcada passa a exibir 00:00 — o que a interface dele mostra como VENCIDA
+ * desde a meia-noite. É exatamente o mesmo erro que o formulário de tarefas
+ * interno cometia ao tratar data e hora como a mesma coisa, em outro módulo.
+ *
+ * =============================================================================
+ * ⚠️ O CORPO É MONTADO DO ZERO — a defesa não é a rota, é isto
+ * =============================================================================
+ * `PUT /task/{id}` é o endpoint de ALTERAR TAREFA: o mesmo que remove colegas,
+ * arquiva e move, dependendo do que vai no corpo. A tabela de `capabilities.ts`
+ * controla método e rota; quem controla o PODER é esta função, construindo um
+ * objeto com exatamente duas chaves.
+ *
+ * Por isso a assinatura recebe `instanteMs: number | null` e `comHora: boolean`
+ * — tipos primitivos, não um objeto. Não existe forma de um `archived` ou um
+ * `assignees` entrar por aqui, nem por engano nem por requisição forjada, porque
+ * não há nenhum caminho pelo qual um objeto vindo da UI chegue ao corpo.
+ *
+ * `null` LIMPA o prazo: é o que o ClickUp entende, e é uma operação que o
+ * usuário precisa ter ("tirei a data dessa tarefa").
+ */
+export async function mudarPrazo(
+  token: string,
+  taskId: string,
+  instanteMs: number | null,
+  comHora: boolean,
+): Promise<void> {
+  await chamar<unknown>(
+    "mudarPrazo",
+    token,
+    { taskId },
+    { corpo: { due_date: instanteMs, due_date_time: comHora } },
+  );
+}
+
+/**
  * 8. Comentar.
  *
  * `notify_all: false` é deliberado: comentário criado por uma ferramenta

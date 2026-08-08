@@ -549,6 +549,101 @@ export function faturaDoCartao(
   return { totalCents, paidCents, openCents: totalCents - paidCents, itens };
 }
 
+/* ------------------------------------------------------------ status da fatura */
+
+/**
+ * Em que pé está a fatura.
+ *
+ * A ordem da união é a de GRAVIDADE crescente, e ela é usada para escolher o
+ * tom na interface — nada aqui depende disso, mas quem for mexer deve saber que
+ * a ordem não é alfabética por acaso.
+ */
+export type StatusDaFatura = "aberta" | "fechada" | "parcial" | "paga" | "vencida";
+
+export interface StatusDaFaturaArgs {
+  /** Hoje, "AAAA-MM-DD" no fuso do app. Vem de fora: este módulo não tem relógio. */
+  hoje: string;
+  mesFatura: string;
+  diaFechamento: number;
+  diaVencimento: number;
+  /** Os números de `faturaDoCartao`. */
+  resumo: Pick<ResumoDeFatura, "totalCents" | "paidCents" | "openCents">;
+}
+
+/**
+ * O status é DERIVADO, e nunca gravado. Este é o ponto inteiro da função.
+ *
+ * =============================================================================
+ * ⚠️ POR QUE NÃO EXISTE COLUNA `status` EM `finance_transactions`
+ * =============================================================================
+ * Uma coluna persistida precisaria de RELÓGIO: a fatura vence sozinha, sem
+ * ninguém tocar em nada. "Fechada" vira "vencida" à meia-noite do dia seguinte
+ * ao vencimento, e nenhum usuário faz uma escrita nesse instante. Manter a
+ * coluna correta exigiria um processo noturno — e no dia em que ele falhasse, a
+ * tela mostraria "fechada" para uma fatura vencida há uma semana.
+ *
+ * Pior: a coluna passaria a DISCORDAR dos valores ao lado dela. Um pagamento
+ * registrado zera `openCents` na hora, mas o status gravado continuaria
+ * "vencida" até o processo rodar — e aí a mesma tela diria "vencida" e "R$ 0,00
+ * em aberto" lado a lado, com o usuário tendo que decidir em qual acreditar.
+ *
+ * É o mesmo argumento que `FinanceView` já usa para não recalcular a dívida
+ * localmente, e o mesmo que vale para `openCents`: número derivado se calcula
+ * na hora de mostrar.
+ *
+ * =============================================================================
+ * A ORDEM DOS TESTES, QUE É ONDE MORA A SUTILEZA
+ * =============================================================================
+ *   1. PAGA vem primeiro. Uma fatura quitada é "paga" mesmo depois do
+ *      vencimento — testar "vencida" antes marcaria como vencida toda fatura
+ *      antiga já quitada, que é a maioria delas.
+ *   2. VENCIDA antes de PARCIAL e FECHADA: passou da data e ainda deve algo, o
+ *      que importa é isso. "Parcial e vencida" é vencida.
+ *   3. ABERTA por último entre as com saldo, porque depende só do calendário.
+ *
+ * ⚠️ `openCents <= 0` e não `=== 0`: pagamento a maior deixa o saldo NEGATIVO
+ * (crédito a favor), e isso é fatura paga. Ver o comentário de `openCents`.
+ */
+export function statusDaFatura({
+  hoje,
+  mesFatura,
+  diaFechamento,
+  diaVencimento,
+  resumo,
+}: StatusDaFaturaArgs): StatusDaFatura {
+  const fechamento = fechamentoDaFatura(mesFatura, diaFechamento);
+  const vencimento = vencimentoDaFatura(mesFatura, diaVencimento, diaFechamento);
+
+  /*
+    Fatura sem lançamento nenhum e sem pagamento nunca é "vencida": não há o que
+    vencer. Ela segue o calendário — aberta antes de fechar, e "paga" (ou seja,
+    nada a dever) depois. Sem esta linha, todo mês sem uso de um cartão
+    apareceria em vermelho.
+  */
+  if (resumo.totalCents === 0 && resumo.paidCents === 0) {
+    return hoje < fechamento ? "aberta" : "paga";
+  }
+
+  if (resumo.openCents <= 0) return "paga";
+
+  // Comparação de string "AAAA-MM-DD" é comparação de data — o formato é
+  // ordenável por construção, e é por isso que todo este módulo trabalha com
+  // ele em vez de com `Date`.
+  if (hoje > vencimento) return "vencida";
+  if (hoje < fechamento) return "aberta";
+  if (resumo.paidCents > 0) return "parcial";
+  return "fechada";
+}
+
+/** O rótulo em português. Fica aqui para que tela e e-mail digam o mesmo. */
+export const ROTULO_DO_STATUS_DA_FATURA: Record<StatusDaFatura, string> = {
+  aberta: "Aberta",
+  fechada: "Fechada",
+  parcial: "Parcialmente paga",
+  paga: "Paga",
+  vencida: "Vencida",
+};
+
 /* --------------------------------------------------------- patrimônio x dívida */
 
 export interface PatrimonioEDivida {

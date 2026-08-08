@@ -46,18 +46,42 @@ function ultimaChamada() {
 /* ============================================================ 6.2 — operações */
 
 describe("a tabela de operações (§0)", () => {
-  it("tem EXATAMENTE as oito previstas", () => {
+  it("tem EXATAMENTE as nove previstas", () => {
     /*
       Este caso parece bobo e é o mais valioso do arquivo: acrescentar uma
       operação QUEBRA o teste. Ampliar o poder do aplicativo sobre o workspace
       da empresa passa a ser um ato deliberado, com uma linha de teste para
       editar junto — em vez de uma linha a mais numa tabela que ninguém revisa.
+
+      =======================================================================
+      ⚠️ REGISTRO DA NONA: `mudarPrazo` (era oito)
+      =======================================================================
+      O teste FEZ o que devia: quebrou, e esta lista foi editada de propósito.
+      A decisão, para quem ler depois:
+
+        O QUE MUDA no poder do token — nada de rota. `PUT /task/{id}` já estava
+        liberado por `mudarStatus`; a entrada nova reusa o MESMO método e a
+        MESMA rota. O que muda é o corpo que o aplicativo passa a saber montar:
+        agora ele também escreve `due_date` e `due_date_time`.
+
+        POR QUE UMA ENTRADA SEPARADA, se a rota já existia — porque a tabela
+        descreve INTENÇÕES, não endereços. Mandar `due_date` pela linha do
+        status faria o nome dela mentir, e este inventário deixaria de ser
+        legível como "o que o aplicativo é capaz de fazer".
+
+        O QUE CONTINUA IMPOSSÍVEL — arquivar, mover, renomear e remover
+        colegas, que são os outros efeitos do mesmo endpoint. Eles não são
+        barrados pela rota (ela é a mesma): são barrados porque `client.ts`
+        constrói o corpo do zero, a partir de parâmetros PRIMITIVOS. Não existe
+        caminho pelo qual um objeto vindo da interface vire corpo. O teste do
+        corpo, mais abaixo, é o que sustenta isso.
     */
     expect([...OPERACOES_DISPONIVEIS].sort()).toEqual([
       "comentar",
       "identificar",
       "lerComentarios",
       "minhasTarefas",
+      "mudarPrazo",
       "mudarStatus",
       "statusDaLista",
       "umaTarefa",
@@ -71,10 +95,11 @@ describe("a tabela de operações (§0)", () => {
     }
   });
 
-  it("só existem três métodos, e escrita só em duas operações", () => {
+  it("só existem três métodos, e escrita só em três operações", () => {
     const metodos = Object.values(OPERACOES).map((o) => o.metodo);
     expect(new Set(metodos)).toEqual(new Set(["GET", "PUT", "POST"]));
-    expect(metodos.filter((m) => m !== "GET")).toHaveLength(2);
+    // Três escritas: mudarStatus, mudarPrazo e comentar. Ver o registro acima.
+    expect(metodos.filter((m) => m !== "GET")).toHaveLength(3);
   });
 
   it("recusa em tempo de execução uma operação que não está na tabela", async () => {

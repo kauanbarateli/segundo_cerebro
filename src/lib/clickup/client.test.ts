@@ -3,9 +3,11 @@ import {
   comentar,
   identificar,
   listarMinhasTarefas,
+  mudarPrazo,
   mudarStatus,
   statusDaLista,
 } from "./client";
+import { ErroClickUp } from "./erros";
 
 /**
  * 6.3 — A PROVA DO CORPO (§1 do plano).
@@ -176,5 +178,77 @@ describe("leituras simples", () => {
     );
     const s = await statusDaLista(TOKEN, "lista1");
     expect(s.map((x) => x.status)).toEqual(["todo", "doing", "done"]);
+  });
+});
+
+/* ========================================================================== */
+/*  mudarPrazo — o corpo tem EXATAMENTE duas chaves                           */
+/* ========================================================================== */
+
+describe("mudarPrazo — o corpo tem EXATAMENTE duas chaves", () => {
+  it("manda só due_date e due_date_time, no PUT da tarefa", async () => {
+    await mudarPrazo(TOKEN, "901234567890", 1_775_000_000_000, true);
+    const { corpo, metodo, url } = ultima();
+
+    expect(metodo).toBe("PUT");
+    // `url.pathname` e não a URL inteira, como nos casos acima — e a razão é
+    // literal: a varredura de `capabilities.test.ts` reprova qualquer arquivo
+    // de `src/` que CONTENHA o domínio da API, inclusive dentro de um
+    // comentário. O caminho já identifica a rota, que é o que importa aqui.
+    expect(url.pathname).toBe("/api/v2/task/901234567890");
+    expect(corpo).toEqual({ due_date: 1_775_000_000_000, due_date_time: true });
+    expect(Object.keys(corpo!)).toHaveLength(2);
+  });
+
+  /**
+   * ⚠️ O TESTE QUE IMPORTA.
+   *
+   * `PUT /task/{id}` é o endpoint de ALTERAR TAREFA: o mesmo que arquiva, move,
+   * renomeia e remove colegas, dependendo do corpo. A rota está liberada; o que
+   * impede o abuso é o corpo ser construído do zero a partir de parâmetros
+   * PRIMITIVOS — não há caminho por onde um objeto vindo da interface chegue
+   * até aqui.
+   *
+   * Este caso prova isso empurrando um objeto hostil no lugar do timestamp.
+   */
+  it("não deixa chave extra entrar, nem por objeto forjado no lugar do prazo", async () => {
+    const hostil = {
+      valueOf: () => 1_775_000_000_000,
+      archived: true,
+      assignees: { rem: [123] },
+      name: "renomeada",
+    } as unknown as number;
+
+    await mudarPrazo(TOKEN, "abc", hostil, true);
+
+    const corpo = ultima().corpo!;
+    expect(Object.keys(corpo).sort()).toEqual(["due_date", "due_date_time"]);
+    expect(corpo.archived).toBeUndefined();
+    expect(corpo.assignees).toBeUndefined();
+    expect(corpo.name).toBeUndefined();
+  });
+
+  /**
+   * `due_date_time: false` é o que diz "dia inteiro, sem hora".
+   *
+   * Omitir o campo faria o ClickUp assumir false sozinho, e toda tarefa com
+   * hora marcada passaria a exibir 00:00 — que a interface dele mostra como
+   * VENCIDA desde a meia-noite. É o mesmo defeito da Etapa 1 em outro módulo.
+   */
+  it("distingue dia inteiro de hora marcada", async () => {
+    await mudarPrazo(TOKEN, "abc", 1_775_000_000_000, false);
+    expect(ultima().corpo!.due_date_time).toBe(false);
+
+    await mudarPrazo(TOKEN, "abc", 1_775_000_000_000, true);
+    expect(ultima().corpo!.due_date_time).toBe(true);
+  });
+
+  it("null limpa o prazo — é operação legítima, não erro", async () => {
+    await mudarPrazo(TOKEN, "abc", null, false);
+    expect(ultima().corpo).toEqual({ due_date: null, due_date_time: false });
+  });
+
+  it("recusa id de tarefa malformado antes de chamar a rede", async () => {
+    await expect(mudarPrazo(TOKEN, "../../user", 1, true)).rejects.toBeInstanceOf(ErroClickUp);
   });
 });

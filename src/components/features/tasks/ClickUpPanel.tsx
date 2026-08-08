@@ -15,7 +15,7 @@ import {
 } from "@/lib/clickup/filtros";
 import { aninharTarefas } from "@/lib/clickup/mapper";
 import type { TarefaClickUp } from "@/lib/clickup/types";
-import { cn } from "@/lib/utils";
+import { cn, plural } from "@/lib/utils";
 import { CartaoClickUp } from "@/components/features/tasks/CartaoClickUp";
 import { ClickUpFiltros } from "@/components/features/tasks/ClickUpFiltros";
 import { ClickUpQuadro } from "@/components/features/tasks/ClickUpQuadro";
@@ -112,6 +112,75 @@ export function ClickUpPanel() {
     "sub" no cartão continua, e é ela que carrega a informação.
   */
   const linhas = useMemo(() => aninharTarefas(visiveis), [visiveis]);
+
+  /*
+    ===========================================================================
+    EXPANDIR / RECOLHER — filtro sobre a lista já montada
+    ===========================================================================
+    ⚠️ `aninharTarefas()` NÃO É TOCADA, e isso é decisão, não preguiça. Ela
+    carrega invariantes testadas que custaram caro: subtarefa ÓRFÃ (cuja mãe não
+    veio no lote, porque o filtro `assignees[]` da API se aplica também às
+    subtasks) promovida ao topo sem perder a marca, teto de 5 níveis, e a
+    garantia de que nada some mesmo com ciclo entre pais.
+
+    Recolher é AÇÚCAR DE INTERFACE. Reescrever a função que garante "nada pode
+    sumir" para conseguir esconder linhas seria arriscar a invariante mais
+    importante do módulo pelo motivo mais fraco. Então a lista continua sendo
+    montada inteira, e o que muda é só o que se DESENHA.
+  */
+  const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
+
+  function alternarExpansao(id: string) {
+    setExpandidas((atual) => {
+      const proximo = new Set(atual);
+      if (proximo.has(id)) proximo.delete(id);
+      else proximo.add(id);
+      return proximo;
+    });
+  }
+
+  /** As filhas de cada pai, para o contador do botão. */
+  const filhasPorPai = useMemo(() => {
+    const mapa = new Map<string, string[]>();
+    for (const { tarefa, orfa } of linhas) {
+      // Órfã não conta como filha de ninguém: a mãe dela não está na tela, e
+      // somá-la a um contador faria o botão prometer linhas que não existem.
+      if (tarefa.paiId === null || orfa) continue;
+      const irmas = mapa.get(tarefa.paiId) ?? [];
+      irmas.push(tarefa.id);
+      mapa.set(tarefa.paiId, irmas);
+    }
+    return mapa;
+  }, [linhas]);
+
+  /**
+   * A lista efetivamente desenhada. PADRÃO RECOLHIDO.
+   *
+   * ⚠️ ÓRFÃ NUNCA É ESCONDIDA. Ela foi promovida ao topo justamente porque não
+   * há pai na tela — esconder até "expandir o pai" a tornaria inalcançável, que
+   * é exatamente o defeito que `aninharTarefas` foi escrita para impedir.
+   *
+   * A verificação sobe a cadeia inteira, e não só um nível: com o pai recolhido,
+   * a NETA também não pode aparecer flutuando sozinha com recuo de 40px.
+   */
+  const linhasVisiveis = useMemo(() => {
+    const porId = new Map(linhas.map((l) => [l.tarefa.id, l]));
+
+    return linhas.filter(({ tarefa, orfa }) => {
+      if (tarefa.paiId === null || orfa) return true;
+
+      let paiId: string | null = tarefa.paiId;
+      // O teto de níveis de `aninharTarefas` já impede cadeia infinita; o
+      // `visitados` protege contra ciclo, que ela tolera sem sumir com nada.
+      const visitados = new Set<string>();
+      while (paiId !== null && !visitados.has(paiId)) {
+        if (!expandidas.has(paiId)) return false;
+        visitados.add(paiId);
+        paiId = porId.get(paiId)?.tarefa.paiId ?? null;
+      }
+      return true;
+    });
+  }, [linhas, expandidas]);
 
   /* ------------------------------------------------------------ carregando */
 
@@ -276,7 +345,7 @@ export function ClickUpPanel() {
         />
       ) : (
         <ul className="space-y-2">
-          {linhas.map(({ tarefa, nivel, orfa }) => (
+          {linhasVisiveis.map(({ tarefa, nivel, orfa }) => (
             <li
               key={tarefa.id}
               // Recuo por estilo, e não por classe: `ml-${n}` do Tailwind precisa
@@ -291,6 +360,28 @@ export function ClickUpPanel() {
                 subtarefa={tarefa.paiId !== null}
                 orfa={orfa}
               />
+              {/*
+                O botão de expandir fica FORA do cartão, abaixo dele. Dentro, ele
+                disputaria o clique com "abrir a tarefa", que é a ação principal
+                do cartão inteiro — e errar o alvo abriria um painel em vez de
+                revelar as subtarefas.
+
+                O rótulo diz QUANTAS são, não "expandir": o número é o que
+                permite decidir se vale abrir. Mesmo princípio do "+3
+                compromissos" da Início.
+              */}
+              {(filhasPorPai.get(tarefa.id)?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => alternarExpansao(tarefa.id)}
+                  aria-expanded={expandidas.has(tarefa.id)}
+                  className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-legenda text-ink-muted hover:text-ink"
+                >
+                  {expandidas.has(tarefa.id)
+                    ? "Ocultar subtarefas"
+                    : `${plural(filhasPorPai.get(tarefa.id)!.length, "subtarefa", "subtarefas")}`}
+                </button>
+              )}
             </li>
           ))}
         </ul>

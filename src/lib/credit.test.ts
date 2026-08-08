@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  statusDaFatura,
   faturaDe,
   fechamentoDaFatura,
   ultimoFechamentoAte,
@@ -788,5 +789,102 @@ describe("patrimonioEDivida", () => {
     const r = patrimonioEDivida([saldo("poupanca", -300_00)], accounts);
     expect(r.patrimonioCents).toBe(-30000);
     expect(r.dividaCents).toBe(0);
+  });
+});
+
+/* ============================================================================ */
+/*  statusDaFatura — derivado, nunca gravado                                    */
+/* ============================================================================ */
+
+describe("statusDaFatura", () => {
+  /** Cartão que fecha dia 10 e vence dia 20 do MESMO mês do fechamento. */
+  const cartao = { diaFechamento: 10, diaVencimento: 20 };
+  const mes = "2026-03-01";
+
+  const status = (hoje: string, totalCents: number, paidCents: number) =>
+    statusDaFatura({
+      hoje,
+      mesFatura: mes,
+      ...cartao,
+      resumo: { totalCents, paidCents, openCents: totalCents - paidCents },
+    });
+
+  it("aberta enquanto o ciclo não fechou", () => {
+    expect(status("2026-03-01", 10_000, 0)).toBe("aberta");
+    expect(status("2026-03-09", 10_000, 0)).toBe("aberta");
+  });
+
+  it("fechada no dia do fechamento — o dia do corte já é depois", () => {
+    // Mesma convenção de `faturaDe`: a compra no dia do fechamento já é da
+    // próxima fatura, logo o ciclo fechou no começo desse dia.
+    expect(status("2026-03-10", 10_000, 0)).toBe("fechada");
+  });
+
+  it("parcial quando pagou algo e ainda deve, dentro do prazo", () => {
+    expect(status("2026-03-15", 10_000, 4_000)).toBe("parcial");
+  });
+
+  it("vencida quando passou o vencimento e ainda deve", () => {
+    expect(status("2026-03-21", 10_000, 0)).toBe("vencida");
+    expect(status("2026-03-21", 10_000, 4_000)).toBe("vencida");
+  });
+
+  it("no DIA do vencimento ainda não está vencida", () => {
+    // Quem paga no dia paga em dia. Marcar vermelho às 00h01 do vencimento
+    // seria cobrar antes da hora.
+    expect(status("2026-03-20", 10_000, 0)).toBe("fechada");
+  });
+
+  /*
+    A ordem dos testes dentro da função: PAGA vem antes de VENCIDA. Sem isso,
+    toda fatura antiga já quitada apareceria como vencida — que é a maioria
+    delas.
+  */
+  it("paga vence 'vencida': fatura quitada continua paga depois do prazo", () => {
+    expect(status("2027-01-01", 10_000, 10_000)).toBe("paga");
+  });
+
+  it("pagamento a maior conta como paga, não como aberta", () => {
+    // openCents negativo é crédito a favor. Ver o comentário de `openCents`.
+    expect(status("2026-03-21", 10_000, 12_000)).toBe("paga");
+  });
+
+  it("mês sem uso nenhum nunca aparece como vencida", () => {
+    expect(status("2026-03-05", 0, 0)).toBe("aberta");
+    expect(status("2026-04-30", 0, 0)).toBe("paga");
+  });
+
+  it("respeita cartão que vence no mês SEGUINTE ao fechamento", () => {
+    // "fecha 28, vence 5": o vencimento cai no mês seguinte, e é o caso que o
+    // `diaVencimento <= diaFechamento` de `vencimentoDaFatura` resolve.
+    const r = (hoje: string) =>
+      statusDaFatura({
+        hoje,
+        mesFatura: "2026-03-01",
+        diaFechamento: 28,
+        diaVencimento: 5,
+        resumo: { totalCents: 10_000, paidCents: 0, openCents: 10_000 },
+      });
+
+    expect(r("2026-03-27")).toBe("aberta");
+    expect(r("2026-03-29")).toBe("fechada");
+    // Vence em 05/04, não em 05/03.
+    expect(r("2026-04-04")).toBe("fechada");
+    expect(r("2026-04-06")).toBe("vencida");
+  });
+
+  it("fechamento 31 em fevereiro cai no último dia do mês", () => {
+    const r = (hoje: string) =>
+      statusDaFatura({
+        hoje,
+        mesFatura: "2026-02-01",
+        diaFechamento: 31,
+        diaVencimento: 10,
+        resumo: { totalCents: 5_000, paidCents: 0, openCents: 5_000 },
+      });
+
+    // 2026 não é bissexto: fevereiro fecha em 28.
+    expect(r("2026-02-27")).toBe("aberta");
+    expect(r("2026-02-28")).toBe("fechada");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, PillButton } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -39,12 +39,19 @@ import {
   inMonth,
 } from "@/lib/finance";
 import {
+  ROTULO_DO_STATUS_DA_FATURA,
+  ehPagamentoDeFatura,
   faturaDoCartao,
   fechamentoDaFatura,
+  somaMeses,
+  statusDaFatura,
   vencimentoDaFatura,
   patrimonioEDivida,
   type ResumoDeFatura,
+  type StatusDaFatura,
 } from "@/lib/credit";
+import { diaCivilDe } from "@/lib/tempo";
+import type { PontoDeCategoria } from "@/components/ui/Badge";
 import {
   archiveAccount,
   deleteTransaction,
@@ -52,6 +59,22 @@ import {
   deleteTag,
   deleteBudget,
 } from "@/app/(app)/financeiro/actions";
+
+/**
+ * A cor do ponto de cada status de fatura. Ver o comentário no uso — ela
+ * ACOMPANHA o rótulo de texto, nunca o substitui (DS §9).
+ *
+ * `undefined` em "fechada" é deliberado: é o estado normal de uma fatura
+ * esperando o vencimento, e não pede atenção nenhuma. Cor tem significado; se
+ * todo estado tem cor, nenhum tem.
+ */
+const PONTO_DO_STATUS_DA_FATURA: Record<StatusDaFatura, PontoDeCategoria | undefined> = {
+  aberta: "info",
+  fechada: undefined,
+  parcial: "warning",
+  paga: "success",
+  vencida: "danger",
+};
 
 /** "2026-08-02" -> "02/08/2026". Sem `Date`: converter aqui deslocaria o dia por fuso. */
 function dataBR(iso: string): string {
@@ -1021,18 +1044,74 @@ function CreditCardPanel({
   const usadoCents = balance?.debt_cents ?? 0;
   const disponivelCents = balance?.available_cents ?? null;
 
+  /*
+    O mês da fatura é LOCAL deste cartão — ver o bloco da fatura lá embaixo.
+    Ele começa no mês global e é REALINHADO quando o mês global muda: sem o
+    efeito, trocar o mês na barra do topo deixaria os cartões parados no mês em
+    que cada um tivesse sido navegado, e a tela passaria a mostrar meses
+    diferentes lado a lado sem dizer isso em lugar nenhum.
+  */
+  const [mesDaFatura, setMesDaFatura] = useState(month);
+  useEffect(() => setMesDaFatura(month), [month]);
+
+  const [itensAbertos, setItensAbertos] = useState(false);
+
   const fatura = useMemo(() => {
     if (diaFechamento == null) return null;
-    return faturaDoCartao(transacoes, { id: card.id, statement_closing_day: diaFechamento }, month);
-  }, [transacoes, card.id, diaFechamento, month]);
+    return faturaDoCartao(
+      transacoes,
+      { id: card.id, statement_closing_day: diaFechamento },
+      mesDaFatura,
+    );
+  }, [transacoes, card.id, diaFechamento, mesDaFatura]);
 
-  const fechaEm = diaFechamento == null ? null : fechamentoDaFatura(month, diaFechamento);
+  const fechaEm = diaFechamento == null ? null : fechamentoDaFatura(mesDaFatura, diaFechamento);
   // O terceiro argumento é o que cobre o cartão "fecha 28, vence 5": sem ele o
   // vencimento sairia ANTES do próprio fechamento.
   const venceEm =
     diaFechamento == null || diaVencimento == null
       ? null
-      : vencimentoDaFatura(month, diaVencimento, diaFechamento);
+      : vencimentoDaFatura(mesDaFatura, diaVencimento, diaFechamento);
+
+  /*
+    O status é DERIVADO a cada render, nunca lido de coluna. Ver o cabeçalho de
+    `statusDaFatura` para o porquê — em resumo: a fatura vence sozinha, e uma
+    coluna persistida precisaria de relógio e passaria a discordar dos valores
+    exibidos ao lado dela.
+
+    `hojeISO()` e não `new Date()` cru: a comparação é com "AAAA-MM-DD" no fuso
+    do app, e o navegador de quem está viajando não pode mudar o status de uma
+    fatura.
+  */
+  const status = useMemo(() => {
+    if (!fatura || diaFechamento == null || diaVencimento == null) return null;
+    return statusDaFatura({
+      hoje: diaCivilDe(new Date().toISOString()),
+      mesFatura: mesDaFatura,
+      diaFechamento,
+      diaVencimento,
+      resumo: fatura,
+    });
+  }, [fatura, diaFechamento, diaVencimento, mesDaFatura]);
+
+  /*
+    Lançamentos deste cartão que não pertencem a fatura nenhuma.
+
+    Acontece com cartão cadastrado SEM dia de fechamento: `financeiro/actions.ts`
+    grava `statement_month` nulo, a linha entra em `debt_cents` e desaparece da
+    fatura. Documentado lá, e invisível na tela até agora.
+  */
+  const foraDeFatura = useMemo(
+    () =>
+      transacoes.filter(
+        (t) =>
+          t.account_id === card.id &&
+          t.kind !== "transfer" &&
+          t.statement_month === null &&
+          !ehPagamentoDeFatura(t),
+      ).length,
+    [transacoes, card.id],
+  );
 
   const temLimite = limiteCents != null && limiteCents > 0;
   const percentual = temLimite ? (usadoCents / limiteCents) * 100 : null;
@@ -1166,10 +1245,62 @@ function CreditCardPanel({
       )}
 
       <div className="rounded-md border border-line bg-surface-muted p-3.5">
-        <div className="flex items-baseline justify-between gap-2">
+        {/*
+          ⚠️ A NAVEGAÇÃO DE MÊS DA FATURA É **LOCAL**, e não a global da tela.
+
+          Conferir a fatura de dezembro não deveria trocar o mês do extrato, do
+          orçamento e de todos os outros cartões junto. A pergunta "o que caiu
+          na fatura passada deste cartão?" é sobre ESTE cartão, e arrastar a tela
+          inteira para respondê-la obriga a desfazer tudo depois.
+
+          Por isso `mesDaFatura` mora aqui dentro, começa no mês global e volta
+          para ele quando o mês global muda (ver o `useEffect`).
+        */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-corpo font-medium capitalize text-ink">
-            Fatura de {monthLabel(month)}
+            Fatura de {monthLabel(mesDaFatura)}
           </p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Fatura anterior"
+              onClick={() => setMesDaFatura((m) => somaMeses(m, -1))}
+              className="alvo-44 flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface hover:text-ink"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="Próxima fatura"
+              onClick={() => setMesDaFatura((m) => somaMeses(m, 1))}
+              className="alvo-44 flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface hover:text-ink"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-1 flex items-baseline justify-between gap-2">
+          {/*
+            ⚠️ PONTO COLORIDO **MAIS** RÓTULO DE TEXTO — nunca só a cor.
+
+            É a regra do DS §9, e ela não é preferência estética: quem não
+            distingue vermelho de verde precisa saber que a fatura está vencida.
+            O `ponto` do Badge existe exatamente para isto, e é o mesmo
+            mecanismo que as categorias já usam.
+
+            "fechada" fica sem ponto de propósito: é o estado NORMAL de uma
+            fatura esperando o vencimento, e pintá-lo gastaria cor num caso que
+            não pede atenção nenhuma. Cor tem significado; se tudo tem cor,
+            nada tem.
+          */}
+          {fatura && status ? (
+            <Badge tone="outline" ponto={PONTO_DO_STATUS_DA_FATURA[status]}>
+              {ROTULO_DO_STATUS_DA_FATURA[status]}
+            </Badge>
+          ) : (
+            <span />
+          )}
           <p className="text-sm font-semibold tabular-nums text-ink">
             {fatura ? money(fatura.totalCents) : "—"}
           </p>
@@ -1193,11 +1324,96 @@ function CreditCardPanel({
                 <span className="font-medium text-ink">{money(fatura.openCents)}</span>
               </p>
             )}
+
+            {/*
+              ⚠️ A LISTA É RECOLHÍVEL E COMEÇA FECHADA.
+
+              O cartão de conta já é denso, e a fatura de um mês normal tem
+              dezenas de linhas — abertas por padrão, elas empurrariam todo o
+              resto da tela para fora. O botão diz QUANTOS são, pelo mesmo
+              motivo do "+3 compromissos" da Início: dá para decidir se vale
+              abrir antes de abrir.
+            */}
+            {fatura.itens.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setItensAbertos((v) => !v)}
+                  aria-expanded={itensAbertos}
+                  className="mt-2 flex min-h-11 w-full items-center justify-center rounded-md border border-line px-3 text-legenda font-medium text-ink-muted hover:bg-surface hover:text-ink"
+                >
+                  {itensAbertos
+                    ? "Ocultar lançamentos"
+                    : `Ver ${plural(fatura.itens.length, "lançamento", "lançamentos")}`}
+                </button>
+
+                {itensAbertos && (
+                  <ul className="mt-2 divide-y divide-line border-t border-line">
+                    {fatura.itens.map((t) => (
+                      <li key={t.id} className="flex items-center gap-2 py-2">
+                        <span className="w-12 shrink-0 text-legenda tabular-nums text-ink-subtle">
+                          {t.occurred_on.slice(8, 10)}/{t.occurred_on.slice(5, 7)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-legenda text-ink">
+                          {t.description}
+                        </span>
+                        {/*
+                          Estorno aparece com sinal, e não some: ele SUBTRAI do
+                          total (ver `faturaDoCartao`), e uma linha exibida como
+                          se fosse despesa faria a soma visível não bater com o
+                          total do topo.
+                        */}
+                        <span
+                          className={cn(
+                            "shrink-0 text-legenda tabular-nums",
+                            t.kind === "income" ? "text-success-ink" : "text-ink-muted",
+                          )}
+                        >
+                          {t.kind === "income" ? "−" : ""}
+                          {money(t.amount_cents)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+
+            {/*
+              ⚠️ OS PAGAMENTOS FICAM FORA DA LISTA ACIMA, e é por isso que a
+              soma fecha. `faturaDoCartao` já os EXCLUI do `totalCents`
+              (`ehPagamentoDeFatura`) — misturá-los na lista faria a soma das
+              linhas visíveis divergir do número do topo, e o usuário passaria a
+              conferir na mão para descobrir qual dos dois está certo.
+            */}
+            {fatura.paidCents !== 0 && (
+              <p className="mt-2 border-t border-line pt-2 text-legenda text-ink-subtle">
+                Pagamentos desta fatura ({money(fatura.paidCents)}) não entram na lista acima —
+                eles abatem o total, não fazem parte dele.
+              </p>
+            )}
           </>
         ) : (
           <p className="mt-1 text-legenda text-danger-ink">
             Sem dia de fechamento cadastrado: não dá para saber a que fatura cada compra
             pertence. Edite o cartão.
+          </p>
+        )}
+
+        {/*
+          ⚠️ O CASO QUE FICAVA INVISÍVEL — e que a lista acima torna gritante.
+
+          Um lançamento no cartão sem `statement_month` pesa em `debt_cents` (a
+          barra de limite sobe) e não aparece em fatura nenhuma. Antes isso
+          passava despercebido; com a lista visível, o usuário veria a barra
+          dizer R$ 800 e a soma dos lançamentos dizer R$ 500, sem explicação.
+          Contá-los explicitamente é a explicação.
+        */}
+        {foraDeFatura > 0 && (
+          <p className="mt-2 text-legenda text-warning-ink">
+            {plural(foraDeFatura, "lançamento", "lançamentos")} deste cartão sem fatura
+            atribuída. {plural(foraDeFatura, "Ele conta", "Eles contam")} no limite usado e não{" "}
+            {plural(foraDeFatura, "aparece", "aparecem")} em nenhuma fatura.
           </p>
         )}
 

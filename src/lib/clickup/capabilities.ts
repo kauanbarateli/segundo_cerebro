@@ -92,6 +92,24 @@ const OPERACOES = {
   mudarStatus: { metodo: "PUT", rota: (p) => `/task/${p.taskId}` },
   /** 8. Comentar. */
   comentar: { metodo: "POST", rota: (p) => `/task/${p.taskId}/comment` },
+  /**
+   * 9. Mudar o PRAZO. Mesmo método e mesma rota de `mudarStatus`.
+   *
+   * ⚠️ POR QUE UMA ENTRADA NOVA, SE A ROTA JÁ ESTAVA LIBERADA
+   * A tabela descreve INTENÇÕES, não endereços. `PUT /task/{id}` já constava,
+   * então tecnicamente daria para mandar `due_date` reaproveitando a linha do
+   * status — e é justamente isso que não pode acontecer: a linha passaria a
+   * significar duas coisas, e o nome dela mentiria sobre uma delas.
+   *
+   * Uma entrada por intenção é o que mantém esta tabela legível como
+   * INVENTÁRIO DO PODER concedido. Quem lê "mudarStatus, mudarPrazo, comentar"
+   * sabe o que o aplicativo faz; quem lê "mudarStatus" e descobre depois que
+   * ela também muda prazo não sabe mais o que confiar aqui.
+   *
+   * O corpo continua sendo montado do zero em client.ts, com as duas únicas
+   * chaves que este caso precisa. Ver o cabeçalho sobre PUT /task/{id}.
+   */
+  mudarPrazo: { metodo: "PUT", rota: (p) => `/task/${p.taskId}` },
 } as const satisfies Record<string, Definicao>;
 
 export type Operacao = keyof typeof OPERACOES;
@@ -127,7 +145,13 @@ function exigirId(valor: string | undefined, campo: string): string {
 /** Valida os parâmetros que a rota escolhida realmente usa. */
 function validarParametros(op: Operacao, p: ParametrosDeRota): void {
   if (op === "minhasTarefas") exigirId(p.teamId, "teamId");
-  if (op === "umaTarefa" || op === "lerComentarios" || op === "mudarStatus" || op === "comentar") {
+  if (
+    op === "umaTarefa" ||
+    op === "lerComentarios" ||
+    op === "mudarStatus" ||
+    op === "mudarPrazo" ||
+    op === "comentar"
+  ) {
     exigirId(p.taskId, "taskId");
   }
   if (op === "statusDaLista") exigirId(p.listId, "listId");
