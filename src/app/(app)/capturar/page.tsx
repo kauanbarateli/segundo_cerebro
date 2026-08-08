@@ -4,6 +4,7 @@ import {
   getCaptures,
   getCategories,
   getEventCandidates,
+  getImagensDasCapturas,
   getProjects,
   getRelatedItems,
   getTaskCandidates,
@@ -21,6 +22,13 @@ export default async function CapturarPage() {
     getProjects(),
   ]);
 
+  /*
+    Fora do `Promise.all` acima porque DEPENDE dele: só dá para pedir as imagens
+    depois de saber quais capturas estão na tela. É a única consulta encadeada
+    desta página, e o custo é uma ida ao banco mais a assinatura das URLs.
+  */
+  const imagens = await getImagensDasCapturas(captures.map((c) => c.id));
+
   return (
     <>
       <PageHeader
@@ -36,6 +44,7 @@ export default async function CapturarPage() {
         linkCandidates={[...tarefas, ...eventos]}
         projetos={projetos}
         userId={ctx.userId}
+        imagens={imagens}
       />
     </>
   );

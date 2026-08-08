@@ -1285,6 +1285,98 @@ export async function getHabits(): Promise<Habit[]> {
   return (data as Habit[] | null) ?? [];
 }
 
+/* -------------------------------------------- imagens anexadas à captura --- */
+
+/** Uma imagem anexada, com a URL já assinada e pronta para o `<img src>`. */
+export interface ImagemDaCaptura {
+  fileId: string;
+  captureId: string;
+  url: string;
+}
+
+/**
+ * As imagens de TODAS as capturas da tela, em UM lote.
+ *
+ * ⚠️ EM LOTE, e não uma consulta por captura. A caixa de entrada lista dezenas
+ * de capturas; buscar os anexos dentro do laço faria N+1 idas ao banco numa tela
+ * que abre a cada visita ao app. É o mesmo motivo pelo qual `getRelatedItems`
+ * recebe a lista inteira e devolve um Map.
+ *
+ * ⚠️ A URL É ASSINADA E EXPIRA. O bucket `drive` é privado (0007), então não
+ * existe URL pública: `createSignedUrls` emite um endereço temporário, e uma
+ * hora é o mesmo prazo que `signAvatar` já usa. Depois disso a imagem quebra até
+ * a página ser recarregada — que é o comportamento certo para conteúdo privado,
+ * e o oposto do que um bucket público daria (um link permanente, adivinhável e
+ * fora do controle da RLS).
+ */
+export async function getImagensDasCapturas(
+  captureIds: string[],
+): Promise<Map<string, ImagemDaCaptura[]>> {
+  const mapa = new Map<string, ImagemDaCaptura[]>();
+  if (captureIds.length === 0) return mapa;
+
+  const supabase = await createClient();
+
+  // A RLS já filtra por dono nas duas tabelas; o `in` é só o recorte da tela.
+  const { data: vinculos } = await supabase
+    .from("capture_file_links")
+    .select("capture_id, file_id, drive_files(storage_path)")
+    .in("capture_id", captureIds);
+
+  const linhas =
+    (vinculos as
+      | { capture_id: string; file_id: string; drive_files: { storage_path: string } | null }[]
+      | null) ?? [];
+
+  const caminhos = linhas.map((l) => l.drive_files?.storage_path).filter((p): p is string => !!p);
+  if (caminhos.length === 0) return mapa;
+
+  const { data: assinadas } = await supabase.storage
+    .from("drive")
+    .createSignedUrls(caminhos, 3600);
+
+  // `createSignedUrls` devolve na MESMA ordem dos caminhos pedidos, mas casar
+  // por índice quebraria em silêncio se um deles falhasse. O Map por caminho é
+  // à prova disso.
+  const urlPorCaminho = new Map(
+    (assinadas ?? [])
+      .filter((a) => a.signedUrl && a.path)
+      .map((a) => [a.path as string, a.signedUrl]),
+  );
+
+  for (const linha of linhas) {
+    const caminho = linha.drive_files?.storage_path;
+    const url = caminho ? urlPorCaminho.get(caminho) : undefined;
+    if (!url) continue;
+    const atuais = mapa.get(linha.capture_id) ?? [];
+    atuais.push({ fileId: linha.file_id, captureId: linha.capture_id, url });
+    mapa.set(linha.capture_id, atuais);
+  }
+
+  return mapa;
+}
+
+/**
+ * Os hábitos ARQUIVADOS — a antessala da exclusão.
+ *
+ * Consulta separada, e não um `getHabits()` que traz tudo e filtra na tela: os
+ * ativos são lidos a cada carregamento da página e usam o índice parcial
+ * (`habits_ativos_idx`); trazer os arquivados junto desperdiçaria o índice e
+ * cresceria sem teto justamente na consulta mais quente do módulo.
+ *
+ * Ordem por `archived_at desc`: o que foi arquivado por último é o que alguém
+ * pode querer desfazer, e o que foi arquivado há um ano é o que se vai excluir.
+ */
+export async function getArchivedHabits(): Promise<Habit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("habits")
+    .select("*")
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false });
+  return (data as Habit[] | null) ?? [];
+}
+
 /**
  * As marcações desde `de` (inclusive).
  *

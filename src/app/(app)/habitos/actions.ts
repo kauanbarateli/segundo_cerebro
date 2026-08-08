@@ -151,6 +151,136 @@ export async function archiveHabit(id: unknown): Promise<ActionResult> {
 }
 
 /**
+ * Desarquivar: devolve o hábito à lista ativa.
+ *
+ * Existe porque a exclusão passou a exigir arquivar antes (ver `deleteHabit`).
+ * Sem a volta, arquivar viraria uma porta de mão única — e alguém que arquivou
+ * por engano ficaria com a escolha entre excluir de vez ou recriar do zero,
+ * perdendo o histórico das duas formas.
+ */
+export async function unarchiveHabit(id: unknown): Promise<ActionResult> {
+  const habitId = lerUuid(id);
+  if (!habitId) return { ok: false, error: ID_INVALIDO };
+
+  const { supabase, user } = await exigirUsuario();
+  if (!user) return { ok: false, error: "Sessão expirada" };
+
+  const bloqueio = bloqueioPorLimite("habitos:escrita", user.id);
+  if (bloqueio) return bloqueio;
+
+  const { error } = await supabase
+    .from("habits")
+    .update({ archived_at: null })
+    .eq("id", habitId);
+
+  if (error) return { ok: false, error: "Não foi possível desarquivar." };
+  revalidar();
+  return { ok: true, id: habitId };
+}
+
+/**
+ * Quanto histórico existe — para a CONFIRMAÇÃO poder dizer o que se perde.
+ *
+ * ============================================================================
+ * POR QUE UMA CONSULTA SÓ PARA ISSO
+ * ============================================================================
+ * "Tem certeza?" não é uma pergunta: quem clicou já demonstrou intenção, e a
+ * resposta é sempre sim. "Excluir «Ler 20 páginas» e 47 dias de histórico?" é
+ * outra coisa — ela informa o TAMANHO do que está sendo destruído, que é a
+ * única informação capaz de mudar a decisão de alguém.
+ *
+ * `head: true` com `count: "exact"`: o banco conta e não devolve linha nenhuma.
+ * Trazer os 47 registros para contá-los no cliente seria trabalho para
+ * descartar em seguida.
+ */
+export async function contarHistoricoDoHabito(
+  id: unknown,
+): Promise<{ ok: true; dias: number } | { ok: false; error: string }> {
+  const habitId = lerUuid(id);
+  if (!habitId) return { ok: false, error: ID_INVALIDO };
+
+  const { supabase, user } = await exigirUsuario();
+  if (!user) return { ok: false, error: "Sessão expirada" };
+
+  // A RLS já filtra por dono; o `.eq` é sobre o hábito, não sobre o usuário.
+  const { count, error } = await supabase
+    .from("habit_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("habit_id", habitId);
+
+  if (error) return { ok: false, error: "Não foi possível ler o histórico." };
+  return { ok: true, dias: count ?? 0 };
+}
+
+/**
+ * EXCLUIR de verdade — e só a partir dos ARQUIVADOS.
+ *
+ * ============================================================================
+ * ⚠️ POR QUE ARQUIVAR-DEPOIS-EXCLUIR, E NÃO EXCLUSÃO DIRETA
+ * ============================================================================
+ * Hábito não é um item qualquer: ele acumula sequência, marcações diárias e
+ * pausas — meses de registro que não existem em nenhum outro lugar e que ninguém
+ * consegue reconstruir de memória. Um botão "excluir" ao lado de "marcar hoje",
+ * na mesma linha, no celular, é a distância de um dedo entre marcar o dia e
+ * apagar o ano.
+ *
+ * As três opções e o que cada uma custa:
+ *
+ *   exclusão direta   um toque errado destrói histórico irrecuperável;
+ *   soft delete       preserva tudo, mas nunca LIBERTA: o hábito criado por
+ *                     engano continua no banco para sempre, e "excluir" passa a
+ *                     ser mentira;
+ *   arquivar → excluir  o destrutivo fica atrás de um passo deliberado, e quem
+ *                     chega lá já tirou o hábito da tela e viveu sem ele.
+ *
+ * A terceira ganha por um motivo específico: ela não inventa fluxo novo.
+ * Arquivar já existia e já era o gesto de "não quero mais ver isto".
+ *
+ * ⚠️ A VERIFICAÇÃO DE `archived_at` É NO SERVIDOR, e precisa ser. Esconder o
+ * botão na interface é conveniência; server action é ENDPOINT HTTP, e quem
+ * chamar `deleteHabit` direto não passa por interface nenhuma. O `.not(...
+ * "is", null)` no próprio UPDATE faz a regra valer no banco: um hábito ativo
+ * simplesmente não casa com o filtro, e nada é apagado.
+ *
+ * O histórico some junto por CASCADE, declarado na 0018 (`habit_entries` e
+ * `habit_pauses` com `on delete cascade` em `habit_id`). Não há limpeza manual
+ * aqui de propósito: apagar em três passos abriria a janela em que a exclusão
+ * falha no meio e deixa marcações órfãs apontando para um hábito que não existe.
+ */
+export async function deleteHabit(id: unknown): Promise<ActionResult> {
+  const habitId = lerUuid(id);
+  if (!habitId) return { ok: false, error: ID_INVALIDO };
+
+  const { supabase, user } = await exigirUsuario();
+  if (!user) return { ok: false, error: "Sessão expirada" };
+
+  const bloqueio = bloqueioPorLimite("habitos:escrita", user.id);
+  if (bloqueio) return bloqueio;
+
+  const { data, error } = await supabase
+    .from("habits")
+    .delete()
+    .eq("id", habitId)
+    .not("archived_at", "is", null)
+    .select("id");
+
+  if (error) return { ok: false, error: "Não foi possível excluir." };
+
+  /*
+    Zero linha significa "não estava arquivado" OU "não existe" OU "é de outro
+    usuário" — e a mensagem é a MESMA para os três de propósito. Distinguir
+    "este hábito existe mas é de outra pessoa" de "não existe" confirmaria a
+    existência de um id para quem está sondando.
+  */
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Arquive o hábito antes de excluí-lo." };
+  }
+
+  revalidar();
+  return { ok: true, id: habitId };
+}
+
+/**
  * MARCAR OU DESMARCAR um dia.
  *
  * ============================================================================

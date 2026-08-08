@@ -70,8 +70,9 @@ const nextConfig = {
  * chunks compartilhados. Ganha stack trace um pouco melhor e faz a build
  * demorar bem mais; não vale num projeto deste tamanho.
  *
- * ⚠️ `disableLogger: true` tira do pacote do navegador as mensagens de
- * depuração do próprio SDK — é peso puro em produção.
+ * ⚠️ `treeshake.removeDebugLogging` tira do pacote do navegador as mensagens de
+ * depuração do próprio SDK — peso puro em produção. (Era `disableLogger`, que o
+ * SDK depreciou; a opção nova faz a mesma coisa pela via do webpack.)
  *
  * ⚠️ `tunnelRoute` fica DESLIGADO de propósito. Ele criaria uma rota no
  * próprio domínio para repassar a telemetria e driblar bloqueadores de
@@ -85,6 +86,6 @@ const nextConfig = {
 export default withSentryConfig(nextConfig, {
   silent: !process.env.CI,
   widenClientFileUpload: false,
-  disableLogger: true,
+  webpack: { treeshake: { removeDebugLogging: true } },
   telemetry: false,
 });

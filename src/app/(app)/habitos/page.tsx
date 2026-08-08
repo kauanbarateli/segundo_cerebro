@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { HabitsView } from "@/components/features/habits/HabitsView";
-import { getHabitEntries, getHabitPauses, getHabits } from "@/lib/data";
+import { getArchivedHabits, getHabitEntries, getHabitPauses, getHabits } from "@/lib/data";
 import { requireModule } from "@/lib/guards";
 import { dayRangeInTimeZone } from "@/lib/utils";
 import { somarDias } from "@/lib/habits";
@@ -46,10 +46,14 @@ export default async function HabitosPage() {
   const { dayKey: hoje } = dayRangeInTimeZone(new Date(), "America/Sao_Paulo");
   const inicioDaJanela = somarDias(hoje, -(DIAS_DA_JANELA - 1));
 
-  const [habitos, marcacoes, pausas] = await Promise.all([
+  const [habitos, marcacoes, pausas, arquivados] = await Promise.all([
     getHabits(),
     getHabitEntries(inicioDaJanela),
     getHabitPauses(inicioDaJanela),
+    // Entra no MESMO `Promise.all`, e não numa espera em seguida: são consultas
+    // independentes, e encadeá-las somaria uma ida ao banco à abertura de uma
+    // tela que já era rápida.
+    getArchivedHabits(),
   ]);
 
   return (
@@ -67,6 +71,7 @@ export default async function HabitosPage() {
         hoje={hoje}
         inicioDaJanela={inicioDaJanela}
         diasDaJanela={DIAS_DA_JANELA}
+        arquivados={arquivados}
       />
     </>
   );

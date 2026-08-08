@@ -12,7 +12,17 @@ import { LinkCountBadge } from "@/components/features/links/LinkCountBadge";
 import { RelatedSection } from "@/components/features/links/RelatedSection";
 import type { Capture, CaptureType, Category, Project } from "@/lib/database.types";
 import type { RelatedItem } from "@/lib/links";
-import { formatDayLabel } from "@/lib/utils";
+import type { ImagemDaCaptura } from "@/lib/data";
+import { formatDayLabel, plural } from "@/lib/utils";
+import { Icon } from "@/components/ui/Icons";
+import { IMAGEM_GRANDE_DEMAIS, IMAGEM_INVALIDA, MAXIMO_DE_ANEXOS } from "@/lib/imagem";
+import {
+  ACCEPT_DE_IMAGEM,
+  type AnexoPendente,
+  enviarAnexo,
+  imagensDe,
+  prepararAnexo,
+} from "@/components/features/capture/anexos";
 import {
   apagarRascunho,
   gravarRascunho,
@@ -22,6 +32,7 @@ import {
 import { CLASSE_DO_CAMPO, CLASSE_DO_CAMPO_MULTILINHA } from "@/components/ui/estilos";
 import { cn } from "@/lib/utils";
 import {
+  anexarImagemACaptura,
   archiveCapture,
   convertCaptureToTask,
   createCapture,
@@ -58,6 +69,7 @@ export function CaptureView({
   linkCandidates,
   projetos = [],
   userId,
+  imagens = new Map(),
 }: {
   captures: Capture[];
   categories: Category[];
@@ -73,10 +85,34 @@ export function CaptureView({
    * conta aparece no compositor da outra.
    */
   userId: string;
+  /**
+   * As imagens de cada captura, por id, com URL assinada. Um Map e não um campo
+   * dentro de `captures` porque a assinatura das URLs é feita em lote — ver
+   * `getImagensDasCapturas`.
+   */
+  imagens?: Map<string, ImagemDaCaptura[]>;
 }) {
   const { toast } = useToast();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [restored, setRestored] = useState(false);
+
+  /*
+    ⚠️ AS IMAGENS FICAM FORA DO RASCUNHO, e não é esquecimento.
+
+    O rascunho é gravado em `sessionStorage` (ver `capture-draft.ts`), que
+    guarda STRING e tem uns 5 MB no total. Uma imagem não cabe: em base64 ela
+    cresce ~33%, e duas fotos já estourariam a cota — o que faz o `setItem`
+    LANÇAR, e aí o rascunho inteiro para de ser salvo. Perder o texto para tentar
+    preservar a imagem é o pior negócio possível.
+
+    Consequência assumida: recarregar a página preserva o texto e perde as
+    imagens escolhidas. É recuperável (colar de novo) e o texto — que é o que
+    não se recupera — continua protegido.
+  */
+  const [anexos, setAnexos] = useState<AnexoPendente[]>([]);
+  const [preparando, setPreparando] = useState(false);
+  const [arrastando, setArrastando] = useState(false);
+  const seletorDeArquivo = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [typeFilter, setTypeFilter] = useState<CaptureType | "all">("all");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,6 +166,73 @@ export function CaptureView({
     };
   }, [draft, restored, userId]);
 
+  /**
+   * Recebe arquivos de qualquer uma das TRÊS portas: colar, arrastar, escolher.
+   *
+   * As três chegam aqui e não em três caminhos paralelos — a validação, o teto e
+   * as mensagens são as mesmas, e três cópias divergiriam na primeira correção.
+   */
+  async function receberArquivos(arquivos: File[]) {
+    if (arquivos.length === 0) return;
+
+    const espaco = MAXIMO_DE_ANEXOS - anexos.length;
+    if (espaco <= 0) {
+      toast(`São no máximo ${MAXIMO_DE_ANEXOS} imagens por captura.`, "error");
+      return;
+    }
+
+    // Corta ANTES de preparar: reencodar dez imagens para descartar sete seria
+    // segurar a interface por nada.
+    const aceitos = arquivos.slice(0, espaco);
+    if (arquivos.length > espaco) {
+      toast(`Só cabem mais ${plural(espaco, "imagem", "imagens")}.`, "error");
+    }
+
+    setPreparando(true);
+    try {
+      for (const arquivo of aceitos) {
+        const r = await prepararAnexo(arquivo);
+        if (r.ok) {
+          setAnexos((a) => [...a, r.anexo]);
+        } else {
+          toast(
+            r.motivo === "tipo"
+              ? IMAGEM_INVALIDA
+              : r.motivo === "tamanho"
+                ? IMAGEM_GRANDE_DEMAIS
+                : "Não foi possível ler essa imagem.",
+            "error",
+          );
+        }
+      }
+    } finally {
+      setPreparando(false);
+    }
+  }
+
+  function removerAnexo(id: string) {
+    setAnexos((atuais) => {
+      const alvo = atuais.find((a) => a.id === id);
+      // A prévia é um `blob:` vivo no documento; sem revogar, cada imagem
+      // adicionada e removida deixa a cópia dela na memória da aba até a
+      // navegação seguinte.
+      if (alvo) URL.revokeObjectURL(alvo.previa);
+      return atuais.filter((a) => a.id !== id);
+    });
+  }
+
+  /**
+   * ⚠️ A CAPTURA É SALVA PRIMEIRO, E AS IMAGENS DEPOIS — nesta ordem.
+   *
+   * O vínculo tem FK para `captures`, então não existe anexar a uma captura que
+   * ainda não foi criada. A ordem inversa é impossível, e a consequência precisa
+   * ser tratada: se o upload de uma imagem falhar, a CAPTURA JÁ EXISTE.
+   *
+   * E é o comportamento certo. O texto é o que a pessoa digitou e é o que ela
+   * não pode perder; descartar a captura inteira porque uma imagem falhou seria
+   * punir o conteúdo pelo anexo. Então a captura fica, o formulário é limpo, e o
+   * aviso diz exatamente quantas imagens não subiram.
+   */
   function submit() {
     start(async () => {
       const r = await createCapture({
@@ -139,13 +242,36 @@ export function CaptureView({
         categoryId: draft.categoryId || undefined,
         projectId: draft.projectId || undefined,
       });
-      if (r.ok) {
-        toast("Enviado ao cérebro", "success");
-        setDraft({ ...emptyDraft, type: draft.type });
-        apagarRascunho(userId);
-      } else {
+
+      if (!r.ok) {
         toast(r.error ?? "Erro", "error");
+        return;
       }
+
+      let falharam = 0;
+      if (anexos.length > 0 && r.id) {
+        for (const anexo of anexos) {
+          const caminho = await enviarAnexo(anexo);
+          if (!caminho) {
+            falharam += 1;
+            continue;
+          }
+          const anexado = await anexarImagemACaptura({ captureId: r.id, storagePath: caminho });
+          if (!anexado.ok) falharam += 1;
+        }
+      }
+
+      toast(
+        falharam === 0
+          ? "Enviado ao cérebro"
+          : `Captura salva, mas ${plural(falharam, "imagem falhou", "imagens falharam")}.`,
+        falharam === 0 ? "success" : "error",
+      );
+
+      for (const anexo of anexos) URL.revokeObjectURL(anexo.previa);
+      setAnexos([]);
+      setDraft({ ...emptyDraft, type: draft.type });
+      apagarRascunho(userId);
     });
   }
 
@@ -294,13 +420,82 @@ export function CaptureView({
           className={cn(CLASSE_DO_CAMPO, "w-full mb-3")}
         />
 
+        {/*
+          ⚠️ O `onPaste` e o `onDrop` ficam no TEXTAREA, não num painel separado.
+
+          Colar um print é o caso mais comum de todos, e o cursor já está aqui —
+          a pessoa acabou de escrever. Exigir que ela mova o foco para uma "área
+          de anexos" antes de colar transformaria o gesto de um toque em três, e
+          "tirar da cabeça rápido" é o propósito inteiro desta tela.
+
+          `onDragOver` precisa de `preventDefault` para que o `onDrop` chegue a
+          acontecer: sem ele o navegador trata o arquivo como navegação e ABRE a
+          imagem, descartando a captura que estava sendo escrita.
+        */}
         <textarea
           aria-label="Conteúdo"
-          placeholder="Comece a escrever. Você organiza depois…"
+          placeholder="Comece a escrever. Você organiza depois… (pode colar uma imagem aqui)"
           value={draft.content}
           onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
+          onPaste={(e) => {
+            const imagens = imagensDe(e.clipboardData);
+            if (imagens.length === 0) return;
+            // Só impede o padrão quando HÁ imagem: colar texto precisa
+            // continuar colando texto.
+            e.preventDefault();
+            void receberArquivos(imagens);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastando(true);
+          }}
+          onDragLeave={() => setArrastando(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setArrastando(false);
+            void receberArquivos(imagensDe(e.dataTransfer));
+          }}
           rows={10}
-          className={cn(CLASSE_DO_CAMPO_MULTILINHA, "w-full resize-none")}
+          className={cn(
+            CLASSE_DO_CAMPO_MULTILINHA,
+            "w-full resize-none",
+            // O destaque de arrasto é uma BORDA, não um overlay: overlay cobriria
+            // o texto que a pessoa está escrevendo bem no momento em que ela
+            // precisa ver onde a imagem vai cair.
+            arrastando && "border-accent",
+          )}
+        />
+
+        <AnexosDaCaptura
+          anexos={anexos}
+          preparando={preparando}
+          enviando={pending}
+          onEscolher={() => seletorDeArquivo.current?.click()}
+          onRemover={removerAnexo}
+        />
+
+        {/*
+          O `<input type="file">` é o que funciona no CELULAR — lá não há colar
+          nem arrastar, e `accept="image/*"` abre a câmera e a galeria.
+
+          Escondido com `sr-only` e não `display:none`: um input oculto por
+          display sai da ordem de foco, e o botão que o aciona passaria a ser um
+          controle sem par para quem navega por teclado.
+        */}
+        <input
+          ref={seletorDeArquivo}
+          type="file"
+          accept={ACCEPT_DE_IMAGEM}
+          multiple
+          className="sr-only"
+          onChange={(e) => {
+            // `Array.from` ANTES do await: `e.target.value = ""` limpa a
+            // FileList, e sem a cópia o handler assíncrono receberia uma lista
+            // vazia. É o mesmo cuidado que `DriveView` já documenta.
+            const arquivos = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void receberArquivos(arquivos);
+          }}
         />
 
         {/*
@@ -544,7 +739,11 @@ export function CaptureView({
             />
           ) : (
             <>
-              <CaptureDetailBody capture={selected} categoryName={selectedCategory} />
+              <CaptureDetailBody
+                capture={selected}
+                categoryName={selectedCategory}
+                imagens={imagens.get(selected.id) ?? []}
+              />
               {/*
                 `key` pela captura aberta: a seta esquerda/direita troca a nota
                 SEM desmontar o modal, e sem a chave o texto digitado no
@@ -604,9 +803,12 @@ export function CaptureView({
 function CaptureDetailBody({
   capture,
   categoryName,
+  imagens = [],
 }: {
   capture: Capture;
   categoryName: string | null;
+  /** As imagens anexadas, com URL já assinada. Ver `getImagensDasCapturas`. */
+  imagens?: ImagemDaCaptura[];
 }) {
   return (
     <div className="space-y-3">
@@ -630,6 +832,38 @@ function CaptureDetailBody({
         </p>
       ) : (
         <p className="text-corpo text-ink-subtle">Sem conteúdo.</p>
+      )}
+
+      {imagens.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {imagens.map((img) => (
+            /*
+              A imagem abre em ABA NOVA em vez de num visualizador próprio. Um
+              lightbox seria mais uma camada sobre um modal que já está aberto —
+              e a aba nova entrega de graça o que ele teria que reimplementar:
+              zoom, girar, salvar e a lupa do sistema.
+
+              `rel="noopener noreferrer"` mesmo sendo o próprio domínio: a URL é
+              ASSINADA e aponta para o Storage do Supabase, que é outra origem.
+              Sem `noreferrer` o endereço desta página iria no Referer.
+            */
+            <a
+              key={img.fileId}
+              href={img.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md focus-visible:outline focus-visible:outline-2"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={img.url}
+                alt="Imagem anexada a esta captura"
+                loading="lazy"
+                className="h-24 w-24 rounded-md border border-line object-cover"
+              />
+            </a>
+          ))}
+        </div>
       )}
 
       <dl className="flex flex-wrap gap-x-5 gap-y-1 border-t border-line pt-3 text-legenda">
@@ -771,5 +1005,92 @@ function ArchiveButton({ captureId }: { captureId: string }) {
     >
       Arquivar
     </Button>
+  );
+}
+
+/**
+ * As imagens escolhidas, antes do envio.
+ *
+ * ⚠️ NÃO renderiza nada quando não há imagem NEM preparo em curso — nem um
+ * botão "anexar imagem" permanente. Capturar é uma caixa de texto, e a
+ * funcionalidade toda vive nos gestos que já existem (colar, arrastar). Um
+ * botão fixo somaria peso visual a uma tela cujo valor é não ter nada no
+ * caminho; no celular, onde colar não existe, ele aparece junto das miniaturas
+ * assim que a primeira imagem entra — e antes disso o seletor é alcançável pelo
+ * mesmo `<input>` via teclado.
+ */
+function AnexosDaCaptura({
+  anexos,
+  preparando,
+  enviando,
+  onEscolher,
+  onRemover,
+}: {
+  anexos: AnexoPendente[];
+  preparando: boolean;
+  enviando: boolean;
+  onEscolher: () => void;
+  onRemover: (id: string) => void;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {anexos.map((a) => (
+          <figure key={a.id} className="relative">
+            {/*
+              `<img>` cru e não `next/image`: a fonte é um `blob:` local que
+              existe só nesta aba e some ao recarregar. O otimizador do Next
+              precisaria de uma URL que ele consiga buscar do servidor, e não
+              há nada para otimizar num arquivo que nunca sai da memória.
+            */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={a.previa}
+              alt=""
+              className="h-20 w-20 rounded-md border border-line object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => onRemover(a.id)}
+              disabled={enviando}
+              aria-label="Remover esta imagem"
+              className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-line bg-surface text-ink-muted hover:text-ink"
+            >
+              <Icon.X width={12} height={12} aria-hidden />
+            </button>
+          </figure>
+        ))}
+
+        {preparando && (
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-md border border-dashed border-line text-legenda text-ink-subtle"
+            aria-live="polite"
+          >
+            Lendo…
+          </div>
+        )}
+
+        {(anexos.length > 0 || preparando) && anexos.length < MAXIMO_DE_ANEXOS && (
+          <button
+            type="button"
+            onClick={onEscolher}
+            disabled={enviando}
+            className="flex h-20 w-20 items-center justify-center rounded-md border border-dashed border-line-strong text-legenda text-ink-muted hover:bg-surface-muted hover:text-ink"
+          >
+            + imagem
+          </button>
+        )}
+      </div>
+
+      {anexos.length > 0 && (
+        <p className="mt-2 text-legenda text-ink-subtle">
+          {plural(anexos.length, "imagem", "imagens")} — {""}
+          {/* Diz que os metadados saem. É informação de PRIVACIDADE: foto de
+              celular carrega GPS, e quem anexa merece saber que ele não vai
+              junto. Ver `prepararImagem`. */}
+          enviadas sem os metadados da câmera (data, aparelho e localização).
+        </p>
+      )}
+    </div>
   );
 }

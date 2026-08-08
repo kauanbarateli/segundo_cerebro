@@ -20,10 +20,16 @@ import {
   maiuscula,
   unidadeDaSequencia,
 } from "@/components/features/habits/Leitura";
-import { archiveHabit, toggleHabitDay } from "@/app/(app)/habitos/actions";
+import {
+  archiveHabit,
+  contarHistoricoDoHabito,
+  deleteHabit,
+  toggleHabitDay,
+  unarchiveHabit,
+} from "@/app/(app)/habitos/actions";
 import type { Habit, HabitEntry, HabitPause } from "@/lib/database.types";
 import { celulasDoPeriodo, resumirHabitos, type Habito, type ResumoDeHabito } from "@/lib/habits";
-import { cn } from "@/lib/utils";
+import { cn, plural } from "@/lib/utils";
 
 /**
  * A TELA DE HÁBITOS — dois blocos, duas perguntas.
@@ -68,6 +74,7 @@ export function HabitsView({
   hoje,
   inicioDaJanela,
   diasDaJanela,
+  arquivados = [],
 }: {
   habitos: Habit[];
   marcacoes: HabitEntry[];
@@ -76,12 +83,21 @@ export function HabitsView({
   hoje: string;
   inicioDaJanela: string;
   diasDaJanela: number;
+  /** Os hábitos arquivados — a antessala da exclusão. Ver `deleteHabit`. */
+  arquivados?: Habit[];
 }) {
   const { toast } = useToast();
   const [, iniciar] = useTransition();
   const [formAberto, setFormAberto] = useState(false);
   const [editando, setEditando] = useState<Habit | null>(null);
   const [arquivando, setArquivando] = useState<Habit | null>(null);
+  /*
+    O alvo da exclusão carrega o VOLUME de histórico junto, e não só o hábito:
+    a confirmação precisa dizer quantos dias somem, e esse número vem de uma
+    consulta que roda ao ABRIR o diálogo. Guardá-lo aqui evita que a frase
+    pisque entre "…e ? dias" e o número real.
+  */
+  const [excluindo, setExcluindo] = useState<{ habito: Habit; dias: number | null } | null>(null);
 
   /*
     OTIMISMO LOCAL. Marcar um hábito precisa responder no toque: esperar a ida
@@ -164,6 +180,42 @@ export function HabitsView({
     setFormAberto(true);
   }
 
+  function desarquivar(h: Habit) {
+    iniciar(async () => {
+      const r = await unarchiveHabit(h.id);
+      toast(r.ok ? "De volta à lista" : (r.error ?? "Erro"), r.ok ? "success" : "error");
+    });
+  }
+
+  /**
+   * Abre o diálogo JÁ, com `dias: null`, e busca a contagem em seguida.
+   *
+   * O contrário — esperar a consulta para só então abrir — deixaria o botão sem
+   * resposta durante uma ida ao servidor, e a reação natural é clicar de novo.
+   */
+  function pedirExclusao(h: Habit) {
+    setExcluindo({ habito: h, dias: null });
+    iniciar(async () => {
+      const r = await contarHistoricoDoHabito(h.id);
+      if (!r.ok) return;
+      // Só atualiza se ainda for o MESMO hábito: a resposta pode chegar depois
+      // de o usuário fechar este diálogo e abrir o de outro.
+      setExcluindo((atual) =>
+        atual && atual.habito.id === h.id ? { ...atual, dias: r.dias } : atual,
+      );
+    });
+  }
+
+  function confirmarExclusao() {
+    const alvo = excluindo?.habito;
+    setExcluindo(null);
+    if (!alvo) return;
+    iniciar(async () => {
+      const r = await deleteHabit(alvo.id);
+      toast(r.ok ? "Hábito excluído" : (r.error ?? "Erro"), r.ok ? "success" : "error");
+    });
+  }
+
   if (habitos.length === 0) {
     return (
       <>
@@ -182,11 +234,30 @@ export function HabitsView({
             </Button>
           }
         />
+        {/*
+          ⚠️ A SEÇÃO DE ARQUIVADOS PRECISA APARECER TAMBÉM AQUI.
+
+          Este retorno antecipado dispara quando não há hábito ATIVO — e
+          "arquivei todos" é exatamente um desses casos. Sem esta linha, quem
+          arquivasse o último hábito perderia o acesso à própria lista de
+          arquivados: nada para desarquivar, nada para excluir, e a única saída
+          seria criar um hábito novo para a tela voltar a existir.
+        */}
+        <SecaoArquivados
+          arquivados={arquivados}
+          aoDesarquivar={desarquivar}
+          aoPedirExclusao={pedirExclusao}
+        />
         {formAberto && (
           <Modal title="Novo hábito" onClose={() => setFormAberto(false)}>
             <HabitForm hoje={hoje} onDone={() => setFormAberto(false)} />
           </Modal>
         )}
+        <DialogoDeExclusao
+          excluindo={excluindo}
+          onCancel={() => setExcluindo(null)}
+          onConfirm={confirmarExclusao}
+        />
       </>
     );
   }
@@ -308,6 +379,12 @@ export function HabitsView({
         </div>
       </section>
 
+      <SecaoArquivados
+        arquivados={arquivados}
+        aoDesarquivar={desarquivar}
+        aoPedirExclusao={pedirExclusao}
+      />
+
       {/* `div` e não `footer`: um `<footer>` que não está dentro de `article` ou
           `section` vira landmark `contentinfo`, e o layout do aplicativo já tem
           o dele. Dois `contentinfo` na mesma página fazem o leitor de tela
@@ -351,7 +428,104 @@ export function HabitsView({
           });
         }}
       />
+
+      <DialogoDeExclusao
+        excluindo={excluindo}
+        onCancel={() => setExcluindo(null)}
+        onConfirm={confirmarExclusao}
+      />
     </div>
+  );
+}
+
+/**
+ * ARQUIVADOS — a antessala da exclusão.
+ *
+ * A seção só existe quando há algo nela: um bloco "Arquivados (0)" permanente
+ * seria um convite diário a uma operação destrutiva que ninguém pediu. E ela
+ * fica no FIM da página, depois do rodapé de explicação — é o lugar de quem se
+ * visita raramente, e a distância física é parte da proteção.
+ */
+function SecaoArquivados({
+  arquivados,
+  aoDesarquivar,
+  aoPedirExclusao,
+}: {
+  arquivados: Habit[];
+  aoDesarquivar: (h: Habit) => void;
+  aoPedirExclusao: (h: Habit) => void;
+}) {
+  if (arquivados.length === 0) return null;
+
+  return (
+    <section className="space-y-3 border-t border-line pt-5">
+      <h2 className="text-lg font-semibold text-ink">Arquivados</h2>
+      <p className="text-legenda text-ink-subtle">
+        Não contam sequência e não aparecem no checklist. Desarquivar devolve o hábito inteiro,
+        com o histórico; excluir apaga as marcações junto, e isso não tem volta.
+      </p>
+      <Card className="divide-y divide-line">
+        {arquivados.map((h) => (
+          <div key={h.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+            <span className="min-w-0 flex-1 truncate text-sm text-ink">{h.name}</span>
+            <Button variant="ghost" size="sm" onClick={() => aoDesarquivar(h)}>
+              Desarquivar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => aoPedirExclusao(h)}>
+              Excluir
+            </Button>
+          </div>
+        ))}
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * ⚠️ A CONFIRMAÇÃO DIZ QUANTO SE PERDE — é a diferença entre um aviso e uma
+ * pergunta de verdade.
+ *
+ * "Tem certeza?" não informa nada: quem clicou já demonstrou intenção, e a
+ * resposta é sempre sim. "Excluir «Ler 20 páginas» e 47 dias marcados?" é a
+ * única formulação capaz de fazer alguém parar — porque 47 é um número que a
+ * pessoa reconhece e não quer perder.
+ *
+ * `destructive` AQUI SIM, ao contrário do desvínculo de projeto: isto apaga
+ * linha do banco, em cascata, sem volta. É por poupar o vermelho nas operações
+ * inofensivas que ele ainda significa alguma coisa aqui.
+ *
+ * ⚠️ Enquanto `dias` é `null` a contagem ainda está vindo, e a frase NÃO
+ * inventa um número: ela fala em "todo o histórico". Mostrar "0 dias" durante o
+ * carregamento seria mentir na direção mais perigosa — dizer que não há nada a
+ * perder exatamente quando pode haver muito.
+ */
+function DialogoDeExclusao({
+  excluindo,
+  onCancel,
+  onConfirm,
+}: {
+  excluindo: { habito: Habit; dias: number | null } | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const descricao = !excluindo
+    ? undefined
+    : excluindo.dias === null
+      ? `"${excluindo.habito.name}" e todo o histórico dele serão apagados. Não tem volta.`
+      : excluindo.dias === 0
+        ? `"${excluindo.habito.name}" nunca foi marcado — não há histórico a perder.`
+        : `"${excluindo.habito.name}" e ${plural(excluindo.dias, "dia marcado", "dias marcados")} serão apagados. Não tem volta.`;
+
+  return (
+    <ConfirmationDialog
+      open={excluindo !== null}
+      destructive
+      title="Excluir hábito"
+      description={descricao}
+      confirmLabel="Excluir"
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 
