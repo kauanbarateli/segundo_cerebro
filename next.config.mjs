@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 
 /**
@@ -57,4 +59,32 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * O embrulho do Sentry — e as três coisas que ele NÃO deve fazer aqui.
+ *
+ * `withSentryConfig` existe para enviar SOURCE MAPS na build (sem eles a pilha
+ * de um erro de produção é `a.b.c` minificado e não serve para nada) e para
+ * instrumentar o servidor.
+ *
+ * ⚠️ `widenClientFileUpload: false` — o padrão `true` sobe também os mapas dos
+ * chunks compartilhados. Ganha stack trace um pouco melhor e faz a build
+ * demorar bem mais; não vale num projeto deste tamanho.
+ *
+ * ⚠️ `disableLogger: true` tira do pacote do navegador as mensagens de
+ * depuração do próprio SDK — é peso puro em produção.
+ *
+ * ⚠️ `tunnelRoute` fica DESLIGADO de propósito. Ele criaria uma rota no
+ * próprio domínio para repassar a telemetria e driblar bloqueadores de
+ * anúncio. Além de contornar uma escolha do usuário, ele transformaria a
+ * aplicação num proxy aberto para o endpoint do Sentry — e a CSP, que esta
+ * etapa acabou de ajustar com a origem exata, deixaria de ser a barreira que é.
+ *
+ * Sem `SENTRY_AUTH_TOKEN` o plugin não sobe mapa nenhum e a build segue
+ * normal — que é o caso de quem clonar o projeto sem conta no Sentry.
+ */
+export default withSentryConfig(nextConfig, {
+  silent: !process.env.CI,
+  widenClientFileUpload: false,
+  disableLogger: true,
+  telemetry: false,
+});

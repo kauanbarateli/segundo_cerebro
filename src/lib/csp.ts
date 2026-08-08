@@ -161,6 +161,42 @@ function origensDoSupabase(): string[] {
 }
 
 /**
+ * Origem do Sentry, DERIVADA do DSN — nunca escrita à mão.
+ *
+ * ============================================================================
+ * ⚠️ POR QUE ISTO ANDA JUNTO COM A INSTALAÇÃO DO SDK
+ * ============================================================================
+ * O SDK do Sentry faz `fetch` para o endpoint de ingestão do projeto, e isso é
+ * exatamente o que `connect-src` governa. Instalar o SDK sem tocar aqui produz
+ * o pior modo de falha possível: enquanto a política estiver em Report-Only
+ * tudo funciona e ninguém percebe, e no dia em que `CSP_EM_BLOQUEIO` virar
+ * `true` a telemetria morre EM SILÊNCIO — sem erro na tela, sem log, só o
+ * Sentry parando de receber. Descobrir isso exigiria notar a ausência de algo.
+ *
+ * O DSN tem a forma `https://<chave>@<org>.ingest.sentry.io/<projeto>`, então a
+ * origem sai dele por construção. Derivar em vez de escrever "*.sentry.io" tem
+ * dois ganhos: a política fica restrita ao HOST exato que este projeto usa, e
+ * trocar de organização (ou usar Sentry auto-hospedado) não exige lembrar de
+ * mudar mais nada.
+ *
+ * Sem DSN configurado a lista é VAZIA, e é o certo: o SDK também não inicializa
+ * sem DSN (ver `sentry.client.config.ts`), então não há para onde a política se
+ * abrir. Um `*.sentry.io` fixo abriria a política de todo mundo que não usa
+ * Sentry — a exata categoria de permissão que a CSP existe para não dar.
+ */
+function origemDoSentry(): string[] {
+  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+  if (!dsn) return [];
+  try {
+    return [new URL(dsn).origin];
+  } catch {
+    // Mesma escolha de `origensDoSupabase`: uma política mais apertada é melhor
+    // que uma política inválida, que o navegador descarta inteira.
+    return [];
+  }
+}
+
+/**
  * Hash do `themeInitScript` de src/components/theme/tema-init.ts.
  *
  * É uma CONSTANTE e não um cálculo em tempo de execução por duas razões: o
@@ -188,6 +224,7 @@ export const HASH_DO_SCRIPT_DE_TEMA = "sha256-2k/4j58eKv/7VzpSAzNLMu5o1TxQ87d1uf
  */
 export function politicaDeSegurancaDeConteudo(nonce: string): string {
   const supabase = origensDoSupabase();
+  const sentry = origemDoSentry();
 
   /*
     O `next dev` precisa de duas coisas que produção não precisa, e as duas
@@ -265,6 +302,7 @@ export function politicaDeSegurancaDeConteudo(nonce: string): string {
     "connect-src": [
       "'self'",
       ...supabase,
+      ...sentry,
       ...(desenvolvimento ? ["ws://localhost:*"] : []),
     ],
 

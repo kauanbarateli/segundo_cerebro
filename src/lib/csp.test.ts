@@ -23,9 +23,71 @@ function diretiva(politica: string, nome: string): string {
   return encontrada ?? "";
 }
 
+const DSN_ORIGINAL = process.env.NEXT_PUBLIC_SENTRY_DSN;
+
+/** Mesma mecânica de `politicaCom`, para o DSN do Sentry. */
+async function politicaComSentry(dsn: string | undefined) {
+  vi.resetModules();
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://abcdefgh.supabase.co";
+  if (dsn === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN;
+  else process.env.NEXT_PUBLIC_SENTRY_DSN = dsn;
+  const modulo = await import("./csp");
+  return modulo.politicaDeSegurancaDeConteudo("NONCE-DE-TESTE");
+}
+
 afterEach(() => {
   if (ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   else process.env.NEXT_PUBLIC_SUPABASE_URL = ORIGINAL;
+  if (DSN_ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN;
+  else process.env.NEXT_PUBLIC_SENTRY_DSN = DSN_ORIGINAL;
+});
+
+/**
+ * ============================================================================
+ * A FALHA QUE ESTES TESTES EXISTEM PARA IMPEDIR
+ * ============================================================================
+ * Instalar o SDK do Sentry sem ajustar `connect-src` falha do pior jeito
+ * possível: enquanto a política estiver em Report-Only, TUDO FUNCIONA e ninguém
+ * percebe. No dia em que `CSP_EM_BLOQUEIO` virar `true`, a telemetria morre em
+ * silêncio — sem erro na tela, sem log, só o Sentry parando de receber.
+ *
+ * Descobrir isso exigiria notar a ausência de algo, que é a coisa mais difícil
+ * de notar. Estes testes tornam a ligação explícita.
+ */
+describe("connect-src e o Sentry", () => {
+  it("libera a origem do DSN quando há Sentry configurado", async () => {
+    const politica = await politicaComSentry("https://chave@o123.ingest.sentry.io/456");
+    expect(diretiva(politica, "connect-src")).toContain("https://o123.ingest.sentry.io");
+  });
+
+  it("NÃO libera nada quando não há DSN — a política não se abre à toa", async () => {
+    const politica = await politicaComSentry(undefined);
+    expect(diretiva(politica, "connect-src")).not.toContain("sentry.io");
+  });
+
+  it("usa o host EXATO do DSN, nunca um curinga *.sentry.io", async () => {
+    const politica = await politicaComSentry("https://chave@o123.ingest.sentry.io/456");
+    const connect = diretiva(politica, "connect-src");
+    // Um curinga abriria a política para qualquer projeto de qualquer
+    // organização no Sentry — permissão que a CSP existe para não dar.
+    expect(connect).not.toContain("*.sentry.io");
+    expect(connect).not.toContain("*.ingest");
+  });
+
+  it("DSN malformado aperta a política em vez de invalidá-la", async () => {
+    // Uma política com "undefined" no meio é DESCARTADA INTEIRA pelo navegador
+    // — a diretiva some, e o efeito é o oposto do pretendido.
+    const politica = await politicaComSentry("isto-não-é-uma-url");
+    const connect = diretiva(politica, "connect-src");
+    expect(connect).toContain("'self'");
+    expect(connect).not.toContain("undefined");
+    expect(connect).not.toContain("isto-não-é-uma-url");
+  });
+
+  it("não vaza o DSN inteiro (que contém a chave pública) para o cabeçalho", async () => {
+    const politica = await politicaComSentry("https://chave-secreta@o123.ingest.sentry.io/456");
+    expect(politica).not.toContain("chave-secreta");
+  });
 });
 
 describe("politicaDeSegurancaDeConteudo", () => {

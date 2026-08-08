@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/app/**/{page,layout,loading,error,not-found,route,template,default}.{ts,tsx}",
+    "src/app/**/{icon,apple-icon,opengraph-image}.{ts,tsx}",
+    "src/middleware.ts",
+    "src/**/*.test.{ts,tsx}",
+    "src/test/server-only-stub.ts",
+    "next.config.mjs",
+    "tailwind.config.ts",
+    "postcss.config.mjs",
+    "vitest.config.ts",
+    "scripts/**/*.{ts,mjs,js}"
+  ],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignoreDependencies": [
+    "autoprefixer",
+    "postcss",
+    "@types/*"
+  ],
+  "ignoreBinaries": ["depcruise"],
+  "ignoreExportsUsedInFile": true
+}

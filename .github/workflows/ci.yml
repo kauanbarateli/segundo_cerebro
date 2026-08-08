@@ -47,6 +47,19 @@ jobs:
       - name: Lint
         run: npx next lint
 
+      # CONTRATO DE CAMADAS — as quatro regras que já estavam escritas em
+      # comentário, agora executáveis. Ver .dependency-cruiser.cjs para o que
+      # cada uma protege e por quê.
+      #
+      # Roda ANTES dos testes porque é rápido (~5s) e porque um import que
+      # atravessa camada costuma ser a causa de falhas mais adiante — saber
+      # disso primeiro encurta a leitura do log.
+      #
+      # Falha o CI de propósito: as quatro regras vêm de defeito real já
+      # ocorrido, e nenhuma delas tem exceção legítima prevista.
+      - name: Contrato de camadas
+        run: npx depcruise src --config .dependency-cruiser.cjs
+
       - name: Testes
         run: npx vitest run
 
@@ -85,6 +98,27 @@ jobs:
             exit 1
           fi
           echo "OK: nada sensível em .next/static"
+
+      # CÓDIGO MORTO — em modo RELATÓRIO, e o `|| true` é deliberado.
+      #
+      # O projeto já encontrou código morto à mão (a prop `right` do PageHeader,
+      # removida porque `grep -rn 'right={' src` não retornava nada). Knip faz
+      # isso sozinho e vai continuar achando à medida que a base cresce.
+      #
+      # ⚠️ POR QUE NÃO FALHA O CI (ainda): knip acerta muito e erra em casos
+      # legítimos — export consumido só por convenção do framework, tipo usado
+      # apenas em `.d.ts`. Ligar como bloqueio antes de ler o primeiro relatório
+      # é o caminho conhecido para alguém desligar a ferramenta na primeira
+      # sexta-feira. A ordem é: relatório → avaliar os achados → ajustar o
+      # `knip.json` → só então trocar por `npx knip`.
+      #
+      # ⚠️ NÃO FOI POSSÍVEL RODAR NA MÁQUINA LOCAL: o binário nativo do
+      # oxc-resolver (dependência do knip) é bloqueado pela política de Controle
+      # de Aplicativo do Windows. Não é defeito de configuração e não afeta o
+      # runner Linux do CI — mas significa que este passo estreia aqui, e é mais
+      # uma razão para ele não ser bloqueante já.
+      - name: Código morto (relatório)
+        run: npx knip --no-exit-code || true
 
       # ÚLTIMO PASSO, e de propósito: uma vulnerabilidade nova numa dependência
       # não deve esconder um erro de tipo ou um teste quebrado. Rodando por
