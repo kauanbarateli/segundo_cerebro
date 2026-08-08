@@ -1,6 +1,5 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
 import {
   TAMANHO_MAXIMO_BYTES,
   TIPOS_ACEITOS,
@@ -155,6 +154,18 @@ export async function prepararAnexo(arquivo: File): Promise<ResultadoDoPreparo> 
  * vezes. É o mesmo caminho que o Drive já usa.
  */
 export async function enviarAnexo(anexo: AnexoPendente): Promise<string | null> {
+  /*
+    ⚠️ `import()` DINÂMICO, e o número justifica: com o import estático, a tela
+    de Captura saltou de 120 kB para 191 kB de First Load JS. O cliente do
+    Supabase para navegador pesa ~70 kB e vinha inteiro no pacote inicial — para
+    TODA visita, inclusive as milhares em que alguém só escreve uma linha de
+    texto e sai.
+
+    Anexar imagem é a exceção, não a regra, e o custo agora é pago por quem usa:
+    o chunk é buscado no primeiro envio. A espera é irrelevante ao lado da
+    própria transferência do arquivo, que acontece logo em seguida.
+  */
+  const { createClient } = await import("@/lib/supabase/client");
   const supabase = createClient();
   const {
     data: { user },

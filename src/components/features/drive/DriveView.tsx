@@ -11,7 +11,11 @@ import { Icon } from "@/components/ui/Icons";
 import { ConfirmationDialog } from "@/components/ui/ConfirmationDialog";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { createClient } from "@/lib/supabase/client";
+/*
+  ⚠️ O cliente do Supabase é importado DENTRO de `uploadFiles`, não aqui — ver o
+  comentário lá. Em resumo: ele pesa ~70 kB e só serve para ENVIAR arquivo, que
+  é a minoria das visitas ao Drive.
+*/
 import type { DriveFile, DriveFolder, DriveUsage } from "@/lib/database.types";
 import { formatBytes, formatDayLabel, cn } from "@/lib/utils";
 import {
@@ -109,6 +113,18 @@ export function DriveView({
    * a banda. A RLS do Storage garante que só é possível escrever na própria pasta.
    */
   async function uploadFiles(list: FileList | File[]) {
+    /*
+      `import()` dinâmico. O cliente do Supabase para navegador pesa ~70 kB e
+      aqui ele serve a UMA coisa: mandar bytes direto para o Storage, sem passar
+      pelo servidor Next (rota serverless tem teto de corpo).
+
+      Abrir o Drive para ver, renomear, mover ou baixar não precisa dele —
+      essas operações são Server Actions. Pagar 70 kB no carregamento de toda
+      visita para o caso de a pessoa ENVIAR um arquivo é pagar pelo caso menos
+      frequente. Buscar o chunk no primeiro envio é irrelevante ao lado da
+      transferência do arquivo, que vem logo depois.
+    */
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const {
       data: { user },

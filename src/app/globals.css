@@ -321,12 +321,37 @@ body {
  *   - animação por JavaScript (rAF, Web Animations API, biblioteca de mola).
  * Se algum dia um dos dois for necessário, o desligamento tem que ser tratado
  * dentro deste @media, senão a acessibilidade regride em silêncio.
+ *
+ * =========================================================================
+ * ⚠️ `animation-iteration-count` — O DEFEITO QUE FALTAVA, E ELE ERA GRAVE
+ * =========================================================================
+ * Zerar a duração resolve animação FINITA. Para animação INFINITA ela faz o
+ * oposto do pretendido, e o raciocínio é curto: `animate-pulse` do Tailwind é
+ * `pulse 2s ... infinite`. Com a duração forçada para 0.001ms e a repetição
+ * ainda em `infinite`, o ciclo inteiro passa a durar um microssegundo e a
+ * repetir — cerca de um MILHÃO de ciclos por segundo, cada um agendando
+ * recomposição.
+ *
+ * Ou seja: exatamente quem pediu MENOS movimento no sistema operacional —
+ * frequentemente por enxaqueca, vertigem ou sensibilidade vestibular, e muitas
+ * vezes numa máquina modesta — recebia a ventoinha ligada e a bateria
+ * drenando. O piso de acessibilidade estava piorando a vida de quem ele existe
+ * para proteger.
+ *
+ * `animation-iteration-count: 1` fecha isso: a animação roda uma vez (em
+ * 0.001ms, ou seja, imediatamente), assenta no quadro 100% e PARA. Para o
+ * `pulse`, o quadro 100% é `opacity: 1` — o esqueleto fica visível e estático,
+ * que é precisamente o que se quer.
+ *
+ * O projeto usa `animate-pulse` em `ui/states.tsx`, em `TarefasDeHoje` e no
+ * carregamento do painel do ClickUp. As três eram afetadas.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
 }

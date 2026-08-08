@@ -39,3 +39,5 @@ BRAINSTORM-CLICKUP.md
 PROXIMOS-PASSOS-CLICKUP.md
 PLANO-MELHORIAS-SEGUNDO-CEREBRO.md
 coverage/
+test-results/
+playwright-report/

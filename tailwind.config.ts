@@ -402,6 +402,45 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+
+        /* ------------------------------------------------------------- saída
+         *
+         * ⚠️ EXISTIAM CINCO ENTRADAS E NENHUMA SAÍDA, e a assimetria era
+         * perceptível justamente porque a entrada existe: o modal nascia
+         * subindo e desaparecia por corte seco. O olho aprende o movimento na
+         * abertura e estranha a ausência dele no fechamento.
+         *
+         * São a entrada INVERTIDA, e nada além disso — mesma distância, mesma
+         * direção, mesma curva. Uma saída com desenho próprio (encolher, deslizar
+         * para o lado) seria movimento novo para aprender, e o objetivo aqui é
+         * o oposto: que ninguém repare.
+         *
+         * SÃO MAIS RÁPIDAS QUE A ENTRADA — 120ms contra 180ms. Não é
+         * inconsistência: na abertura a animação acompanha algo que a pessoa
+         * está esperando ver; no fechamento ela ATRASA algo que a pessoa já
+         * decidiu descartar. Saída lenta é a forma mais comum de uma interface
+         * animada parecer travada.
+         *
+         * `visibility: hidden` no quadro final impede que o nó, ainda montado
+         * durante os 120ms, continue capturando clique — um véu invisível e
+         * clicável seria pior que não animar.
+         */
+        "sb-fade-out": {
+          from: { opacity: "1" },
+          to: { opacity: "0", visibility: "hidden" },
+        },
+        "sb-modal-out": {
+          from: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "0", transform: "translateY(8px)", visibility: "hidden" },
+        },
+        "sb-toast-out": {
+          from: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "0", transform: "translateY(8px)", visibility: "hidden" },
+        },
+        "sb-popover-out": {
+          from: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "0", transform: "translateY(-4px)", visibility: "hidden" },
+        },
       },
 
       /**
@@ -427,6 +466,21 @@ const config: Config = {
         "toast-in": "sb-toast-in 180ms cubic-bezier(0.2, 0.75, 0.25, 1)",
         "popover-in": "sb-popover-in 120ms cubic-bezier(0.2, 0.75, 0.25, 1)",
         "list-in": "sb-list-in 180ms cubic-bezier(0.2, 0.75, 0.25, 1)",
+
+        /*
+          Saída em 120ms — mais rápida que a entrada, de propósito. Ver os
+          keyframes acima.
+
+          `forwards` é OBRIGATÓRIO aqui e não era nas entradas: sem ele o
+          elemento volta ao estado inicial (opaco, visível) no instante em que a
+          animação termina, e o resultado é um PISCA — ele desaparece e reaparece
+          por um quadro antes de ser desmontado. As entradas não precisam porque
+          o quadro final delas já é o estado natural do elemento.
+        */
+        "overlay-out": "sb-fade-out 120ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards",
+        "modal-out": "sb-modal-out 120ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards",
+        "toast-out": "sb-toast-out 120ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards",
+        "popover-out": "sb-popover-out 120ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards",
       },
 
       /**

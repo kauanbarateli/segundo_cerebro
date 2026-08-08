@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +55,17 @@ const FOCUSABLE_SELECTOR =
  */
 let openModalCount = 0;
 let bodyOverflowBeforeLock = "";
+
+/**
+ * Duração da animação de SAÍDA, em milissegundos.
+ *
+ * ⚠️ ESPELHA `animate-overlay-out` / `animate-modal-out` do tailwind.config.ts.
+ * O número está em dois lugares por necessidade — CSS não é legível daqui — e o
+ * risco é conhecido: se este ficar MENOR que o da animação, o pai desmonta o
+ * modal no meio dela e o corte seco volta, que é exatamente o defeito que a
+ * saída veio corrigir.
+ */
+const SAIDA_MS = 120;
 
 /**
  * Consulta os focáveis AGORA, não na montagem: o conteúdo do modal é dinâmico
@@ -128,6 +147,50 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<Element | null>(null);
   const titleId = useId();
+
+  /*
+    =========================================================================
+    ANIMAÇÃO DE SAÍDA — e por que ela precisa de estado
+    =========================================================================
+    Entrada é fácil: o elemento monta e a animação roda. Saída é o contrário —
+    quando o pai faz `setAberto(false)`, o nó some do DOM no mesmo quadro e não
+    há o que animar. Era por isso que existiam CINCO animações de entrada e
+    nenhuma de saída: o modal nascia subindo e desaparecia por corte seco.
+
+    A solução aqui é o modal ADIAR o próprio fechamento. Todo caminho de fechar
+    (Esc, clique no véu, botão) passa a chamar `iniciarFechamento`, que marca o
+    estado, deixa a animação rodar e SÓ ENTÃO chama o `onClose` do pai — que é
+    quem de fato desmonta.
+
+    ⚠️ Nenhum componente que usa `Modal` precisou mudar. O contrato continua
+    `onClose: () => void`; o que mudou é QUANDO ele é chamado.
+
+    ⚠️ `SAIDA_MS` está em sincronia com `animate-*-out` do tailwind.config.ts
+    (120ms). Mudou lá, mudou aqui — se este número ficar MENOR que o da
+    animação, o pai desmonta no meio e o corte seco volta.
+
+    O timer é a rede, não o mecanismo: `animationend` é quem normalmente
+    dispara. Sob `prefers-reduced-motion` a animação dura 0.001ms e o evento vem
+    de imediato; se por algum motivo ele não vier (aba em segundo plano, por
+    exemplo), o timeout garante que o modal não fique preso na tela para sempre.
+  */
+  const [fechando, setFechando] = useState(false);
+  const fechamentoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const iniciarFechamento = useCallback(() => {
+    // Guarda contra Esc repetido e duplo clique no véu: sem ela, cada tecla
+    // agendaria mais um `onClose`.
+    if (fechamentoRef.current !== null) return;
+    setFechando(true);
+    fechamentoRef.current = setTimeout(onClose, SAIDA_MS);
+  }, [onClose]);
+
+  useEffect(
+    () => () => {
+      if (fechamentoRef.current !== null) clearTimeout(fechamentoRef.current);
+    },
+    [],
+  );
   // O gesto de fechar só é válido se ele NASCEU e MORREU no fundo escuro. Ver o
   // comentário dos handlers do overlay, lá embaixo.
   const gestureStartedOnOverlayRef = useRef(false);
@@ -191,7 +254,7 @@ export function Modal({
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose();
+        iniciarFechamento();
         return;
       }
 
@@ -243,7 +306,13 @@ export function Modal({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, onPrev, onNext]);
+    // `iniciarFechamento` no lugar de `onClose`: é ela que o Esc chama agora, e
+    // ela já depende de `onClose` por dentro. A maioria dos chamadores passa uma
+    // arrow inline, então esta lista muda a cada render do pai — o custo é um
+    // par add/removeEventListener, que é barato e correto. O contrário (lista
+    // "estável" com valor velho preso na closure) fecharia o modal chamando o
+    // `onClose` de um render anterior.
+  }, [iniciarFechamento, onPrev, onNext]);
 
   return (
     /*
@@ -268,7 +337,13 @@ export function Modal({
         canto nenhum da tela, ele simplesmente passa a existir. Movimento no véu
         chamaria atenção para a decoração em vez de para o diálogo.
       */
-      className="fixed inset-0 z-[90] flex animate-overlay-in items-center justify-center bg-black/40 p-4"
+      className={cn(
+        "fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4",
+        // Uma OU outra, nunca as duas: com as duas classes o navegador roda as
+        // animações em paralelo e a última declarada vence de forma
+        // imprevisível entre navegadores.
+        fechando ? "animate-overlay-out" : "animate-overlay-in",
+      )}
       onMouseDown={(e) => {
         gestureStartedOnOverlayRef.current = e.target === e.currentTarget;
       }}
@@ -280,7 +355,7 @@ export function Modal({
         // Zerar sempre, inclusive quando não fecha: um mousedown que morreu no
         // painel não pode deixar a flag armada para o clique seguinte.
         gestureStartedOnOverlayRef.current = false;
-        if (closes) onClose();
+        if (closes) iniciarFechamento();
       }}
     >
       {/*
@@ -311,9 +386,28 @@ export function Modal({
             passar a se ancorar no painel em vez de na janela. Como a animação
             não usa fill-mode, o transform não sobrevive ao último quadro.
           */
-          "animate-modal-in",
+          fechando ? "animate-modal-out" : "animate-modal-in",
           SIZE_CLASS[size],
         )}
+        /*
+          `animationend` é o mecanismo NORMAL de fechar; o `setTimeout` de
+          `iniciarFechamento` é só a rede de segurança. Fechar aqui é melhor
+          porque acompanha a duração real da animação — inclusive quando ela é
+          0.001ms sob `prefers-reduced-motion`, caso em que o modal some na hora
+          em vez de esperar 120ms de nada.
+
+          O teste de alvo importa: `animationend` sobe dos filhos, e um
+          `animate-list-in` de qualquer item lá dentro fecharia o modal sozinho.
+        */
+        onAnimationEnd={(e) => {
+          if (!fechando || e.target !== e.currentTarget) return;
+          if (fechamentoRef.current !== null) {
+            clearTimeout(fechamentoRef.current);
+            // Não zera a ref: ela também é a trava contra Esc repetido, e
+            // limpá-la aqui reabriria a porta para um segundo `onClose`.
+          }
+          onClose();
+        }}
       >
         <h2 id={titleId} className="mb-5 text-corpo-forte font-semibold text-ink">
           {title}
