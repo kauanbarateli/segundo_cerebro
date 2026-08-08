@@ -22,6 +22,44 @@ export interface Profile {
   locale: string;
   created_at: string;
   updated_at: string;
+  /**
+   * Bloqueio administrativo (0021).
+   *
+   * ⚠️ É a camada que derruba SESSÃO JÁ EMITIDA. O ban do Auth impede apenas
+   * login novo — quem já está dentro continuaria até o JWT expirar. Verificado
+   * em `getAppContext()`, que roda em toda navegação.
+   */
+  status: "active" | "blocked";
+  blocked_at: string | null;
+  /** Anotação para o administrador. NUNCA mostrada ao usuário bloqueado. */
+  blocked_reason: string | null;
+  blocked_by: string | null;
+}
+
+/** Papel do usuário (0021). Ausência de linha em `user_roles` = "user". */
+export interface UserRole {
+  user_id: string;
+  role: "user" | "admin" | "master";
+  /** Nulo quando veio de migration (o master semeado), não de gente. */
+  granted_by: string | null;
+  granted_at: string;
+}
+
+/**
+ * Auditoria administrativa (0021). Só INSERT — nada apaga linha daqui.
+ *
+ * `alvo_id` não tem FK de propósito: o registro de "fulano foi excluído"
+ * precisa sobreviver ao usuário excluído, e com cascade ele sumiria justamente
+ * quando vira o único vestígio.
+ */
+export interface AdminAuditEvent {
+  id: string;
+  ator_id: string | null;
+  acao: string;
+  alvo_id: string | null;
+  alvo_email: string | null;
+  detalhe: Record<string, unknown> | null;
+  occurred_at: string;
 }
 
 export type TaskView = "list" | "board";

@@ -54,7 +54,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   */
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
-  const items = MODULES.filter((m) => ctx.enabledModules.has(m.key));
+  /*
+    ⚠️ "Admin" NÃO entra em `MODULES`, e a distinção importa.
+
+    `MODULES` é a lista de módulos DESLIGÁVEIS — cada um tem um interruptor em
+    Configurações, e `user_modules` guarda a escolha. A área administrativa não
+    é uma preferência: ela existe ou não conforme o PAPEL, e um interruptor ali
+    sugeriria que um usuário comum poderia ligá-la.
+
+    Este acréscimo é a CAMADA 1 das quatro (ver `requireMaster`), e é a mais
+    fraca de todas: esconder um link não fecha uma rota. Quem digitar `/admin`
+    ainda passa por `admin/layout.tsx`, e quem chamar uma action direto ainda
+    passa por `requireMaster()`. É conveniência, não controle de acesso.
+  */
+  const items = [
+    ...MODULES.filter((m) => ctx.enabledModules.has(m.key)),
+    ...(ctx.papel === "master"
+      ? [
+          {
+            key: "admin",
+            label: "Admin",
+            href: "/admin",
+            icon: "Settings" as const,
+            core: false,
+            description: "Contas, papéis e bloqueio.",
+          },
+        ]
+      : []),
+  ];
   const notificationsOn = ctx.preferences?.notifications_enabled ?? true;
   const showReminder = notificationsOn && ctx.enabledModules.has("calendario");
 

@@ -51,7 +51,11 @@ export interface AppContext {
   preferences: UserPreferences | null;
   enabledModules: Set<string>;
   organized: { done: number; total: number; percent: number };
+  /** Papel do usuário (0021). "user" quando não há linha em `user_roles`. */
+  papel: PapelDoUsuario;
 }
+
+export type PapelDoUsuario = "user" | "admin" | "master";
 
 /** URL assinada do avatar. O banco guarda o CAMINHO; a URL expira. */
 async function signAvatar(path: string | null): Promise<string | null> {
@@ -87,13 +91,36 @@ export const getAppContext = cache(async (): Promise<AppContext | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: profile }, { data: preferences }, { data: moduleRows }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    supabase.from("user_preferences").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("user_modules").select("module_key, enabled"),
-  ]);
+  const [{ data: profile }, { data: preferences }, { data: moduleRows }, { data: papelRow }] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase.from("user_preferences").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase.from("user_modules").select("module_key, enabled"),
+      // A policy `user_roles_select` deixa cada um ler a PRÓPRIA linha. Ausência
+      // de linha é o papel comum — ver `papel_do_usuario` na 0021.
+      supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle(),
+    ]);
 
   const typedProfile = (profile as Profile | null) ?? null;
+
+  /*
+    ⚠️ A SEGUNDA CAMADA DO BLOQUEIO, e é ela que derruba sessão VIVA.
+
+    `auth.admin.updateUserById(id, { ban_duration })` impede login NOVO — e só.
+    Quem já estava logado continua com um JWT válido no cookie e segue usando o
+    aplicativo até ele expirar, que pode ser uma hora depois. Para um bloqueio
+    que existe justamente porque alguém precisa parar AGORA, isso não serve.
+
+    Esta linha fecha a outra metade: `getAppContext()` roda em toda navegação
+    (é o que o layout e cada `requireModule` chamam), então o próximo clique de
+    um usuário bloqueado o manda para o login. As duas camadas são necessárias e
+    nenhuma substitui a outra — sem o ban do Auth, ele reentraria; sem esta,
+    não sairia.
+
+    Devolver `null` e não lançar: quem chama já trata `null` como "sem sessão" e
+    redireciona. Um caminho novo de erro seria um caminho novo para esquecer.
+  */
+  if (typedProfile?.status === "blocked") return null;
 
   const todayStart = startOfDay(new Date()).toISOString();
   const todayEnd = endOfDay(new Date()).toISOString();
@@ -130,6 +157,10 @@ export const getAppContext = cache(async (): Promise<AppContext | null> => {
       (moduleRows as { module_key: string; enabled: boolean }[] | null) ?? [],
     ),
     organized: { done, total, percent },
+    // `?? "user"` porque ausência de linha É o papel comum — a mesma
+    // convenção de `papel_do_usuario` na 0021, para que os dois lados
+    // concordem sem precisar de linha para todo mundo.
+    papel: ((papelRow as { role?: PapelDoUsuario } | null)?.role ?? "user") as PapelDoUsuario,
   };
 });
 
