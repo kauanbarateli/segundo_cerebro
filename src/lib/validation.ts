@@ -464,6 +464,29 @@ export const financeStatementPaymentSchema = z
     mesFatura: z.string().regex(/^\d{4}-\d{2}-01$/, "Mês da fatura inválido"),
     amountCents: centavosPositivos(),
     occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+    /*
+      ROTATIVO. Zero por padrão, e o padrão é o caso comum: quem paga a fatura
+      inteira não informa taxa nenhuma.
+
+      ⚠️ O TETO DE 100% NÃO É ARBITRÁRIO em nenhuma direção. O rotativo brasileiro
+      gira em torno de 12-15% ao mês, então 100 é folga larga para qualquer
+      contrato real — e ao mesmo tempo é o que impede um erro de digitação
+      ("1500" no lugar de "15,00") de gerar um lançamento de juros quinze vezes
+      maior que a dívida. Sem teto, o campo aceitaria e o banco gravaria.
+
+      NÃO existe valor sugerido, aqui nem na tela: a taxa varia por emissor e por
+      contrato, e um padrão nosso viraria uma previsão errada com cara de certa.
+    */
+    taxaMensalPercent: z
+      .number({ invalid_type_error: "Informe a taxa de juros" })
+      .min(0, "A taxa não pode ser negativa")
+      .max(100, "Taxa acima de 100% ao mês — confira se não faltou a vírgula")
+      .default(0),
+    iofCents: z
+      .number()
+      .int("O IOF precisa estar em centavos inteiros")
+      .min(0, "O IOF não pode ser negativo")
+      .default(0),
   })
   .refine((v) => v.cardAccountId !== v.fromAccountId, {
     path: ["fromAccountId"],

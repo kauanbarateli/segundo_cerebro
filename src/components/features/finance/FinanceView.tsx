@@ -27,29 +27,37 @@ import type {
   FinanceTransaction,
   FinanceBudget,
 } from "@/lib/database.types";
-import { formatBRL, monthLabel, plural, cn } from "@/lib/utils";
+import { formatBRL, monthLabel, plural, concorda, cn } from "@/lib/utils";
 import {
-  monthTotals,
-  expensesByCategory,
   variation,
   previousMonthIso,
   nextMonthIso,
   budgetProgress,
   isTransfer,
-  inMonth,
+  mesDeCompetencia,
+  cartoesDe,
+  rotuloDoPeriodo,
+  RECORTES,
+  ROTULO_DO_RECORTE,
+  type Recorte,
 } from "@/lib/finance";
 import {
   ROTULO_DO_STATUS_DA_FATURA,
   ehPagamentoDeFatura,
   faturaDoCartao,
+  faturasQueVencemEm,
   fechamentoDaFatura,
   somaMeses,
   statusDaFatura,
+  totalAPagarEm,
   vencimentoDaFatura,
   patrimonioEDivida,
   type ResumoDeFatura,
   type StatusDaFatura,
 } from "@/lib/credit";
+import { corDaPosicao, tomDaCor } from "@/lib/finance-colors";
+import { Rosca, limitarFatias, type FatiaDaRosca } from "./Rosca";
+import type { FinanceAnalytics } from "@/lib/finance";
 import { diaCivilDe } from "@/lib/tempo";
 import type { PontoDeCategoria } from "@/components/ui/Badge";
 import {
@@ -93,6 +101,10 @@ const TABS: { key: Tab; label: string }[] = [
 
 export interface FinanceViewProps {
   month: string;
+  /** Mês, trimestre ou ano. Vem da URL — ver `lerRecorte` e o comentário lá. */
+  recorte: Recorte;
+  /** As somas do Painel, já prontas do servidor. Ver `getFinanceAnalytics`. */
+  analise: FinanceAnalytics;
   accounts: FinanceAccount[];
   balances: FinanceAccountBalance[];
   categories: FinanceCategory[];
@@ -114,6 +126,7 @@ export interface FinanceViewProps {
 export function FinanceView(props: FinanceViewProps) {
   const {
     month,
+    recorte,
     accounts,
     balances,
     categories,
@@ -128,8 +141,14 @@ export function FinanceView(props: FinanceViewProps) {
 
   const money = (cents: number) => formatBRL(cents, { hidden });
 
-  function goMonth(iso: string) {
-    router.push(`/financeiro?month=${iso}`);
+  /*
+    UM só ponto de navegação para os dois parâmetros. Trocar o mês precisa
+    PRESERVAR o recorte (e vice-versa): dois `router.push` independentes
+    apagariam um ao escrever o outro, e o alternador voltaria para "Mês" a cada
+    clique na seta.
+  */
+  function irPara(iso: string, novoRecorte: Recorte) {
+    router.push(`/financeiro?month=${iso}&recorte=${novoRecorte}`);
   }
 
   return (
@@ -141,7 +160,7 @@ export function FinanceView(props: FinanceViewProps) {
             variant="ghost"
             size="sm"
             aria-label="Mês anterior"
-            onClick={() => goMonth(previousMonthIso(month))}
+            onClick={() => irPara(previousMonthIso(month), recorte)}
           >
             ‹
           </Button>
@@ -152,7 +171,7 @@ export function FinanceView(props: FinanceViewProps) {
             variant="ghost"
             size="sm"
             aria-label="Próximo mês"
-            onClick={() => goMonth(nextMonthIso(month))}
+            onClick={() => irPara(nextMonthIso(month), recorte)}
           >
             ›
           </Button>
@@ -177,7 +196,14 @@ export function FinanceView(props: FinanceViewProps) {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard {...props} money={money} hidden={hidden} />}
+      {tab === "dashboard" && (
+        <Dashboard
+          {...props}
+          money={money}
+          hidden={hidden}
+          onRecorte={(r) => irPara(month, r)}
+        />
+      )}
       {tab === "transactions" && <Transactions {...props} money={money} />}
       {tab === "accounts" && (
         <Accounts
@@ -194,6 +220,7 @@ export function FinanceView(props: FinanceViewProps) {
         <Budgets
           budgets={budgets}
           categories={categories}
+          accounts={accounts}
           transactions={transactions}
           month={month}
           money={money}
@@ -205,18 +232,36 @@ export function FinanceView(props: FinanceViewProps) {
 
 /* --------------------------------------------------------------- dashboard */
 
+/** "2026-08-01" -> "ago". Componentes numéricos, nunca `new Date(iso)`. */
+const MES_CURTO = new Intl.DateTimeFormat("pt-BR", { month: "short" });
+function mesCurto(mesIso: string): string {
+  const [ano, mes] = mesIso.split("-").map(Number);
+  return MES_CURTO.format(new Date(ano!, (mes ?? 1) - 1, 1)).replace(".", "");
+}
+
+/** "2026-08-07" -> "07/08". */
+function diaMes(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+}
+
 function Dashboard({
   month,
+  recorte,
+  analise,
   transactions,
-  categories,
+  futureCardTransactions,
   balances,
   accounts,
   money,
   hidden,
-}: FinanceViewProps & { money: (c: number) => string; hidden: boolean }) {
-  const current = monthTotals(transactions, month);
-  const previous = monthTotals(transactions, previousMonthIso(month));
-  const byCategory = expensesByCategory(transactions, categories, month);
+  onRecorte,
+}: FinanceViewProps & {
+  money: (c: number) => string;
+  hidden: boolean;
+  onRecorte: (r: Recorte) => void;
+}) {
+  const { atual, anterior, meses, porCategoria, porEtiqueta, beneficiarios, semanas, historico, orfaos } =
+    analise;
 
   /*
     Patrimônio e dívida, NUNCA um "saldo total" somando os dois.
@@ -235,8 +280,46 @@ function Dashboard({
   // na cara: sozinho ele esconde o endividamento, que é o que precisa aparecer.
   const liquidoCents = patrimonioCents - dividaCents;
 
-  const incomeVar = variation(current.incomeCents, previous.incomeCents);
-  const expenseVar = variation(current.expenseCents, previous.expenseCents);
+  const todasTx = useMemo(
+    () => [...transactions, ...futureCardTransactions],
+    [transactions, futureCardTransactions],
+  );
+
+  /*
+    ⚠️ "A PAGAR" É SEMPRE SOBRE O MÊS, mesmo quando o recorte é trimestre ou ano.
+
+    Não é descuido: a pergunta que este cartão responde é de FLUXO DE CAIXA —
+    "quanto sai do meu bolso agora" —, e ela só faz sentido num horizonte curto.
+    Somar o "a pagar" de um ano inteiro produziria um número grande que ninguém
+    usa para decidir nada, ao lado de uma dívida total que já responde isso
+    melhor. O rótulo diz o mês, para a diferença ficar visível.
+  */
+  const aVencer = useMemo(
+    () => faturasQueVencemEm(todasTx, accounts.filter((a) => a.kind === "credit_card"), month),
+    [todasTx, accounts, month],
+  );
+  const aPagarCents = totalAPagarEm(aVencer);
+
+  /*
+    Até quando a dívida se estende. `dividaCents` inclui parcela que vence daqui
+    a dez meses — é o número certo para "quanto devo", e um número assustador sem
+    o horizonte ao lado. O maior `statement_month` das linhas de cartão é
+    exatamente esse horizonte.
+  */
+  const horizonte = useMemo(() => {
+    const cartoes = cartoesDe(accounts);
+    let maior: string | null = null;
+    for (const tx of todasTx) {
+      if (!cartoes.has(tx.account_id)) continue;
+      if (ehPagamentoDeFatura(tx)) continue;
+      const mes = mesDeCompetencia(tx, cartoes);
+      if (mes !== null && (maior === null || mes > maior)) maior = mes;
+    }
+    return maior;
+  }, [todasTx, accounts]);
+
+  const incomeVar = variation(atual.incomeCents, anterior.incomeCents);
+  const expenseVar = variation(atual.expenseCents, anterior.expenseCents);
 
   // Com valores ocultos o sinal também some: saber que o líquido está negativo
   // já é informação sobre o dinheiro, e é justamente o que "ocultar" promete não
@@ -245,95 +328,424 @@ function Dashboard({
     ? money(liquidoCents)
     : `${liquidoCents >= 0 ? "+" : "−"}${formatBRL(Math.abs(liquidoCents))}`;
 
+  const periodo = rotuloDoPeriodo(meses, recorte);
+  const rotuloDoPeriodoNaTela = recorte === "mes" ? monthLabel(month) : periodo;
+
+  const fatias: FatiaDaRosca[] = limitarFatias(
+    porCategoria.map((c) => ({
+      id: c.categoryId ?? "sem-categoria",
+      rotulo: c.name,
+      valorCents: c.totalCents,
+      share: c.share,
+      colorKey: c.colorKey,
+    })),
+    7,
+  );
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/*
+        O alternador de recorte. `PillButton` é o mesmo controle das abas, e não
+        um seletor novo: a barra já ensina que pílula preta é "o que está ativo".
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-legenda capitalize text-ink-subtle">{rotuloDoPeriodoNaTela}</p>
+        <div className="flex gap-1.5" role="group" aria-label="Recorte de tempo">
+          {RECORTES.map((r) => (
+            <PillButton key={r} active={recorte === r} onClick={() => onRecorte(r)}>
+              {ROTULO_DO_RECORTE[r]}
+            </PillButton>
+          ))}
+        </div>
+      </div>
+
+      {/*
+        ⚠️ "A PAGAR" NUNCA APARECE SEM "DÍVIDA TOTAL" AO LADO.
+
+        É o mesmo raciocínio que já governa o cartão "Líquido" aqui embaixo:
+        sozinho, o número curto é otimista. "R$ 1.200 este mês" soa administrável
+        mesmo quando existem R$ 14.000 de parcelas atrás dele. Os dois juntos
+        respondem as duas perguntas que de fato se fazem — "o que vence agora?" e
+        "quanto eu devo ao todo?" — e nenhuma das duas responde a outra.
+      */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Patrimônio"
           value={money(patrimonioCents)}
           hint="Contas, poupança, dinheiro e investimentos."
         />
         <StatCard
-          label="Dívidas"
+          label={`A pagar em ${monthLabel(month).replace(/ de \d{4}$/, "")}`}
+          value={money(aPagarCents)}
+          tone={aPagarCents > 0 ? "negative" : undefined}
+          hint={
+            aVencer.length === 0
+              ? "Nenhuma fatura vence neste mês."
+              : `${plural(aVencer.length, "fatura", "faturas")} · vence ${aVencer.map((f) => dataBR(f.vence)).join(", ")}`
+          }
+        />
+        <StatCard
+          label="Dívida total"
           value={money(dividaCents)}
           tone={dividaCents > 0 ? "negative" : undefined}
-          hint="Faturas de cartão, incluindo parcelas ainda por vencer."
+          hint={
+            horizonte
+              ? `Tudo o que se deve em cartão, incluindo parcelas até ${monthLabel(horizonte)}.`
+              : "Tudo o que se deve em cartão, incluindo parcelas ainda por vencer."
+          }
         />
         <StatCard
           label="Líquido"
           value={liquidoLabel}
           tone={liquidoCents >= 0 ? "positive" : "negative"}
-          hint="Patrimônio menos dívidas."
+          hint="Patrimônio menos dívida total."
           destaque
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          label="Receitas do mês"
-          value={money(current.incomeCents)}
+          label="Receitas"
+          value={money(atual.incomeCents)}
           delta={incomeVar}
           positiveIsGood
         />
         <StatCard
-          label="Despesas do mês"
-          value={money(current.expenseCents)}
+          label="Despesas"
+          value={money(atual.expenseCents)}
           delta={expenseVar}
           positiveIsGood={false}
         />
         <StatCard
           label="Resultado"
-          value={money(current.balanceCents)}
-          tone={current.balanceCents >= 0 ? "positive" : "negative"}
+          value={money(atual.balanceCents)}
+          tone={atual.balanceCents >= 0 ? "positive" : "negative"}
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      {/*
+        ⚠️ O AVISO QUE IMPEDE OS NÚMEROS DE DISCORDAREM EM SILÊNCIO.
+
+        Lançamento de cartão sem `statement_month` pesa em `debt_cents` (a view
+        só olha `is_paid`) e não pertence a fatura nenhuma — logo, não entra em
+        mês nenhum das somas acima. Sem esta linha, "Despesas" viria menor que a
+        realidade e a única pista seria a dívida não bater. Contá-los é a
+        explicação.
+      */}
+      {orfaos.quantidade > 0 && (
+        <Card className="border-warning/40 p-4">
+          <p className="flex items-start gap-2 text-corpo text-warning-ink">
+            <Icon.Alert width={15} height={15} className="mt-0.5 shrink-0" aria-hidden />
+            <span>
+              {plural(orfaos.quantidade, "lançamento", "lançamentos")} de cartão sem fatura
+              atribuída ({money(orfaos.totalCents)}).{" "}
+              {concorda(orfaos.quantidade, "Ele conta", "Eles contam")} na dívida e{" "}
+              {concorda(orfaos.quantidade, "não entra", "não entram")} em nenhum mês acima —
+              cadastre o dia de fechamento do cartão em Contas para resolver.
+            </span>
+          </p>
+        </Card>
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card className="p-6">
           <h3 className="text-corpo-forte font-semibold text-ink">Despesas por categoria</h3>
-          <p className="mt-0.5 text-legenda text-ink-subtle">
-            {monthLabel(month)} · {current.transactionCount} lançamentos
+          <p className="mt-0.5 mb-4 text-legenda capitalize text-ink-subtle">
+            {rotuloDoPeriodoNaTela} · {plural(atual.transactionCount, "lançamento", "lançamentos")}
           </p>
 
-          {byCategory.length === 0 ? (
-            <EmptyState icon="Wallet" title="Sem despesas neste mês" />
+          {fatias.length === 0 ? (
+            <EmptyState icon="Wallet" title="Sem despesas neste período" />
           ) : (
-            <ul className="mt-4 space-y-3">
-              {byCategory.map((c) => (
-                <li key={c.categoryId ?? "none"}>
-                  <div className="mb-1 flex items-center justify-between text-corpo">
-                    <span className="text-ink">{c.name}</span>
-                    <span className="text-ink-muted">
-                      {money(c.totalCents)}
-                      <span className="ml-2 text-ink-subtle">
-                        {(c.share * 100).toFixed(0)}%
-                      </span>
-                    </span>
-                  </div>
-                  {/* Barra em SVG/CSS puro — evita ~100 KB de biblioteca de gráfico. */}
-                  <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
-                    <div
-                      className="h-full rounded-full bg-accent"
-                      style={{ width: `${Math.max(2, c.share * 100)}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <Rosca
+              fatias={fatias}
+              valorCentral={money(atual.expenseCents)}
+              rotuloCentral="Despesas"
+              descricao={`Despesas por categoria: ${fatias
+                .map((f) => `${f.rotulo} ${(f.share * 100).toFixed(0)}%`)
+                .join(", ")}`}
+              money={money}
+            />
           )}
         </Card>
 
+        <HistoricoCard historico={historico} money={money} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {recorte === "mes" ? (
+          <SemanasCard semanas={semanas} money={money} />
+        ) : (
+          /*
+            Semana não é recorte de trimestre nem de ano: seriam 13 ou 52 barras
+            de 3px, ilegíveis e sem nenhuma pergunta por trás. O histórico ao lado
+            já responde "como isso variou no tempo" nessa escala.
+          */
+          <Card className="p-6">
+            <h3 className="text-corpo-forte font-semibold text-ink">Comparação</h3>
+            <p className="mt-0.5 mb-4 text-legenda text-ink-subtle">
+              {periodo} vs. período anterior
+            </p>
+            <CompareRow
+              label="Receitas"
+              current={atual.incomeCents}
+              previous={anterior.incomeCents}
+              money={money}
+            />
+            <CompareRow
+              label="Despesas"
+              current={atual.expenseCents}
+              previous={anterior.expenseCents}
+              money={money}
+            />
+            <CompareRow
+              label="Resultado"
+              current={atual.balanceCents}
+              previous={anterior.balanceCents}
+              money={money}
+            />
+          </Card>
+        )}
+
         <Card className="p-6">
-          <h3 className="text-corpo-forte font-semibold text-ink">Comparação</h3>
+          <h3 className="text-corpo-forte font-semibold text-ink">Etiquetas e estabelecimentos</h3>
           <p className="mt-0.5 mb-4 text-legenda text-ink-subtle">
-            {monthLabel(month)} vs. {monthLabel(previousMonthIso(month))}
+            Os cortes que a categoria não dá.
           </p>
-          <CompareRow label="Receitas" current={current.incomeCents} previous={previous.incomeCents} money={money} />
-          <CompareRow label="Despesas" current={current.expenseCents} previous={previous.expenseCents} money={money} />
-          <CompareRow label="Resultado" current={current.balanceCents} previous={previous.balanceCents} money={money} />
+
+          <div className="space-y-5">
+            <div>
+              <p className="mb-2 text-corpo font-medium text-ink">Etiquetas</p>
+              {porEtiqueta.length === 0 ? (
+                <p className="text-legenda text-ink-subtle">
+                  Nenhum lançamento etiquetado neste período.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {porEtiqueta.slice(0, 5).map((t, i) => (
+                    <li key={t.tagId} className="flex items-center gap-2 text-corpo">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "h-2.5 w-2.5 shrink-0 rounded-full",
+                          corDaPosicao(t.colorKey, i).fundo,
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-ink">#{t.name}</span>
+                      <span className="shrink-0 tabular-nums text-ink-muted">
+                        {money(t.totalCents)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {porEtiqueta.length > 0 && (
+                /*
+                  A ressalva que evita a pergunta "por que isto não fecha com as
+                  despesas?": um lançamento pode ter várias etiquetas ou nenhuma.
+                */
+                <p className="mt-1.5 text-legenda text-ink-subtle">
+                  Um lançamento pode ter mais de uma etiqueta — a soma daqui não fecha com o total
+                  de despesas.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-2 text-corpo font-medium text-ink">Estabelecimentos</p>
+              {beneficiarios.length === 0 ? (
+                <p className="text-legenda text-ink-subtle">
+                  Nenhum lançamento com beneficiário preenchido.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {beneficiarios.map((b) => (
+                    <li key={b.nome} className="flex items-center gap-2 text-corpo">
+                      <span className="min-w-0 flex-1 truncate text-ink">{b.nome}</span>
+                      <span className="shrink-0 text-legenda text-ink-subtle">
+                        {plural(b.quantidade, "vez", "vezes")}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-ink-muted">
+                        {money(b.totalCents)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * Doze meses de receita × despesa, com a linha do líquido por cima.
+ *
+ * ============================================================================
+ * A LINHA É SVG SOBRE BARRAS DE `div` — e por que os dois sistemas coexistem
+ * ============================================================================
+ * Barra é retângulo: `div` com altura percentual resolve, e é o que o resto do
+ * projeto já faz. Linha não é: ela precisa ligar pontos, e ligar pontos com
+ * `div` exigiria calcular ângulo e comprimento de cada segmento em JavaScript.
+ *
+ * O `viewBox="0 0 100 100"` com `preserveAspectRatio="none"` faz o SVG esticar
+ * exatamente sobre a área das barras, então os dois sistemas de coordenadas
+ * coincidem sem nenhuma medição no cliente — nada de `getBoundingClientRect`,
+ * nada de `useEffect` para reposicionar no redimensionamento.
+ *
+ * ============================================================================
+ * O GRÁFICO É `aria-hidden`; O DADO ESTÁ NA LISTA
+ * ============================================================================
+ * Cada mês tem um `sr-only` com entrada, saída e resultado em texto. Um `<svg>`
+ * com `aria-label` resumido diria "doze meses de receita e despesa" e esconderia
+ * os doze valores — que é justamente o conteúdo.
+ */
+function HistoricoCard({
+  historico,
+  money,
+}: {
+  historico: { mes: string; incomeCents: number; expenseCents: number; balanceCents: number }[];
+  money: (c: number) => string;
+}) {
+  const teto = Math.max(
+    1,
+    ...historico.map((m) => Math.max(m.incomeCents, m.expenseCents)),
+  );
+  const saldos = historico.map((m) => m.balanceCents);
+  const maiorSaldo = Math.max(1, ...saldos);
+  const menorSaldo = Math.min(0, ...saldos);
+  const amplitude = Math.max(1, maiorSaldo - menorSaldo);
+
+  const pontos = historico
+    .map((m, i) => {
+      const x = ((i + 0.5) / historico.length) * 100;
+      const y = 100 - ((m.balanceCents - menorSaldo) / amplitude) * 100;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  const vazio = historico.every((m) => m.incomeCents === 0 && m.expenseCents === 0);
+
+  return (
+    <Card className="p-6">
+      <h3 className="text-corpo-forte font-semibold text-ink">Últimos 12 meses</h3>
+      <p className="mt-0.5 mb-4 text-legenda text-ink-subtle">
+        Entradas × saídas, com a linha do resultado.
+      </p>
+
+      {vazio ? (
+        <EmptyState icon="Wallet" title="Sem histórico ainda" />
+      ) : (
+        <>
+          <div className="relative h-40">
+            <ul className="flex h-full items-end gap-1" aria-hidden>
+              {historico.map((m) => (
+                <li key={m.mes} className="flex h-full flex-1 items-end justify-center gap-0.5">
+                  <span
+                    className="w-1/2 rounded-t-xs bg-success"
+                    style={{ height: `${(m.incomeCents / teto) * 100}%` }}
+                  />
+                  <span
+                    className="w-1/2 rounded-t-xs bg-danger"
+                    style={{ height: `${(m.expenseCents / teto) * 100}%` }}
+                  />
+                </li>
+              ))}
+            </ul>
+            <svg
+              aria-hidden
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-0 h-full w-full"
+            >
+              <polyline
+                points={pontos}
+                fill="none"
+                className="stroke-ink"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+
+          <ul className="mt-1.5 flex gap-1">
+            {historico.map((m) => (
+              <li key={m.mes} className="flex-1 text-center text-micro text-ink-subtle">
+                {mesCurto(m.mes)}
+                <span className="sr-only">
+                  {" "}
+                  de {m.mes.slice(0, 4)}: entrou {money(m.incomeCents)}, saiu{" "}
+                  {money(m.expenseCents)}, resultado {money(m.balanceCents)}.
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Legenda das duas cores. Elas são `success`/`danger`, que já
+              significam "sobrou"/"faltou" no sistema inteiro — mas cor não anda
+              sozinha, então os nomes vêm junto. */}
+          <div className="mt-3 flex flex-wrap gap-4 text-legenda text-ink-muted">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="h-2 w-2 rounded-full bg-success" /> Entradas
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="h-2 w-2 rounded-full bg-danger" /> Saídas
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="h-0.5 w-4 rounded-full bg-ink" /> Resultado
+            </span>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** As faixas de sete dias do mês. Ver `porSemana` — a âncora é o dado, não o dia 1. */
+function SemanasCard({
+  semanas,
+  money,
+}: {
+  semanas: { inicio: string; fim: string; incomeCents: number; expenseCents: number }[];
+  money: (c: number) => string;
+}) {
+  const teto = Math.max(1, ...semanas.map((s) => s.expenseCents));
+
+  return (
+    <Card className="p-6">
+      <h3 className="text-corpo-forte font-semibold text-ink">Semana a semana</h3>
+      <p className="mt-0.5 mb-4 text-legenda text-ink-subtle">
+        Despesas por data da compra, em faixas de sete dias.
+      </p>
+
+      {semanas.length === 0 ? (
+        <EmptyState icon="Wallet" title="Sem lançamentos neste mês" />
+      ) : (
+        <ul className="space-y-2.5">
+          {semanas.map((s) => (
+            <li key={s.inicio}>
+              <div className="mb-1 flex items-center justify-between text-corpo">
+                <span className="tabular-nums text-ink">
+                  {diaMes(s.inicio)} – {diaMes(s.fim)}
+                </span>
+                <span className="tabular-nums text-ink-muted">{money(s.expenseCents)}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{
+                    width: `${s.expenseCents === 0 ? 0 : Math.max(2, (s.expenseCents / teto) * 100)}%`,
+                  }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -513,7 +925,23 @@ function Transactions({
     return map;
   }, [transactionTags]);
 
-  const monthTx = transactions.filter((t) => inMonth(t, month));
+  /*
+    ⚠️ A LISTA SEGUE A MESMA COMPETÊNCIA DO PAINEL, e não `occurred_on`.
+
+    A alternativa — listar por data da compra — parece mais natural e produz o
+    pior defeito possível numa tela de dinheiro: o Painel diria "Despesas de
+    abril: R$ 2.300" e esta lista, no mesmo mês, mostraria outro conjunto de
+    linhas somando outra coisa. Aí o usuário confere na mão para descobrir qual
+    dos dois está certo, e a resposta é "os dois, para perguntas diferentes" —
+    que é a pior resposta que uma interface pode dar.
+
+    O preço é que uma compra de 25/03 aparece na lista de ABRIL. Por isso a linha
+    mostra a data real e, quando ela cai em outro mês, um selo dizendo de qual
+    fatura aquilo é. A surpresa fica explicada onde ela acontece.
+  */
+  const cartoes = useMemo(() => cartoesDe(accounts), [accounts]);
+  const alvo = `${month.slice(0, 7)}-01`;
+  const monthTx = transactions.filter((t) => mesDeCompetencia(t, cartoes) === alvo);
 
   return (
     <Card className="overflow-hidden">
@@ -587,6 +1015,15 @@ function Transactions({
                     <span>{dataBR(tx.occurred_on)}</span>
                     <span>·</span>
                     <span>{accountById.get(tx.account_id) ?? "—"}</span>
+                    {/*
+                      O selo só aparece quando a data da compra cai em OUTRO mês
+                      que não o da lista — ou seja, exatamente quando a presença
+                      da linha aqui surpreenderia. Repeti-lo em toda linha de
+                      cartão seria ruído: na maioria delas os dois meses batem.
+                    */}
+                    {tx.occurred_on.slice(0, 7) !== month.slice(0, 7) && (
+                      <Badge tone="outline">Fatura de {monthLabel(month)}</Badge>
+                    )}
                     {tx.installment_no != null && tx.installment_total != null && (
                       <Badge tone="outline">
                         {tx.installment_no} de {tx.installment_total}
@@ -820,7 +1257,38 @@ function Accounts({
   );
 
   const cartoes = accounts.filter((a) => a.kind === "credit_card");
-  const demais = accounts.filter((a) => a.kind !== "credit_card");
+  /*
+    ⚠️ TRÊS BLOCOS, TRÊS SUBTOTAIS — E NUNCA UM TOTAL GERAL.
+
+    Com seis ou oito contas a tela virava uma pilha de retângulos iguais: só o
+    nome distinguia um do outro. Agrupar por natureza devolve a leitura ("quanto
+    tenho líquido?", "quanto está aplicado?", "quanto devo?") sem inventar
+    nenhuma informação nova.
+
+    O subtotal é POR BLOCO de propósito. Somar dinheiro com dívida num número só
+    é o mesmo erro que o cartão "Líquido" do Painel já documenta: esconde o
+    endividamento. E somar investimento com conta corrente responderia "quanto
+    tenho" para dois tipos de dinheiro que não estão igualmente disponíveis.
+
+    `other` fica em "Contas e dinheiro": é o balde do que não se encaixou, e o
+    saldo dele é dinheiro (a view o trata assim). Um quarto bloco chamado "Outros"
+    com uma conta dentro seria pior que a imprecisão.
+  */
+  const liquidas = accounts.filter(
+    (a) => a.kind === "checking" || a.kind === "savings" || a.kind === "cash" || a.kind === "other",
+  );
+  const investimentos = accounts.filter((a) => a.kind === "investment");
+
+  function saldoDe(conta: FinanceAccount): number {
+    return balanceById.get(conta.id)?.balance_cents ?? conta.opening_balance_cents;
+  }
+  const somar = (lista: FinanceAccount[]) => lista.reduce((s, a) => s + saldoDe(a), 0);
+
+  const limiteTotal = cartoes.reduce((s, c) => s + (c.credit_limit_cents ?? 0), 0);
+  const usadoTotal = cartoes.reduce(
+    (s, c) => s + (balanceById.get(c.id)?.debt_cents ?? 0),
+    0,
+  );
 
   /**
    * Resumo da fatura de um mês para um cartão: lançado, já pago e em aberto.
@@ -842,105 +1310,107 @@ function Accounts({
     return { totalCents, paidCents, openCents };
   }
 
+  const editar = (a: FinanceAccount) => {
+    setEditing(a);
+    setFormOpen(true);
+  };
+
   return (
     <div className="space-y-5">
-      {cartoes.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {cartoes.map((cartao) => (
-            <CreditCardPanel
-              key={cartao.id}
-              card={cartao}
-              balance={balanceById.get(cartao.id)}
-              month={month}
-              transacoes={todasTx}
-              money={money}
-              onEdit={() => {
-                setEditing(cartao);
-                setFormOpen(true);
-              }}
-              onArchive={() => setTarget(cartao)}
-              onPay={() => setPaying(cartao)}
-            />
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-corpo-forte font-semibold text-ink">Contas</h3>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => {
+            setEditing(null);
+            setFormOpen(true);
+          }}
+        >
+          <Icon.Capture width={15} height={15} /> Nova conta
+        </Button>
+      </div>
+
+      {accounts.length === 0 && (
+        <Card>
+          <EmptyState icon="Wallet" title="Nenhuma conta" description="Crie sua primeira conta." />
+        </Card>
       )}
 
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h3 className="text-corpo-forte font-semibold text-ink">
-            {cartoes.length > 0 ? "Outras contas" : "Contas"}
-          </h3>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <Icon.Capture width={15} height={15} /> Nova conta
-          </Button>
-        </div>
+      {cartoes.length > 0 && (
+        <section className="space-y-3">
+          <BlocoDeContas
+            titulo="Cartões de crédito"
+            valor={money(usadoTotal)}
+            legenda={
+              limiteTotal > 0
+                ? `usado de ${money(limiteTotal)} de limite`
+                : "limite não cadastrado"
+            }
+            /* Dívida nunca vem com cara de patrimônio: o rótulo diz "usado" e o
+               tom é o de saída, como no cartão "Dívida total" do Painel. */
+            tom="negativo"
+          />
+          <div className="grid gap-4 xl:grid-cols-2">
+            {cartoes.map((cartao) => (
+              <CreditCardPanel
+                key={cartao.id}
+                card={cartao}
+                balance={balanceById.get(cartao.id)}
+                month={month}
+                transacoes={todasTx}
+                money={money}
+                onEdit={() => editar(cartao)}
+                onArchive={() => setTarget(cartao)}
+                onPay={() => setPaying(cartao)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-        {accounts.length === 0 ? (
-          <EmptyState icon="Wallet" title="Nenhuma conta" description="Crie sua primeira conta." />
-        ) : demais.length === 0 ? (
-          /*
-            Só cartões cadastrados. Não é um estado vazio de verdade (os cartões
-            estão logo acima), e mostrar "Nenhuma conta" aqui faria parecer que os
-            dados sumiram. Também não é caso raro: dá para não ter conta corrente
-            cadastrada e, aí, não há de onde pagar a fatura.
-          */
-          <p className="px-4 py-4 text-corpo text-ink-subtle">
+      {liquidas.length > 0 && (
+        <section className="space-y-3">
+          <BlocoDeContas
+            titulo="Contas e dinheiro"
+            valor={money(somar(liquidas))}
+            legenda="disponível"
+          />
+          <ListaDeContas contas={liquidas} saldoDe={saldoDe} money={money} onEditar={editar} onArquivar={setTarget} />
+        </section>
+      )}
+
+      {investimentos.length > 0 && (
+        <section className="space-y-3">
+          <BlocoDeContas
+            titulo="Investimentos"
+            valor={money(somar(investimentos))}
+            legenda="aplicado"
+          />
+          <ListaDeContas
+            contas={investimentos}
+            saldoDe={saldoDe}
+            money={money}
+            onEditar={editar}
+            onArquivar={setTarget}
+          />
+        </section>
+      )}
+
+      {accounts.length > 0 && liquidas.length === 0 && investimentos.length === 0 && (
+        /*
+          Só cartões cadastrados. Não é um estado vazio de verdade (os cartões
+          estão logo acima), e mostrar "Nenhuma conta" aqui faria parecer que os
+          dados sumiram. Também não é caso raro: dá para não ter conta corrente
+          cadastrada e, aí, não há de onde pagar a fatura.
+        */
+        <Card className="p-4">
+          <p className="text-corpo text-ink-subtle">
             Você só tem cartões cadastrados. Crie a conta de onde o dinheiro sai para poder
             registrar o pagamento das faturas.
           </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {demais.map((a) => (
-              /* Mesma quebra em duas linhas da lista de lançamentos, e pelo
-                 mesmo motivo: saldo e ações somam ~180px dos 303 disponíveis. */
-              <li
-                key={a.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:flex-nowrap"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">{a.name}</p>
-                  <p className="truncate text-legenda text-ink-subtle">
-                    {KIND_LABEL[a.kind] ?? a.kind}
-                    {a.institution ? ` · ${a.institution}` : ""}
-                  </p>
-                </div>
-                <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
-                    {money(balanceById.get(a.id)?.balance_cents ?? a.opening_balance_cents)}
-                  </span>
-                  <div className="flex shrink-0 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(a);
-                        setFormOpen(true);
-                      }}
-                      className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Arquivar ${a.name}`}
-                      onClick={() => setTarget(a)}
-                      className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
-                    >
-                      <Icon.Trash width={13} height={13} />
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {formOpen && (
         <Modal
@@ -994,6 +1464,133 @@ function Accounts({
         }}
       />
     </div>
+  );
+}
+
+/** Cabeçalho de um bloco de contas: o nome à esquerda, o subtotal à direita. */
+function BlocoDeContas({
+  titulo,
+  valor,
+  legenda,
+  tom,
+}: {
+  titulo: string;
+  valor: string;
+  legenda: string;
+  tom?: "negativo";
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <h4 className="text-corpo font-semibold text-ink">{titulo}</h4>
+      <p className="text-legenda text-ink-subtle">
+        <span
+          className={cn(
+            "text-sm font-semibold tabular-nums",
+            tom === "negativo" ? "text-danger-ink" : "text-ink",
+          )}
+        >
+          {valor}
+        </span>{" "}
+        {legenda}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A COR DA CONTA — o único desvio consciente do Design System nesta fase.
+ *
+ * ============================================================================
+ * ONDE ELE ESTÁ, E POR QUE SÓ AQUI
+ * ============================================================================
+ * Nos gráficos do Painel a cor É DADO: ela identifica a categoria, e o DS §3 já
+ * reserva os 10% para exatamente isso. Aqui não — a cor da conta é IDENTIDADE
+ * VISUAL, um atalho para o olho achar "o Nubank" numa pilha de oito retângulos
+ * sem ler título nenhum. O DS não prevê esse uso, e este comentário existe para
+ * que ele fique registrado como decisão, não como descuido.
+ *
+ * ⚠️ E POR ISSO ELE É CONTIDO: um disco de 32px atrás da inicial, nunca o cartão
+ * inteiro pintado. Oito cards preenchidos viram um mostruário em que nenhum se
+ * destaca — o oposto do problema que a cor veio resolver. O nome continua sendo
+ * o dado; o disco é o atalho.
+ *
+ * A inicial dentro do disco não é enfeite: ela é o que sobra para quem não
+ * distingue as cores, e é a razão de o disco poder existir sem quebrar a regra
+ * de que cor nunca informa sozinha.
+ */
+function DiscoDaConta({ conta }: { conta: FinanceAccount }) {
+  const tom = tomDaCor(conta.color_key);
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-legenda font-semibold text-ink",
+        tom.fundoSuave,
+        tom.borda,
+      )}
+    >
+      {conta.name.trim().charAt(0).toUpperCase() || "?"}
+    </span>
+  );
+}
+
+function ListaDeContas({
+  contas,
+  saldoDe,
+  money,
+  onEditar,
+  onArquivar,
+}: {
+  contas: FinanceAccount[];
+  saldoDe: (c: FinanceAccount) => number;
+  money: (c: number) => string;
+  onEditar: (c: FinanceAccount) => void;
+  onArquivar: (c: FinanceAccount) => void;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <ul className="divide-y divide-line">
+        {contas.map((a) => (
+          /* Mesma quebra em duas linhas da lista de lançamentos, e pelo
+             mesmo motivo: saldo e ações somam ~180px dos 303 disponíveis. */
+          <li
+            key={a.id}
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:flex-nowrap"
+          >
+            <DiscoDaConta conta={a} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ink">{a.name}</p>
+              <p className="truncate text-legenda text-ink-subtle">
+                {KIND_LABEL[a.kind] ?? a.kind}
+                {a.institution ? ` · ${a.institution}` : ""}
+              </p>
+            </div>
+            <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
+                {money(saldoDe(a))}
+              </span>
+              <div className="flex shrink-0 gap-3">
+                <button
+                  type="button"
+                  onClick={() => onEditar(a)}
+                  className="alvo-44 rounded-sm border border-line-strong px-2 py-1 text-meta text-ink-muted hover:text-ink"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Arquivar ${a.name}`}
+                  onClick={() => onArquivar(a)}
+                  className="alvo-44 rounded-sm border border-line-strong p-1.5 text-ink-subtle hover:text-ink"
+                >
+                  <Icon.Trash width={13} height={13} />
+                </button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -1412,8 +2009,8 @@ function CreditCardPanel({
         {foraDeFatura > 0 && (
           <p className="mt-2 text-legenda text-warning-ink">
             {plural(foraDeFatura, "lançamento", "lançamentos")} deste cartão sem fatura
-            atribuída. {plural(foraDeFatura, "Ele conta", "Eles contam")} no limite usado e não{" "}
-            {plural(foraDeFatura, "aparece", "aparecem")} em nenhuma fatura.
+            atribuída. {concorda(foraDeFatura, "Ele conta", "Eles contam")} no limite usado e não{" "}
+            {concorda(foraDeFatura, "aparece", "aparecem")} em nenhuma fatura.
           </p>
         )}
 
@@ -1464,6 +2061,13 @@ function CategoriesAndTags({
           <ul className="divide-y divide-line">
             {categories.map((c) => (
               <li key={c.id} className="flex items-center gap-3 px-4 py-2.5">
+                {/* A cor escolhida aparece AQUI, e não só no gráfico: sem isto,
+                    escolher uma cor é uma ação sem retorno visível na tela onde
+                    ela foi escolhida. */}
+                <span
+                  aria-hidden
+                  className={cn("h-2.5 w-2.5 shrink-0 rounded-full", tomDaCor(c.color_key).fundo)}
+                />
                 <span className="min-w-0 flex-1 truncate text-sm text-ink">{c.name}</span>
                 <Badge tone="outline">{c.kind === "income" ? "Receita" : "Despesa"}</Badge>
                 <button
@@ -1516,6 +2120,10 @@ function CategoriesAndTags({
           <ul className="divide-y divide-line">
             {tags.map((t) => (
               <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span
+                  aria-hidden
+                  className={cn("h-2.5 w-2.5 shrink-0 rounded-full", tomDaCor(t.color_key).fundo)}
+                />
                 <span className="min-w-0 flex-1 truncate text-sm text-ink">#{t.name}</span>
                 <button
                   type="button"
@@ -1587,12 +2195,15 @@ function CategoriesAndTags({
 function Budgets({
   budgets,
   categories,
+  accounts,
   transactions,
   month,
   money,
 }: {
   budgets: FinanceBudget[];
   categories: FinanceCategory[];
+  /** Necessário para a competência: em cartão o mês é o da fatura. */
+  accounts: FinanceAccount[];
   transactions: FinanceTransaction[];
   month: string;
   money: (c: number) => string;
@@ -1602,7 +2213,12 @@ function Budgets({
   const [, start] = useTransition();
   const [open, setOpen] = useState(false);
 
-  const progress = budgetProgress(budgets, transactions, categories, month);
+  /*
+    O orçamento passa a bater com o Painel: uma compra de cartão feita depois do
+    fechamento consome o limite do mês da FATURA, não o do mês da compra. Antes
+    disto, estourar o orçamento de março era possível gastando em fevereiro.
+  */
+  const progress = budgetProgress(budgets, transactions, categories, month, accounts);
 
   return (
     <Card className="overflow-hidden">

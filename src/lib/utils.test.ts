@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   plural,
+  concorda,
   formatBytes,
   parseBRLToCents,
   formatBRL,
@@ -102,5 +103,20 @@ describe("dayRangeInTimeZone", () => {
     expect(r.endIso).toBe("2026-03-09T04:00:00.000Z");
     const duracao = new Date(r.endIso).getTime() - new Date(r.startIso).getTime();
     expect(duracao).toBe(23 * 60 * 60 * 1000);
+  });
+});
+
+describe("concorda — a flexão SEM o número", () => {
+  it("devolve só a palavra, para o meio de uma frase que já disse o número", () => {
+    // O defeito que motivou a função: `plural(3, "Ele conta", "Eles contam")`
+    // renderizava "3 Eles contam" no meio de uma frase que já começava com
+    // "3 lançamentos" — o número repetido, colado num verbo.
+    expect(concorda(1, "Ele conta", "Eles contam")).toBe("Ele conta");
+    expect(concorda(3, "Ele conta", "Eles contam")).toBe("Eles contam");
+    expect(concorda(0, "aparece", "aparecem")).toBe("aparecem");
+  });
+
+  it("plural continua prefixando o número — as ~15 chamadas legítimas dependem disso", () => {
+    expect(plural(1, "tarefa aberta", "tarefas abertas")).toBe("1 tarefa aberta");
   });
 });

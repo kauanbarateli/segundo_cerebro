@@ -111,14 +111,23 @@ export function ResumoFinanceiro({
 
   const { patrimonioCents, dividaCents } = patrimonioEDivida(snapshot.balances, snapshot.accounts);
   const liquidoCents = patrimonioCents - dividaCents;
-  const doMes = monthTotals(snapshot.transactions, mes);
+  /*
+    ⚠️ `snapshot.accounts` é obrigatório em `monthTotals` desde a correção de
+    competência: para cartão, o mês de um lançamento é o da FATURA
+    (`statement_month`), não o da compra. Sem a lista de contas não há como saber
+    quais lançamentos são de cartão, e o resumo voltaria a contar a compra no mês
+    em que ela aconteceu em vez do mês em que ela é paga.
+  */
+  const doMes = monthTotals(snapshot.transactions, mes, snapshot.accounts);
 
   /*
-    A união das janelas, sem repetição. Elas são disjuntas por construção (cada
-    `getFinanceSnapshot` cobre dois meses e as chamadas não se sobrepõem), mas
-    `monthTotals` soma tudo que cai no mês — uma linha duplicada viraria uma
-    despesa duplicada no gráfico, em silêncio. O Map custa nada e trava a
-    invariante no lugar onde ela é usada.
+    A união das janelas, SEM REPETIÇÃO — e isto deixou de ser precaução.
+
+    Cada `getFinanceSnapshot` cobre TRÊS meses (a janela cresceu para que o "a
+    pagar este mês" do Painel não subestimasse faturas que fecham no mês
+    anterior), e as três chamadas desta página estão a dois meses uma da outra:
+    as janelas agora SE SOBREPÕEM. Sem este Map, os meses de interseção teriam
+    cada lançamento contado duas vezes — despesa dobrada no gráfico, em silêncio.
   */
   const porId = new Map<string, FinanceTransaction>();
   for (const tx of [...transacoesAnteriores, ...snapshot.transactions]) porId.set(tx.id, tx);
@@ -126,7 +135,7 @@ export function ResumoFinanceiro({
 
   const historico: MesDoHistorico[] = Array.from({ length: MESES_DO_HISTORICO }, (_, i) => {
     const alvo = somaMeses(mes, i - (MESES_DO_HISTORICO - 1));
-    const t = monthTotals(todas, alvo);
+    const t = monthTotals(todas, alvo, snapshot.accounts);
     return { mes: alvo, entradasCents: t.incomeCents, saidasCents: t.expenseCents };
   });
 

@@ -148,6 +148,52 @@
   --sb-personal: 139 92 246; /* #8b5cf6 */
   --sb-personal-ink: 112 56 232; /* #7038e8 */
 
+  /* -----------------------------------------------------------------------
+     CATEGÓRICAS — a paleta dos gráficos do Financeiro
+     -----------------------------------------------------------------------
+     Elas NÃO são semânticas. Uma semântica responde "isto é um erro?"; estas
+     respondem "qual categoria é esta?" — e a resposta não vem da cor, vem da
+     legenda. É a fatia de 10% do DS §3 em que a cor É o dado, exatamente o caso
+     que `finance_categories.color_key` (existente desde a 0005, e até agora sem
+     uso) foi criada para representar.
+
+     ⚠️ DUAS EXCLUSÕES DELIBERADAS. O vermelho de `danger` e o âmbar de
+     `warning` NÃO entram: uma fatia com a cor exata do alerta faria a categoria
+     "Mercado" parecer um problema. Terracota e ocre ficam de fora pelo mesmo
+     motivo — perto demais do âmbar para o olho separar num disco de 8px.
+
+     Contraste medido contra o PIOR dos quatro fundos de cada tema (surface,
+     canvas, surface-muted, surface-hover). O piso é 3:1 — WCAG 1.4.11, objeto
+     gráfico não-textual:
+
+                    claro          escuro
+       stone        4.63 ✓         5.62 ✓
+       indigo       5.51 ✓         6.23 ✓
+       ciano        4.25 ✓         6.67 ✓
+       teal         3.62 ✓         7.03 ✓
+       oliva        4.30 ✓         7.87 ✓
+       terracota    5.02 ✓         6.05 ✓
+       rosa         4.75 ✓         5.95 ✓
+       violeta      4.99 ✓         5.82 ✓
+
+     ⚠️ ENTRE SI o pior par tem 1.01 de contraste de LUMINÂNCIA (terracota e
+     violeta separam-se por matiz, não por claro/escuro). Duas fatias vizinhas
+     assim ficariam coladas num borrão. Por isso a rosca desenha um VÃO da cor da
+     superfície entre os arcos — a separação é geométrica, não cromática, e
+     funciona igual em escala de cinza. Ver `Rosca.tsx`.
+
+     E, como sempre: a cor nunca vem sozinha. A legenda traz nome, valor e
+     percentual em texto. Mesma regra que `calendar-colors.ts` chama de "a que
+     não se negocia". */
+  --sb-cat-stone: 108 108 102; /* #6c6c66 */
+  --sb-cat-indigo: 79 70 229; /* #4f46e5 */
+  --sb-cat-ciano: 14 124 147; /* #0e7c93 */
+  --sb-cat-teal: 14 140 127; /* #0e8c7f */
+  --sb-cat-oliva: 95 122 22; /* #5f7a16 */
+  --sb-cat-terracota: 166 75 42; /* #a64b2a */
+  --sb-cat-rosa: 190 46 124; /* #be2e7c */
+  --sb-cat-violeta: 124 58 237; /* #7c3aed */
+
   color-scheme: light;
 }
 
@@ -187,6 +233,19 @@
   --sb-work-ink: 32 184 165;
   --sb-personal: 157 120 248; /* #9d78f8 */
   --sb-personal-ink: 157 120 248;
+
+  /* Categóricas clareadas. Os valores do claro são escuros por construção (têm
+     de contrastar com papel branco) e sobre #151515 chegariam a 1.3–2.0 — o
+     gráfico inteiro sumiria no tema escuro. Cada valor abaixo é o degrau que
+     preserva o matiz e passa com folga contra o pior fundo escuro (#222221). */
+  --sb-cat-stone: 154 154 147; /* #9a9a93 */
+  --sb-cat-indigo: 138 155 255; /* #8a9bff */
+  --sb-cat-ciano: 53 182 212; /* #35b6d4 */
+  --sb-cat-teal: 47 192 174; /* #2fc0ae */
+  --sb-cat-oliva: 163 194 74; /* #a3c24a */
+  --sb-cat-terracota: 224 138 99; /* #e08a63 */
+  --sb-cat-rosa: 242 114 180; /* #f272b4 */
+  --sb-cat-violeta: 169 138 248; /* #a98af8 */
 
   color-scheme: dark;
 }

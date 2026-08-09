@@ -549,6 +549,99 @@ export function faturaDoCartao(
   return { totalCents, paidCents, openCents: totalCents - paidCents, itens };
 }
 
+/* --------------------------------------------------- o que vence num mês */
+
+/** Cartão como ele vem do banco: os dias podem não ter sido preenchidos. */
+export type CartaoTalvezIncompleto = Pick<CartaoDeCredito, "id"> & {
+  statement_closing_day: number | null;
+  payment_due_day: number | null;
+};
+
+export interface FaturaAVencer extends ResumoDeFatura {
+  cardId: string;
+  /** Mês em que ela FECHA, "YYYY-MM-01". */
+  mesFatura: string;
+  /** Data de vencimento, "YYYY-MM-DD". */
+  vence: string;
+}
+
+function diaUtil(dia: number | null): dia is number {
+  return dia !== null && Number.isInteger(dia) && dia >= 1 && dia <= 31;
+}
+
+/**
+ * As faturas que VENCEM dentro de um mês, com quanto ainda falta pagar de cada.
+ *
+ * =============================================================================
+ * POR QUE "VENCE NO MÊS" NÃO É "FATURA DO MÊS"
+ * =============================================================================
+ * São duas perguntas diferentes, e a distância entre elas é um mês inteiro de
+ * dinheiro. O arranjo "fecha dia 28, vence dia 5" — comum no Brasil — faz a
+ * fatura de ABRIL vencer em MAIO. Perguntar "quanto sai do meu bolso em maio?"
+ * e responder com a fatura de maio erraria por um ciclo completo.
+ *
+ * Os CANDIDATOS são só dois, e isso é uma propriedade de `vencimentoDaFatura`,
+ * não um chute: ela devolve uma data no próprio mês da fatura ou no seguinte,
+ * nunca além. Logo, o que vence em M só pode ser a fatura de M ou a de M-1 — e
+ * em vez de reimplementar a regra do "vence no mês seguinte", perguntamos à
+ * própria função. Se um dia o vencimento passar a considerar dia útil ou
+ * feriado, isto continua certo sem tocar em nada.
+ *
+ * Cartão sem dia de fechamento ou de vencimento fica DE FORA: `faturaDe` e
+ * `vencimentoDaFatura` lançam `RangeError` para dia inválido, e não há resposta
+ * honesta sobre um cartão que não disse quando fecha. Quem exibe o total precisa
+ * dizer que ele existe — é o mesmo cuidado de `foraDeCompetencia` em finance.ts.
+ */
+export function faturasQueVencemEm(
+  transacoes: FinanceTransaction[],
+  cartoes: CartaoTalvezIncompleto[],
+  mes: string,
+): FaturaAVencer[] {
+  const alvo = normalizaMes(mes, "mes").slice(0, 7);
+  const encontradas: FaturaAVencer[] = [];
+
+  for (const cartao of cartoes) {
+    if (!diaUtil(cartao.statement_closing_day) || !diaUtil(cartao.payment_due_day)) continue;
+
+    for (const candidato of [somaMeses(normalizaMes(mes, "mes"), -1), normalizaMes(mes, "mes")]) {
+      const vence = vencimentoDaFatura(
+        candidato,
+        cartao.payment_due_day,
+        cartao.statement_closing_day,
+      );
+      if (vence.slice(0, 7) !== alvo) continue;
+
+      const { totalCents, paidCents, openCents } = faturaDoCartao(
+        transacoes,
+        { id: cartao.id, statement_closing_day: cartao.statement_closing_day },
+        candidato,
+      );
+      encontradas.push({
+        cardId: cartao.id,
+        mesFatura: candidato,
+        vence,
+        totalCents,
+        paidCents,
+        openCents,
+      });
+    }
+  }
+
+  return encontradas.sort((a, b) => (a.vence < b.vence ? -1 : a.vence > b.vence ? 1 : 0));
+}
+
+/**
+ * Quanto ainda falta pagar, somando só o que é DÍVIDA.
+ *
+ * ⚠️ `Math.max(0, ...)` por fatura, e não na soma: `openCents` fica negativo
+ * quando a fatura foi paga a maior (crédito a favor). Somando cru, o crédito de
+ * um cartão abateria a dívida de OUTRO — dois cartões não se compensam, e o
+ * número mostraria menos a pagar do que realmente vai sair da conta.
+ */
+export function totalAPagarEm(faturas: FaturaAVencer[]): number {
+  return faturas.reduce((soma, f) => soma + Math.max(0, f.openCents), 0);
+}
+
 /* ------------------------------------------------------------ status da fatura */
 
 /**
@@ -643,6 +736,115 @@ export const ROTULO_DO_STATUS_DA_FATURA: Record<StatusDaFatura, string> = {
   paga: "Paga",
   vencida: "Vencida",
 };
+
+/* ------------------------------------------------------ rotativo e encargos */
+
+export interface EncargosArgs {
+  /** O que sobra da fatura DEPOIS deste pagamento. Negativo é tratado como zero. */
+  saldoRemanescenteCents: number;
+  /** Taxa ao mês, em por cento (12.5 = 12,5% a.m.). Informada pelo usuário. */
+  taxaMensalPercent: number;
+  /** IOF ou outro encargo fixo que o emissor cobre. Opcional. */
+  iofCents?: number;
+}
+
+export interface Encargos {
+  jurosCents: number;
+  iofCents: number;
+  /** Juros + IOF. É ESTE o valor que vira lançamento. */
+  totalCents: number;
+}
+
+/**
+ * O CUSTO DE PAGAR A FATURA PELA METADE.
+ *
+ * =============================================================================
+ * ⚠️ O PONTO DE MODELAGEM QUE DECIDE TUDO: O PRINCIPAL NÃO É DESPESA NOVA
+ * =============================================================================
+ * O saldo que "rola" para o mês seguinte JÁ FOI CONTADO — uma vez por compra,
+ * quando cada uma aconteceu. Criar um lançamento de "saldo remanescente" na
+ * fatura seguinte contaria a MESMA despesa duas vezes, que é exatamente o erro
+ * que o `Dashboard` já documenta ter corrigido no cálculo de patrimônio.
+ *
+ * O principal continua onde sempre esteve: na fatura de origem, em aberto
+ * (`openCents > 0`), pesando em `debt_cents`. Ninguém precisa movê-lo.
+ *
+ * ⚠️ O QUE É DESPESA NOVA SÃO OS ENCARGOS. E SÓ ELES. É o que esta função
+ * calcula, e é o único lançamento que o pagamento parcial gera.
+ *
+ * =============================================================================
+ * JUROS SIMPLES, E POR QUÊ
+ * =============================================================================
+ * `juros = saldo × taxa / 100`. Composto só faria diferença projetando VÁRIOS
+ * meses à frente, e a previsão aqui é de UM: o que a próxima fatura recebe. A
+ * conta simples tem uma vantagem que a exata não tem — quem digitou a taxa
+ * consegue conferir o resultado de cabeça, e uma previsão que não se confere não
+ * é usada.
+ *
+ * ⚠️ NENHUMA TAXA PADRÃO É SUGERIDA, nem aqui nem na tela. Taxa de rotativo
+ * varia por emissor e por contrato; chutar um número produziria uma previsão
+ * errada com cara de certa, e o usuário não teria como saber que o número é
+ * nosso e não dele.
+ *
+ * =============================================================================
+ * ARREDONDAMENTO — UMA VEZ, NO FIM
+ * =============================================================================
+ * `(saldo × taxa) / 100` antes de arredondar, e não `saldo × (taxa / 100)`:
+ * dividir primeiro introduz erro de ponto flutuante que o arredondamento depois
+ * amplia. Multiplicando primeiro, o produto continua exato para qualquer saldo
+ * abaixo de ~R$ 90 bilhões com taxa de até 100%.
+ *
+ * `Math.round` (meio para cima) é o comportamento que o extrato do banco tem, e
+ * é o único que não faz o sistema dever centavos a si mesmo — a mesma
+ * preocupação de `parcelas()`, resolvida lá com a última parcela absorvendo o
+ * resto.
+ */
+export function calcularEncargos({
+  saldoRemanescenteCents,
+  taxaMensalPercent,
+  iofCents = 0,
+}: EncargosArgs): Encargos {
+  if (!Number.isFinite(taxaMensalPercent) || taxaMensalPercent < 0) {
+    throw new RangeError(`taxaMensalPercent deve ser um número >= 0: ${taxaMensalPercent}`);
+  }
+  if (!Number.isSafeInteger(iofCents) || iofCents < 0) {
+    throw new RangeError(`iofCents deve ser inteiro >= 0: ${iofCents}`);
+  }
+
+  // Saldo negativo é fatura paga a maior — crédito a favor, não dívida. Cobrar
+  // juros sobre ele inverteria o sinal do encargo e viraria uma "receita".
+  const base = Math.max(0, saldoRemanescenteCents);
+  const jurosCents = Math.round((base * taxaMensalPercent) / 100);
+
+  return { jurosCents, iofCents, totalCents: jurosCents + iofCents };
+}
+
+/**
+ * Em que fatura os encargos deste pagamento caem.
+ *
+ * A regra base é a de QUALQUER lançamento: `faturaDe(data, fechamento)`. Não há
+ * segunda regra de data neste módulo, e não pode haver — uma teria que ser
+ * mantida em sincronia com a outra, e `reescreverFaturas` (que recalcula tudo
+ * pela primeira quando o cartão é editado) apagaria a segunda em silêncio.
+ *
+ * ⚠️ O PISO EXISTE PARA UM CASO REAL: pagar ANTES do fechamento. Num cartão que
+ * fecha dia 5 e vence dia 12, quem quita a fatura de abril no dia 3 de abril
+ * faria `faturaDe("2026-04-03", 5)` devolver ABRIL — a própria fatura que está
+ * sendo paga. Os juros entrariam na conta que eles deveriam suceder, inflando o
+ * total que acabou de ser quitado. O encargo é sempre da fatura SEGUINTE, no
+ * mínimo.
+ */
+export function faturaDoEncargo(
+  mesFaturaPaga: string,
+  dataDoPagamento: string,
+  diaFechamento: number,
+): string {
+  const proxima = somaMeses(normalizaMes(mesFaturaPaga, "mesFaturaPaga"), 1);
+  const pelaData = faturaDe(dataDoPagamento, diaFechamento);
+  // Comparação de "YYYY-MM-01" é comparação de data: mesmo comprimento, campos
+  // em ordem decrescente de peso. Nada de `Date`, pelo motivo de sempre.
+  return pelaData > proxima ? pelaData : proxima;
+}
 
 /* --------------------------------------------------------- patrimônio x dívida */
 

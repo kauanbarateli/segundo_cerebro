@@ -11,8 +11,15 @@ import type {
   FinanceTag,
   FinanceTransaction,
 } from "@/lib/database.types";
-import { parseBRLToCents, formatCentsPlain, formatBRL, monthLabel } from "@/lib/utils";
-import { parcelas, type ResumoDeFatura } from "@/lib/credit";
+import { parseBRLToCents, formatCentsPlain, formatBRL, monthLabel, cn } from "@/lib/utils";
+import {
+  CHAVES_DE_COR,
+  NOME_DA_COR,
+  ehChaveDeCor,
+  tomDaCor,
+  type ChaveDeCor,
+} from "@/lib/finance-colors";
+import { calcularEncargos, faturaDoEncargo, parcelas, type ResumoDeFatura } from "@/lib/credit";
 import { nextMonthIso } from "@/lib/finance";
 import {
   upsertAccount,
@@ -83,6 +90,56 @@ function Actions({ pending, label, onCancel }: { pending: boolean; label: string
   );
 }
 
+/**
+ * Escolha de cor — oito discos, nada de seletor de matiz livre.
+ *
+ * A paleta é FECHADA porque ela é medida: cada tom tem contraste conferido nos
+ * dois temas (ver globals.css). Um seletor livre deixaria a pessoa escolher um
+ * amarelo-claro que some no tema claro, e o defeito só apareceria para ela.
+ *
+ * ⚠️ O nome da cor vai no `aria-label`, e a cor selecionada é dita por
+ * `aria-checked` — não pela moldura. Um seletor em que só a borda indica a
+ * escolha é inutilizável sem enxergar cor, que é justamente o público para quem
+ * a escolha de cor menos importa e a leitura mais.
+ */
+function SeletorDeCor({
+  valor,
+  onChange,
+}: {
+  valor: ChaveDeCor;
+  onChange: (cor: ChaveDeCor) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Cor" className="flex flex-wrap gap-1">
+      {CHAVES_DE_COR.map((cor) => {
+        const tom = tomDaCor(cor);
+        const ativo = valor === cor;
+        return (
+          <button
+            key={cor}
+            type="button"
+            role="radio"
+            aria-checked={ativo}
+            aria-label={NOME_DA_COR[cor]}
+            onClick={() => onChange(cor)}
+            className={cn(
+              "flex h-11 w-11 items-center justify-center rounded-full border-2",
+              ativo ? tom.borda : "border-transparent hover:border-line-strong",
+            )}
+          >
+            <span aria-hidden className={cn("h-5 w-5 rounded-full", tom.fundo)} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A cor gravada, ou `stone` quando o banco tem algo fora da paleta. */
+function corInicial(chave: string | null | undefined): ChaveDeCor {
+  return ehChaveDeCor(chave) ? chave : "stone";
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Número máximo de parcelas — o mesmo teto de `financeInstallmentSchema`. */
@@ -129,6 +186,31 @@ export function TransactionForm({
 
   const contaSelecionada = accounts.find((a) => a.id === accountId) ?? null;
   /*
+    ⚠️ "JÁ PAGO / RECEBIDO" NÃO SE APLICA A CARTÃO DE CRÉDITO.
+
+    São DUAS perguntas que a caixa única fundia numa só:
+
+      a dívida existe?      -> em cartão, SEMPRE, desde o instante da compra
+      a FATURA foi paga?    -> outra pergunta, respondida por `statement_month`
+                               mais o lançamento de pagamento (ehPagamentoDeFatura)
+
+    Desmarcar a caixa numa compra de cartão é o gesto natural ("a fatura nem
+    fechou, não paguei isso ainda") e era exatamente o que apagava a dívida do
+    sistema: a view `finance_account_balances` junta as transações com
+    `and t.is_paid = true` (0005:267, mantido na 0010:431), então a linha não
+    entrava em `balance_cents`, `debt_cents` continuava zero e `available_cents`
+    não se movia. O limite do cartão nunca era consumido.
+
+    O caminho PARCELADO já tinha percebido isso e forçava `is_paid: true` com a
+    explicação certa na tela (ver o texto do rodapé, mais abaixo). A correção é
+    estender o que já existe, não inventar regra nova — quando dois caminhos do
+    mesmo formulário divergem, normalmente um deles já está certo.
+
+    Em conta corrente a caixa CONTINUA fazendo sentido: despesa agendada e ainda
+    não debitada é um estado real. A regra vale só para `credit_card`.
+  */
+  const ehCartao = contaSelecionada?.kind === "credit_card";
+  /*
     Parcelar só faz sentido em DESPESA de CARTÃO e só na CRIAÇÃO.
 
     Edição fica de fora porque `createInstallmentPurchase` cria N linhas novas:
@@ -136,8 +218,7 @@ export function TransactionForm({
     original e recriar, e um erro no meio deixaria a compra duplicada. Quem
     precisa disso exclui e lança de novo — explicitamente.
   */
-  const podeParcelar =
-    transaction === null && kind === "expense" && contaSelecionada?.kind === "credit_card";
+  const podeParcelar = transaction === null && kind === "expense" && ehCartao;
 
   const numeroDeParcelas = Number(installments);
   const parcelasValidas =
@@ -232,7 +313,12 @@ export function TransactionForm({
         payee: String(fd.get("payee") ?? ""),
         occurredOn: String(fd.get("occurredOn") ?? ""),
         notes: String(fd.get("notes") ?? ""),
-        isPaid: fd.get("isPaid") === "on",
+        // Em cartão a caixa não é renderizada, e `fd.get("isPaid")` viria null —
+        // ou seja, `false`, que é justamente o valor que apaga a dívida. O
+        // `true` explícito é o mesmo que o caminho parcelado já grava. A action
+        // reforça isso do lado do servidor: formulário é conveniência, a regra
+        // não pode depender do que o cliente manda.
+        isPaid: ehCartao ? true : fd.get("isPaid") === "on",
         tagIds: selectedTags,
       });
       if (r.ok) {
@@ -398,6 +484,16 @@ export function TransactionForm({
           Serão criados {numeroDeParcelas} lançamentos, um por mês, todos marcados como pagos —
           a dívida no cartão existe por inteiro desde a compra.
         </p>
+      ) : ehCartao ? (
+        /*
+          A caixa dá lugar à FRASE. Escondê-la sem dizer nada deixaria a pessoa
+          procurando o campo que sumiu; a linha explica a regra usando o mesmo
+          argumento que o caminho parcelado já usava logo acima.
+        */
+        <p className="text-legenda text-ink-subtle">
+          A dívida no cartão existe desde a compra — este lançamento já consome o limite. O
+          pagamento é registrado na fatura, em Contas.
+        </p>
       ) : (
         <label className="flex items-center gap-2 text-corpo text-ink-muted">
           <input
@@ -491,6 +587,49 @@ export function StatementPaymentForm({
       ? valorPorMes.texto
       : formatCentsPlain(Math.max(0, resumo.openCents));
 
+  /*
+    ========================================================================
+    ROTATIVO — o que a tela precisa dizer, e o que ela NÃO deve fazer
+    ========================================================================
+    Pagar parcialmente já funcionava no NÚMERO (basta pôr um valor menor e a
+    fatura fica com `openCents > 0`). O que faltava era tudo o que transforma
+    isso numa decisão informada: o que acontece com o resto, quanto custa, e
+    quando a conta chega.
+
+    ⚠️ A TAXA COMEÇA VAZIA E CONTINUA VAZIA. Não há sugestão, nem "taxa média do
+    mercado", nem memória da última usada. O rotativo varia por emissor e por
+    contrato; um número nosso apareceria com a mesma cara de um número dele, e a
+    previsão errada seria indistinguível da certa.
+  */
+  const [pagoEm, setPagoEm] = useState(today());
+  const [taxa, setTaxa] = useState("");
+  const [iof, setIof] = useState("");
+
+  const centavosDoPagamento = parseBRLToCents(valor) ?? 0;
+  // Aceita "12,5" e "12.5": o teclado do celular oferece um separador e o do
+  // desktop, outro. Recusar um dos dois seria recusar metade dos usuários.
+  const taxaNumero = taxa.trim() === "" ? 0 : Number(taxa.trim().replace(",", "."));
+  const taxaValida = Number.isFinite(taxaNumero) && taxaNumero >= 0 && taxaNumero <= 100;
+  const iofCents = iof.trim() === "" ? 0 : (parseBRLToCents(iof) ?? 0);
+
+  /** O que sobra da fatura DEPOIS deste pagamento. */
+  const restanteCents = Math.max(0, resumo.openCents - centavosDoPagamento);
+
+  const encargos = calcularEncargos({
+    saldoRemanescenteCents: restanteCents,
+    // `calcularEncargos` LANÇA para taxa negativa ou não-numérica. A prévia não
+    // pode derrubar o formulário enquanto a pessoa digita "1," — por isso o
+    // valor inválido vira zero aqui e a recusa fica no envio, com mensagem.
+    taxaMensalPercent: taxaValida ? taxaNumero : 0,
+    iofCents: iofCents < 0 ? 0 : iofCents,
+  });
+
+  const diaFechamento = card.statement_closing_day;
+  const mesDoEncargo =
+    diaFechamento != null && diaFechamento >= 1 && diaFechamento <= 31
+      ? faturaDoEncargo(mesFatura, pagoEm, diaFechamento)
+      : null;
+
   // Origem: nunca outro cartão (pagar cartão com cartão é troca de dívida, e o
   // modelo de duas pernas não sabe representar isso — a action também recusa),
   // e nunca o próprio cartão.
@@ -505,16 +644,31 @@ export function StatementPaymentForm({
       setError("Informe um valor válido, ex.: 1.234,56");
       return;
     }
+    if (!taxaValida) {
+      setError("Taxa de juros inválida: informe um número entre 0 e 100 (% ao mês).");
+      return;
+    }
+    if (iof.trim() !== "" && (iofCents == null || iofCents < 0)) {
+      setError("IOF inválido, ex.: 12,34");
+      return;
+    }
     start(async () => {
       const r = await payStatement({
         cardAccountId: card.id,
         fromAccountId: String(fd.get("fromAccountId") ?? ""),
         mesFatura,
         amountCents: cents,
-        occurredOn: String(fd.get("occurredOn") ?? ""),
+        occurredOn: pagoEm,
+        taxaMensalPercent: taxaNumero,
+        iofCents,
       });
       if (r.ok) {
-        toast("Pagamento da fatura registrado", "success");
+        toast(
+          encargos.totalCents > 0
+            ? "Pagamento registrado, com os encargos na próxima fatura"
+            : "Pagamento da fatura registrado",
+          "success",
+        );
         onDone();
       } else setError(r.error ?? "Erro");
     });
@@ -594,9 +748,101 @@ export function StatementPaymentForm({
           />
         </Field>
         <Field label="Data do pagamento">
-          <input name="occurredOn" type="date" required defaultValue={today()} className={inputCls} />
+          <input
+            type="date"
+            required
+            value={pagoEm}
+            onChange={(e) => setPagoEm(e.target.value)}
+            className={inputCls}
+          />
         </Field>
       </div>
+
+      {/*
+        ⚠️ OS CAMPOS DE ENCARGO SÓ APARECEM QUANDO SOBRA SALDO.
+
+        Quitando a fatura inteira não há rotativo, e um campo "taxa de juros"
+        numa tela de pagamento integral é um convite a preencher algo que não se
+        aplica — e a gerar uma despesa de juros que não existe.
+      */}
+      {restanteCents > 0 && (
+        <div className="space-y-4 rounded-md border border-line bg-surface-muted p-3.5">
+          <p className="text-legenda text-ink-subtle">
+            Este pagamento não quita a fatura: restam{" "}
+            <span className="font-medium text-ink">{formatBRL(restanteCents)}</span>. O saldo
+            continua nesta fatura, em aberto —{" "}
+            <span className="font-medium text-ink">não vira lançamento novo</span>, porque essa
+            despesa já foi contada em cada compra. O que é custo novo são os juros.
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field
+              label="Juros do rotativo (% ao mês)"
+              hint="O que o seu cartão cobra. Deixe vazio se não houver."
+            >
+              <input
+                value={taxa}
+                onChange={(e) => setTaxa(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="IOF e outros encargos (R$)" hint="Opcional.">
+              <input
+                value={iof}
+                onChange={(e) => setIof(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+
+          {/*
+            `polite` e não `assertive`: a prévia muda a cada tecla na taxa, e
+            interromper o leitor de tela a cada dígito seria hostil. É a mesma
+            escolha da prévia de parcelamento.
+          */}
+          <p aria-live="polite" className="text-corpo">
+            {!taxaValida ? (
+              <span className="text-danger-ink">
+                Taxa inválida: informe um número entre 0 e 100. Se a sua é 12,5% ao mês, digite
+                12,5 — não 1250.
+              </span>
+            ) : encargos.totalCents === 0 ? (
+              <span className="text-ink-subtle">
+                Sem taxa informada, nada de juros é lançado. O saldo apenas continua em aberto.
+              </span>
+            ) : (
+              <span className="text-ink">
+                {encargos.jurosCents > 0 && (
+                  <>
+                    {taxaNumero.toLocaleString("pt-BR")}% sobre {formatBRL(restanteCents)} ={" "}
+                    <span className="font-medium">{formatBRL(encargos.jurosCents)}</span> de juros
+                    {encargos.iofCents > 0 && <> mais {formatBRL(encargos.iofCents)} de IOF</>}.{" "}
+                  </>
+                )}
+                {encargos.jurosCents === 0 && encargos.iofCents > 0 && (
+                  <>{formatBRL(encargos.iofCents)} de IOF. </>
+                )}
+                {mesDoEncargo ? (
+                  <>
+                    Um lançamento de{" "}
+                    <span className="font-medium">{formatBRL(encargos.totalCents)}</span> entra na
+                    fatura de <span className="capitalize">{monthLabel(mesDoEncargo)}</span>.
+                  </>
+                ) : (
+                  <span className="text-warning-ink">
+                    Sem dia de fechamento cadastrado não dá para saber em que fatura os juros
+                    caem — edite o cartão antes de registrar.
+                  </span>
+                )}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       <ErrorText message={error} />
       <Actions pending={pending} label="Pagar fatura" onCancel={onCancel} />
@@ -725,6 +971,7 @@ export function AccountForm({
   const [vencimento, setVencimento] = useState(
     account?.payment_due_day != null ? String(account.payment_due_day) : "",
   );
+  const [cor, setCor] = useState<ChaveDeCor>(corInicial(account?.color_key));
 
   const ehCartao = kind === "credit_card";
 
@@ -772,7 +1019,7 @@ export function AccountForm({
         kind,
         institution: String(fd.get("institution") ?? ""),
         openingBalanceCents: cents,
-        colorKey: "stone",
+        colorKey: cor,
         creditLimitCents,
         statementClosingDay,
         paymentDueDay,
@@ -809,6 +1056,10 @@ export function AccountForm({
           <input name="institution" defaultValue={account?.institution ?? ""} className={inputCls} />
         </Field>
       </div>
+
+      <Field label="Cor" hint="Para achar a conta na lista sem ler o nome inteiro.">
+        <SeletorDeCor valor={cor} onChange={setCor} />
+      </Field>
 
       {ehCartao && (
         <div className="space-y-4 rounded-md border border-line bg-surface-muted p-3.5">
@@ -895,6 +1146,7 @@ export function CategoryForm({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<"income" | "expense">(category?.kind ?? "expense");
+  const [cor, setCor] = useState<ChaveDeCor>(corInicial(category?.color_key));
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -905,7 +1157,7 @@ export function CategoryForm({
         id: category?.id,
         name: String(fd.get("name") ?? ""),
         kind,
-        colorKey: "stone",
+        colorKey: cor,
       });
       if (r.ok) {
         toast("Categoria salva", "success");
@@ -927,6 +1179,12 @@ export function CategoryForm({
       <Field label="Nome">
         <input name="name" required defaultValue={category?.name ?? ""} className={inputCls} />
       </Field>
+      {/* A cor da categoria é o que pinta a fatia da rosca no Painel. Sem
+          escolha, todas nascem `stone` e o gráfico distribui uma cor por posição
+          — que muda quando a ordem por valor muda. Ver `corDaPosicao`. */}
+      <Field label="Cor" hint="Usada no gráfico de despesas por categoria.">
+        <SeletorDeCor valor={cor} onChange={setCor} />
+      </Field>
       <ErrorText message={error} />
       <Actions pending={pending} label="Salvar" onCancel={onCancel} />
     </form>
@@ -947,6 +1205,7 @@ export function TagForm({
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [cor, setCor] = useState<ChaveDeCor>(corInicial(tag?.color_key));
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -956,7 +1215,7 @@ export function TagForm({
       const r = await upsertTag({
         id: tag?.id,
         name: String(fd.get("name") ?? ""),
-        colorKey: "stone",
+        colorKey: cor,
       });
       if (r.ok) {
         toast("Etiqueta salva", "success");
@@ -969,6 +1228,9 @@ export function TagForm({
     <form onSubmit={submit} className="space-y-4">
       <Field label="Nome" hint="Ex.: fatura, reembolso, viagem.">
         <input name="name" required defaultValue={tag?.name ?? ""} className={inputCls} />
+      </Field>
+      <Field label="Cor" hint="Usada na lista de etiquetas do Painel.">
+        <SeletorDeCor valor={cor} onChange={setCor} />
       </Field>
       <ErrorText message={error} />
       <Actions pending={pending} label="Salvar" onCancel={onCancel} />

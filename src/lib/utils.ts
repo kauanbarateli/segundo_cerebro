@@ -260,5 +260,23 @@ export function monthLabel(iso: string, locale = "pt-BR"): string {
  * o tipo de detalhe que faz a interface parecer descuidada.
  */
 export function plural(count: number, singular: string, many: string): string {
-  return `${count} ${count === 1 ? singular : many}`;
+  return `${count} ${concorda(count, singular, many)}`;
+}
+
+/**
+ * A mesma concordância, SEM o número na frente.
+ *
+ * Existe porque `plural` estava sendo usado para flexionar VERBO no meio de uma
+ * frase que já tinha dito o número: `plural(n, "Ele conta", "Eles contam")`
+ * renderizava "3 lançamentos sem fatura. **3 Eles contam** no limite usado e não
+ * **3 aparecem** em nenhuma fatura" — o número repetido três vezes, colado em
+ * palavras que não são substantivo.
+ *
+ * `plural` não podia deixar de prefixar (é o que ~15 chamadas legítimas esperam),
+ * então a saída sem número virou função própria em vez de mais um parâmetro
+ * booleano — `plural(n, a, b, false)` no ponto de uso não diria o que o `false`
+ * desliga.
+ */
+export function concorda(count: number, singular: string, many: string): string {
+  return count === 1 ? singular : many;
 }

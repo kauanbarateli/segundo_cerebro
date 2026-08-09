@@ -32,6 +32,22 @@ import type {
   ClickUpConnection,
 } from "@/lib/database.types";
 import { startOfDay, endOfDay, dayRangeInTimeZone, formatDayLabel, formatTime } from "@/lib/utils";
+import { somaMeses } from "@/lib/credit";
+import {
+  cartoesDe,
+  despesasPorEtiqueta,
+  expensesByCategory,
+  foraDeCompetencia,
+  historicoMensal,
+  mesesDoRecorte,
+  periodoAnterior,
+  porSemana,
+  topBeneficiarios,
+  totaisDoPeriodo,
+  type ContaParaCompetencia,
+  type FinanceAnalytics,
+  type Recorte,
+} from "@/lib/finance";
 import { resolveEnabled } from "@/lib/modules";
 import { lerConexao, lerConta } from "@/lib/clickup/credentials";
 import { montarArvore, normalizarDocumento } from "@/lib/knowledge";
@@ -913,25 +929,42 @@ export interface FinanceSnapshot {
 }
 
 /**
- * Carrega o mês corrente e o anterior numa tacada só — a comparação
- * mês a mês do dashboard precisa dos dois, e uma query cobre ambos.
+ * Carrega uma janela de TRÊS meses terminando no mês pedido.
  *
  * As colunas novas da 0010 (is_credit, debt_cents, available_cents na view;
  * credit_limit_cents e os dias do cartão em finance_accounts; installment_* e
  * statement_month nos lançamentos) vêm sozinhas nos `select("*")` que já
  * existiam. O que NÃO vinha, e é acrescentado aqui, são as parcelas futuras.
+ *
+ * =============================================================================
+ * ⚠️ POR QUE TRÊS MESES, E NÃO DOIS
+ * =============================================================================
+ * Dois bastavam enquanto o Painel só precisava comparar M com M-1. O cartão
+ * "A pagar este mês" mudou a exigência: o que VENCE em M pode ser a fatura de
+ * M-1 (arranjo "fecha dia 28, vence dia 5", comum no Brasil), e essa fatura é
+ * feita de compras que começam no fechamento de M-2.
+ *
+ * Com a janela de dois meses, essas compras não estariam carregadas e o total
+ * "a pagar" viria MENOR que o real — em silêncio, que é o pior jeito de errar um
+ * número de dinheiro. Um mês a mais de linhas é barato; um número otimista sobre
+ * o quanto se deve, não.
+ *
+ * CONSEQUÊNCIA para quem chama isto mais de uma vez (a página Início chama três
+ * vezes): as janelas passaram a SE SOBREPOR. Junte sempre por `id` antes de
+ * somar — ver o Map em `ResumoFinanceiro`, que já fazia isso.
  */
 export async function getFinanceSnapshot(monthIso: string): Promise<FinanceSnapshot> {
   const supabase = await createClient();
 
   const [y, m] = monthIso.split("-").map(Number);
-  const start = new Date(Date.UTC(y!, (m ?? 1) - 1, 1));
-  const prevStart = new Date(Date.UTC(y!, (m ?? 1) - 2, 1));
+  // `Date.UTC` com componentes NUMÉRICOS, nunca `new Date("YYYY-MM-DD")`: o
+  // parser de string é UTC e devolve o dia no fuso local, o que já custou um dia
+  // inteiro de lançamentos no passado. Ver docs/datas-e-fuso.md.
+  const inicioDaJanela = new Date(Date.UTC(y!, (m ?? 1) - 3, 1));
   const end = new Date(Date.UTC(y!, m ?? 1, 0));
 
-  const fromDate = prevStart.toISOString().slice(0, 10);
+  const fromDate = inicioDaJanela.toISOString().slice(0, 10);
   const toDate = end.toISOString().slice(0, 10);
-  void start;
 
   const [
     { data: accounts },
@@ -1001,6 +1034,156 @@ export async function getFinanceSnapshot(monthIso: string): Promise<FinanceSnaps
     futureCardTransactions: (futureCardTransactions as FinanceTransaction[] | null) ?? [],
     budgets: (budgets as FinanceBudget[] | null) ?? [],
     transactionTags,
+  };
+}
+
+/* ------------------------------------------------------ análise financeira */
+
+/**
+ * As agregações do Painel, JÁ PRONTAS.
+ *
+ * ============================================================================
+ * POR QUE UMA SEGUNDA CONSULTA, E NÃO UMA JANELA MAIOR EM `getFinanceSnapshot`
+ * ============================================================================
+ * O Painel ganhou histórico de 12 meses e recorte por trimestre/ano. Nenhum dos
+ * dois cabe na janela de três meses do snapshot — e alargá-la seria caro do jeito
+ * errado: o snapshot faz `select("*")` para alimentar a lista de lançamentos, a
+ * aba Contas e os orçamentos, e um ano inteiro de linhas completas atravessaria
+ * a rede para produzir doze somas.
+ *
+ * ⚠️ E ATRAVESSARIA MAL: `select("*")` sem paginação é cortado pelo `db-max-rows`
+ * do projeto (1000 por padrão no Supabase) SEM erro e sem aviso. O gráfico
+ * mostraria menos dinheiro do que existe, e nada indicaria isso. Por isso a
+ * leitura aqui é PAGINADA e traz só as nove colunas de que as somas precisam.
+ *
+ * O resultado que cruza para o cliente são os AGREGADOS, não as linhas: doze
+ * pontos de histórico em vez de dois mil lançamentos.
+ */
+export type { FinanceAnalytics } from "@/lib/finance";
+
+/** Quantos meses o histórico do Painel mostra, contando o mês exibido. */
+export const MESES_DO_HISTORICO = 12;
+
+/** As colunas que as somas usam. Nada além disso viaja pela rede. */
+const COLUNAS_DE_ANALISE =
+  "id, account_id, category_id, kind, amount_cents, occurred_on, statement_month, transfer_group_id, payee";
+
+type LinhaDeAnalise = Pick<
+  FinanceTransaction,
+  | "id"
+  | "account_id"
+  | "category_id"
+  | "kind"
+  | "amount_cents"
+  | "occurred_on"
+  | "statement_month"
+  | "transfer_group_id"
+  | "payee"
+>;
+
+/**
+ * Percorre todas as páginas de uma consulta.
+ *
+ * O passo é o TAMANHO DA PÁGINA QUE VOLTOU, nunca o pedido: se o servidor
+ * limitar a menos que `PAGINA`, avançar pelo valor pedido pularia linhas. É a
+ * mesma leitura de `reescreverFaturas` em financeiro/actions.ts, e existe pelo
+ * mesmo motivo — corte silencioso é o pior modo de falha de uma soma.
+ */
+async function lerTudoPaginado<T>(
+  pagina: (inicio: number, fim: number) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<T[]> {
+  const PAGINA = 500;
+  const linhas: T[] = [];
+  for (let inicio = 0; ; ) {
+    const { data, error } = await pagina(inicio, inicio + PAGINA - 1);
+    if (error) break;
+    const lote = (data as T[] | null) ?? [];
+    if (lote.length === 0) break;
+    linhas.push(...lote);
+    inicio += lote.length;
+  }
+  return linhas;
+}
+
+export async function getFinanceAnalytics(
+  monthIso: string,
+  recorte: Recorte,
+): Promise<FinanceAnalytics> {
+  const supabase = await createClient();
+
+  const meses = mesesDoRecorte(monthIso, recorte);
+  const mesesAnteriores = periodoAnterior(meses);
+  const mesesDoHistorico = Array.from({ length: MESES_DO_HISTORICO }, (_, i) =>
+    somaMeses(`${monthIso.slice(0, 7)}-01`, i - (MESES_DO_HISTORICO - 1)),
+  );
+
+  /*
+    A janela cobre TODOS os meses que alguma soma desta função pode citar, mais
+    um mês de folga para trás.
+
+    A folga não é cautela vaga: o mês de competência de uma compra de cartão é o
+    da FATURA, e a fatura de M é feita de compras que começam no fechamento de
+    M-1. Sem o mês extra, a primeira barra do histórico viria sistematicamente
+    menor que as outras — o tipo de erro que parece uma tendência.
+  */
+  const todosOsMeses = [...mesesDoHistorico, ...mesesAnteriores, ...meses].sort();
+  const primeiro = somaMeses(todosOsMeses[0]!, -1);
+  const ultimo = todosOsMeses[todosOsMeses.length - 1]!;
+  const [anoFim, mesFim] = ultimo.split("-").map(Number);
+
+  const de = primeiro;
+  const ate = new Date(Date.UTC(anoFim!, mesFim ?? 1, 0)).toISOString().slice(0, 10);
+
+  const [contas, categorias, etiquetas, linhas, vinculos] = await Promise.all([
+    supabase.from("finance_accounts").select("id, kind"),
+    supabase.from("finance_categories").select("*"),
+    supabase.from("finance_tags").select("*"),
+    lerTudoPaginado<LinhaDeAnalise>((inicio, fim) =>
+      supabase
+        .from("finance_transactions")
+        .select(COLUNAS_DE_ANALISE)
+        .gte("occurred_on", de)
+        .lte("occurred_on", ate)
+        .order("id", { ascending: true })
+        .range(inicio, fim),
+    ),
+    /*
+      TODOS os vínculos de etiqueta do usuário, sem filtro de data.
+
+      Filtrar por `transaction_id in (...)` exigiria mandar centenas de uuids na
+      URL do PostgREST — uns 37 caracteres cada, contra um limite prático de
+      poucos KB. A tabela é pequena por natureza (só existe linha para lançamento
+      etiquetado) e a RLS já a restringe ao dono. Trazer tudo é mais barato que
+      montar a lista de ids, e não tem o 414 esperando.
+    */
+    lerTudoPaginado<{ transaction_id: string; tag_id: string }>((inicio, fim) =>
+      supabase
+        .from("finance_transaction_tags")
+        .select("transaction_id, tag_id")
+        .order("transaction_id", { ascending: true })
+        .range(inicio, fim),
+    ),
+  ]);
+
+  // `as` porque as somas pedem `FinanceTransaction` inteira e aqui só vêm as
+  // colunas usadas. É seguro e deliberado: nenhuma delas lê outro campo, e o
+  // recorte de colunas é o que mantém a consulta barata.
+  const txs = linhas as unknown as FinanceTransaction[];
+  const accounts = ((contas.data as ContaParaCompetencia[] | null) ?? []);
+  const cats = (categorias.data as FinanceCategory[] | null) ?? [];
+  const tags = (etiquetas.data as FinanceTag[] | null) ?? [];
+
+  return {
+    meses,
+    mesesAnteriores,
+    atual: totaisDoPeriodo(txs, meses, accounts),
+    anterior: totaisDoPeriodo(txs, mesesAnteriores, accounts),
+    porCategoria: expensesByCategory(txs, cats, meses, accounts),
+    porEtiqueta: despesasPorEtiqueta(txs, tags, vinculos, meses, accounts),
+    beneficiarios: topBeneficiarios(txs, meses, accounts),
+    semanas: porSemana(txs, meses, accounts),
+    historico: historicoMensal(txs, accounts, monthIso, MESES_DO_HISTORICO),
+    orfaos: foraDeCompetencia(txs, cartoesDe(accounts)),
   };
 }
 

@@ -188,6 +188,30 @@ const config: Config = {
         "work-ink": "rgb(var(--sb-work-ink) / <alpha-value>)",
         personal: "rgb(var(--sb-personal) / <alpha-value>)",
         "personal-ink": "rgb(var(--sb-personal-ink) / <alpha-value>)",
+
+        /**
+         * CATEGÓRICAS — a paleta dos gráficos do Financeiro. Ver o bloco de
+         * contraste medido em globals.css.
+         *
+         * Não são semânticas e não têm degrau `-ink`: elas nunca viram texto.
+         * O rótulo ao lado da fatia é `text-ink` normal, e a cor entra só como
+         * preenchimento (`bg-cat-*` no ponto da legenda, `fill-cat-*` no arco da
+         * rosca) — que é o papel para o qual o piso de 3:1 foi medido.
+         *
+         * ⚠️ As classes precisam ser LITERAIS no código. `bg-cat-${chave}`
+         * montado em tempo de execução não é encontrado pela varredura do
+         * Tailwind, a regra não entra no CSS final e a cor simplesmente não
+         * existe — sem erro, sem aviso, e só na build de produção. Ver o mapa
+         * fechado em `src/lib/finance-colors.ts`.
+         */
+        "cat-stone": "rgb(var(--sb-cat-stone) / <alpha-value>)",
+        "cat-indigo": "rgb(var(--sb-cat-indigo) / <alpha-value>)",
+        "cat-ciano": "rgb(var(--sb-cat-ciano) / <alpha-value>)",
+        "cat-teal": "rgb(var(--sb-cat-teal) / <alpha-value>)",
+        "cat-oliva": "rgb(var(--sb-cat-oliva) / <alpha-value>)",
+        "cat-terracota": "rgb(var(--sb-cat-terracota) / <alpha-value>)",
+        "cat-rosa": "rgb(var(--sb-cat-rosa) / <alpha-value>)",
+        "cat-violeta": "rgb(var(--sb-cat-violeta) / <alpha-value>)",
       },
 
       /**

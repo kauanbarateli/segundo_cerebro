@@ -14,6 +14,10 @@ import {
   patrimonioEDivida,
   ehPagamentoDeFatura,
   ultimoDiaDoMes,
+  faturasQueVencemEm,
+  totalAPagarEm,
+  calcularEncargos,
+  faturaDoEncargo,
 } from "./credit";
 import type { FinanceAccount, FinanceAccountBalance, FinanceTransaction } from "./database.types";
 
@@ -886,5 +890,230 @@ describe("statusDaFatura", () => {
     // 2026 não é bissexto: fevereiro fecha em 28.
     expect(r("2026-02-27")).toBe("aberta");
     expect(r("2026-02-28")).toBe("fechada");
+  });
+});
+
+/* ------------------------------------------------------- o que vence no mês */
+
+describe("faturasQueVencemEm", () => {
+  const CARTAO = { id: "cartao", statement_closing_day: 28, payment_due_day: 5 };
+
+  it("⚠️ 'FECHA 28, VENCE 5': o que vence em MAIO é a fatura de ABRIL", () => {
+    /*
+      A distinção que motiva a função inteira. "Quanto sai do meu bolso em maio?"
+      não é "quanto veio na fatura de maio" — no arranjo mais comum do Brasil as
+      duas respostas estão a um ciclo inteiro de distância, e responder com a
+      fatura de maio erraria por um mês de dinheiro.
+    */
+    const abril = tx({ occurred_on: "2026-04-10", statement_month: "2026-04-01", amount_cents: 300_00 });
+    const maio = tx({ occurred_on: "2026-05-10", statement_month: "2026-05-01", amount_cents: 999_00 });
+
+    const vencendo = faturasQueVencemEm([abril, maio], [CARTAO], "2026-05-01");
+
+    expect(vencendo).toHaveLength(1);
+    expect(vencendo[0]!.mesFatura).toBe("2026-04-01");
+    expect(vencendo[0]!.vence).toBe("2026-05-05");
+    expect(vencendo[0]!.openCents).toBe(30000);
+  });
+
+  it("'fecha 5, vence 12': a fatura vence DENTRO do próprio mês", () => {
+    const cartao = { id: "cartao", statement_closing_day: 5, payment_due_day: 12 };
+    const maio = tx({ occurred_on: "2026-05-02", statement_month: "2026-05-01", amount_cents: 120_00 });
+
+    const vencendo = faturasQueVencemEm([maio], [cartao], "2026-05-01");
+
+    expect(vencendo).toHaveLength(1);
+    expect(vencendo[0]!.mesFatura).toBe("2026-05-01");
+    expect(vencendo[0]!.vence).toBe("2026-05-12");
+  });
+
+  it("desconta o que já foi pago daquela fatura", () => {
+    const compra = tx({ occurred_on: "2026-04-10", statement_month: "2026-04-01", amount_cents: 300_00 });
+    const pagamento = tx({
+      kind: "income",
+      transfer_group_id: "g1",
+      occurred_on: "2026-05-05",
+      statement_month: "2026-04-01",
+      amount_cents: 100_00,
+    });
+
+    const [fatura] = faturasQueVencemEm([compra, pagamento], [CARTAO], "2026-05-01");
+
+    expect(fatura!.totalCents).toBe(30000);
+    expect(fatura!.paidCents).toBe(10000);
+    expect(fatura!.openCents).toBe(20000);
+  });
+
+  it("cartão sem os dias cadastrados fica de fora, em vez de derrubar a tela", () => {
+    // `vencimentoDaFatura` LANÇA para dia inválido. Sem esta guarda, um cartão
+    // cadastrado pela metade quebraria o Painel inteiro — e não há resposta
+    // honesta a dar sobre um cartão que não disse quando fecha.
+    const incompleto = { id: "cartao", statement_closing_day: null, payment_due_day: null };
+    expect(faturasQueVencemEm([], [incompleto], "2026-05-01")).toEqual([]);
+  });
+
+  it("totalAPagarEm: crédito a favor de um cartão NÃO abate a dívida do outro", () => {
+    /*
+      `openCents` fica negativo quando a fatura foi paga a maior. Somando cru, o
+      crédito de um cartão apagaria dívida de outro e o número mostraria menos a
+      pagar do que vai sair da conta. O piso é POR FATURA, não na soma.
+    */
+    const total = totalAPagarEm([
+      { cardId: "a", mesFatura: "2026-04-01", vence: "2026-05-05", totalCents: 0, paidCents: 0, openCents: -50_00 },
+      { cardId: "b", mesFatura: "2026-04-01", vence: "2026-05-10", totalCents: 0, paidCents: 0, openCents: 200_00 },
+    ]);
+    expect(total).toBe(20000);
+  });
+});
+
+/* ------------------------------------------------------ rotativo e encargos */
+
+describe("calcularEncargos", () => {
+  it("juros simples sobre o saldo remanescente", () => {
+    // R$ 600 a 10% ao mês = R$ 60. É a conta que o usuário confere de cabeça —
+    // e é por isso que ela é simples, e não composta.
+    expect(
+      calcularEncargos({ saldoRemanescenteCents: 60_000, taxaMensalPercent: 10 }),
+    ).toEqual({ jurosCents: 6_000, iofCents: 0, totalCents: 6_000 });
+  });
+
+  it("soma o IOF sem misturá-lo com os juros", () => {
+    // Separados no retorno porque a tela mostra os dois, e porque um dia o IOF
+    // pode virar linha própria sem mexer no cálculo dos juros.
+    const r = calcularEncargos({
+      saldoRemanescenteCents: 100_000,
+      taxaMensalPercent: 5,
+      iofCents: 1_234,
+    });
+    expect(r.jurosCents).toBe(5_000);
+    expect(r.iofCents).toBe(1_234);
+    expect(r.totalCents).toBe(6_234);
+  });
+
+  it("taxa zero não gera encargo — rolar sem juros é permitido", () => {
+    expect(
+      calcularEncargos({ saldoRemanescenteCents: 100_000, taxaMensalPercent: 0 }).totalCents,
+    ).toBe(0);
+  });
+
+  it("saldo zero não gera encargo, mesmo com taxa", () => {
+    expect(
+      calcularEncargos({ saldoRemanescenteCents: 0, taxaMensalPercent: 15 }).totalCents,
+    ).toBe(0);
+  });
+
+  it("⚠️ SALDO NEGATIVO (fatura paga a maior) NÃO vira juros negativos", () => {
+    /*
+      `openCents` fica negativo quando se paga mais do que se deve — é crédito a
+      favor, não dívida. Sem o piso em zero, os "juros" sairiam negativos e o
+      lançamento entraria como uma RECEITA no cartão: pagar demais passaria a
+      render dinheiro.
+    */
+    expect(
+      calcularEncargos({ saldoRemanescenteCents: -50_000, taxaMensalPercent: 15 }).jurosCents,
+    ).toBe(0);
+  });
+
+  it("arredonda uma vez, no fim, e sempre para o centavo mais próximo", () => {
+    // R$ 333,33 a 3,33% = 1109,98... centavos -> 1110.
+    expect(
+      calcularEncargos({ saldoRemanescenteCents: 33_333, taxaMensalPercent: 3.33 }).jurosCents,
+    ).toBe(1_110);
+    // Meio centavo exato sobe: 10000 * 0.005% = 0,5 centavo -> 1.
+    expect(
+      calcularEncargos({ saldoRemanescenteCents: 10_000, taxaMensalPercent: 0.005 }).jurosCents,
+    ).toBe(1);
+    // O resultado é SEMPRE inteiro — dinheiro fracionário aqui viraria erro de
+    // constraint no banco (`finance_tx_amount_positive` sobre bigint).
+    for (const taxa of [1.7, 2.35, 7.77, 12.5, 19.99]) {
+      const r = calcularEncargos({ saldoRemanescenteCents: 87_654, taxaMensalPercent: taxa });
+      expect(Number.isSafeInteger(r.totalCents)).toBe(true);
+    }
+  });
+
+  it("recusa taxa negativa e IOF fracionário", () => {
+    expect(() =>
+      calcularEncargos({ saldoRemanescenteCents: 1000, taxaMensalPercent: -1 }),
+    ).toThrow(RangeError);
+    expect(() =>
+      calcularEncargos({ saldoRemanescenteCents: 1000, taxaMensalPercent: 1, iofCents: 1.5 }),
+    ).toThrow(RangeError);
+  });
+});
+
+describe("faturaDoEncargo", () => {
+  it("pagando depois do fechamento, os juros caem na fatura da data", () => {
+    // Fatura de agosto paga em 20/08 com fechamento dia 15: 20/08 já pertence à
+    // fatura de setembro, que é a seguinte. As duas regras concordam.
+    expect(faturaDoEncargo("2026-08-01", "2026-08-20", 15)).toBe("2026-09-01");
+  });
+
+  it("⚠️ PAGANDO ANTES DO FECHAMENTO, o piso impede o juro de cair na própria fatura paga", () => {
+    /*
+      Cartão que fecha dia 5. Quem paga a fatura de agosto no dia 3 de agosto
+      faria `faturaDe("2026-08-03", 5)` devolver AGOSTO — a mesma fatura que
+      acabou de ser quitada. Os juros inflariam o total já pago, e o pagamento
+      pareceria não ter fechado a conta.
+    */
+    expect(faturaDe("2026-08-03", 5)).toBe("2026-08-01");
+    expect(faturaDoEncargo("2026-08-01", "2026-08-03", 5)).toBe("2026-09-01");
+  });
+
+  it("pagando MUITO atrasado, o encargo acompanha a data — não fica preso no mês seguinte", () => {
+    // Juros continuam correndo enquanto a fatura não é paga. Prender o encargo
+    // em setembro cobraria o rotativo de novembro numa fatura já fechada.
+    expect(faturaDoEncargo("2026-08-01", "2026-11-20", 15)).toBe("2026-12-01");
+  });
+
+  it("atravessa a virada de ano", () => {
+    expect(faturaDoEncargo("2026-12-01", "2026-12-20", 15)).toBe("2027-01-01");
+  });
+});
+
+describe("invariante do rotativo: o principal NÃO é relançado", () => {
+  it("⚠️ A DÍVIDA DA FATURA NÃO MUDA COM O PAGAMENTO PARCIAL — só o que falta pagar", () => {
+    /*
+      O TESTE QUE PROTEGE A MODELAGEM INTEIRA DA ETAPA.
+
+      Um lançamento de "saldo remanescente" na fatura seguinte contaria a mesma
+      despesa duas vezes. Aqui isso apareceria como `totalCents` mudando depois
+      do pagamento, ou como a soma das duas faturas passando de R$ 1.000.
+    */
+    const conta = { id: "cartao", statement_closing_day: 15 };
+    const compra = tx({
+      occurred_on: "2026-08-05",
+      statement_month: "2026-08-01",
+      amount_cents: 100_000,
+    });
+
+    const antes = faturaDoCartao([compra], conta, "2026-08-01");
+    expect(antes.totalCents).toBe(100_000);
+    expect(antes.openCents).toBe(100_000);
+
+    const pagamentoParcial = tx({
+      kind: "income",
+      transfer_group_id: "g1",
+      occurred_on: "2026-08-20",
+      statement_month: "2026-08-01",
+      amount_cents: 40_000,
+    });
+    const encargo = tx({
+      occurred_on: "2026-08-20",
+      statement_month: "2026-09-01",
+      amount_cents: 6_000,
+      description: "Juros sobre a fatura 08/2026",
+    });
+
+    const depois = faturaDoCartao([compra, pagamentoParcial, encargo], conta, "2026-08-01");
+    // O que veio na fatura NÃO mudou: nenhum lançamento novo entrou nela.
+    expect(depois.totalCents).toBe(100_000);
+    // Só o que falta pagar mudou.
+    expect(depois.paidCents).toBe(40_000);
+    expect(depois.openCents).toBe(60_000);
+
+    // A fatura seguinte recebe EXATAMENTE os juros — nunca o principal rolado.
+    const seguinte = faturaDoCartao([compra, pagamentoParcial, encargo], conta, "2026-09-01");
+    expect(seguinte.totalCents).toBe(6_000);
+    expect(seguinte.itens).toHaveLength(1);
   });
 });

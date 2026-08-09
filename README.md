@@ -36,10 +36,14 @@ docs/database-setup.md                               # aplicar/validar/rollback
 docs/google-calendar-setup.md                        # Google Cloud + OAuth
 docs/papeis-e-admin.md                               # papéis, bloqueio, /admin
 docs/datas-e-fuso.md                                 # ⚠️ leia antes de mexer em data
+docs/cartao-e-fatura.md                              # ⚠️ limite, competência e rotativo
+docs/cores-do-financeiro.md                          # paleta medida + o desvio do DS
 e2e/README.md                                        # os 5 fluxos e como rodá-los
 .env.example                                          # variáveis (placeholders)
 
 src/lib/tempo.ts                                     # ⚠️ a autoridade sobre fuso
+src/lib/credit.ts                                    # ciclo de fatura, parcelas, encargos
+src/lib/finance.ts                                   # ⚠️ competência: cartão pesa no mês da FATURA
 src/lib/supabase/{client,server,admin,middleware}.ts # 3 clientes Supabase
 src/lib/crypto/tokens.ts                             # AES-256-GCM (servidor)
 src/lib/crypto/vault.ts                              # Argon2id + AES-GCM (cliente)
@@ -94,6 +98,10 @@ eles criam e apagam dado e **nunca** devem apontar para produção).
 ⚠️ Rode a suíte também com `TZ=UTC` de vez em quando. É o fuso da Vercel, e foi
 onde um defeito de data se escondeu por meses — em máquina local o fuso do
 servidor coincide com o da tela e o ida-e-volta fecha. Ver `docs/datas-e-fuso.md`.
+
+⚠️ A migration `0022` **repara dados** e faz a dívida de cartão saltar (dívida que
+estava invisível passa a aparecer). Rode a consulta de contagem que está no
+cabeçalho dela **antes** de aplicar. Ver `docs/cartao-e-fatura.md`.
 
 ## 7. O que ainda depende de credenciais
 

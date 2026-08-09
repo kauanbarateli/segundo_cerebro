@@ -16,7 +16,10 @@ import {
   ID_INVALIDO,
 } from "@/lib/validation";
 import {
+  calcularEncargos,
   faturaDe,
+  faturaDoCartao,
+  faturaDoEncargo,
   planoDeParcelas,
   ultimoFechamentoAte,
   ehPagamentoDeFatura,
@@ -84,6 +87,36 @@ async function carregarContas(
 function mesDaFatura(conta: ContaDoLancamento | undefined, occurredOn: string): string | null {
   if (!conta || conta.kind !== "credit_card" || conta.statement_closing_day === null) return null;
   return faturaDe(occurredOn, conta.statement_closing_day);
+}
+
+/**
+ * `is_paid` de um lançamento — FORÇADO a `true` em cartão de crédito.
+ *
+ * =============================================================================
+ * ⚠️ A REGRA É DO SERVIDOR, E NÃO PODE SER DO FORMULÁRIO
+ * =============================================================================
+ * `is_paid = false` numa linha de cartão é o único estado que quebra o cálculo
+ * de limite, e ele é fácil de produzir de boa-fé: a view
+ * `finance_account_balances` junta as transações com `and t.is_paid = true`
+ * (0005:267, preservado na 0010:431), então a linha não pesa em `balance_cents`,
+ * `debt_cents` fica zero e `available_cents` não se move. A compra existe na
+ * lista e não existe no limite.
+ *
+ * O formulário já esconde a caixa "Já pago / recebido" quando a conta é cartão,
+ * mas isso é conveniência: uma Server Action É um endpoint HTTP, e um POST
+ * montado à mão (ou uma aba aberta antes desta correção, ou uma versão futura do
+ * formulário) manda o que quiser. A checagem que vale é esta.
+ *
+ * NÃO vale para conta corrente: ali "agendado mas ainda não debitado" é um
+ * estado real e a caixa continua na tela.
+ *
+ * É a mesma decisão que `createInstallmentPurchase` já tomava para o caminho
+ * parcelado (`is_paid: true` fixo). Aqui ela deixa de valer só para parcelamento
+ * e passa a valer para toda compra no cartão, que é onde ela sempre esteve
+ * certa.
+ */
+function pagoNoCartao(conta: ContaDoLancamento, informado: boolean): boolean {
+  return conta.kind === "credit_card" ? true : informado;
 }
 
 /**
@@ -246,6 +279,35 @@ async function sincronizarFaturas(
   antes: ContaDoLancamento,
   depois: { kind: FinanceAccountKind; statement_closing_day: number | null },
 ): Promise<boolean> {
+  /*
+    A CONTA VIROU CARTÃO: os lançamentos antigos precisam passar a pesar no
+    limite.
+
+    Este é o caminho de conserto de um cartão cadastrado com o tipo errado
+    ('checking', 'other'), e sem esta linha ele ficaria pela metade: as compras
+    antigas continuariam com `is_paid = false` — legítimo enquanto a conta era
+    corrente — e a view `finance_account_balances`, que junta com
+    `is_paid = true`, seguiria ignorando cada uma delas. A conta apareceria como
+    cartão, com limite cadastrado, e `debt_cents` continuaria zero.
+
+    O gatilho `trg_finance_tx_divida_de_cartao` (0022) NÃO cobre isto sozinho:
+    ele age na escrita de `finance_transactions`, e trocar o tipo da CONTA não
+    escreve em nenhuma delas.
+
+    Mesma exclusão do reparo da 0022: perna de transferência fica de fora,
+    porque a que entra no cartão é pagamento de fatura e marcá-la como paga
+    abateria a dívida. Falha aqui não derruba a operação — a conta foi salva, e
+    salvar de novo repete o passo (é idempotente, como todo o resto desta função).
+  */
+  if (depois.kind === "credit_card") {
+    await supabase
+      .from("finance_transactions")
+      .update({ is_paid: true })
+      .eq("account_id", accountId)
+      .eq("is_paid", false)
+      .is("transfer_group_id", null);
+  }
+
   if (depois.kind === "credit_card" && depois.statement_closing_day === null) return true;
 
   if (depois.kind !== "credit_card") {
@@ -561,7 +623,9 @@ export async function upsertTransaction(input: unknown): Promise<ActionResult> {
       payee: i.payee,
       occurred_on: i.occurredOn,
       notes: i.notes,
-      is_paid: i.isPaid,
+      // Ver `pagoNoCartao`: em cartão a dívida existe desde a compra, e
+      // `is_paid = false` a apagaria do limite. A regra não pode vir do cliente.
+      is_paid: pagoNoCartao(conta, i.isPaid),
       // Vale para income também: estorno de compra abate a fatura do ciclo em
       // que caiu. E é reescrito em toda edição de propósito — mover o
       // lançamento para outra conta ou outra data muda a fatura dele, e um
@@ -745,6 +809,106 @@ export async function createTransfer(input: unknown): Promise<ActionResult> {
   }
 }
 
+/* --------------------------------------------------- encargos do rotativo */
+
+/**
+ * As linhas que `faturaDoCartao()` precisa ver para somar UMA fatura.
+ *
+ * Traz as do mês pedido e as SEM fatura atribuída — estas últimas porque
+ * `faturaDaLinha()` deriva a fatura delas por `faturaDe(occurred_on)`, e ignorá-las
+ * aqui produziria um saldo devedor menor que o real. Juros sobre um saldo
+ * subestimado erram para menos, o que parece inofensivo e não é: o número que a
+ * pessoa confere contra o extrato do banco deixaria de bater.
+ *
+ * Paginado pelo motivo de sempre: o PostgREST corta no `db-max-rows` do projeto
+ * (1000 por padrão) SEM erro e sem aviso.
+ */
+async function linhasDaFatura(
+  supabase: ClienteSupabase,
+  accountId: string,
+  mesFatura: string,
+): Promise<FinanceTransaction[]> {
+  const PAGINA = 500;
+  const linhas: FinanceTransaction[] = [];
+  for (let inicio = 0; ; ) {
+    const { data, error } = await supabase
+      .from("finance_transactions")
+      .select("*")
+      .eq("account_id", accountId)
+      .or(`statement_month.eq.${mesFatura},statement_month.is.null`)
+      .order("id", { ascending: true })
+      .range(inicio, inicio + PAGINA - 1);
+    if (error) break;
+    const lote = (data as FinanceTransaction[] | null) ?? [];
+    if (lote.length === 0) break;
+    linhas.push(...lote);
+    inicio += lote.length;
+  }
+  return linhas;
+}
+
+const NOME_DA_CATEGORIA_DE_ENCARGOS = "Juros e encargos";
+
+/**
+ * A categoria em que os encargos caem — criada na primeira vez que forem cobrados.
+ *
+ * =============================================================================
+ * POR QUE CATEGORIA, E NÃO UMA COLUNA `is_encargo`
+ * =============================================================================
+ * Uma coluna nova exigiria migration, tipo, e um caso especial em toda soma que
+ * hoje agrupa por categoria. A categoria já é o eixo pelo qual o Painel separa
+ * despesa — os encargos entram nele de graça, aparecem na rosca com nome próprio
+ * e podem ganhar orçamento como qualquer outra.
+ *
+ * =============================================================================
+ * POR QUE CRIAR SOB DEMANDA, E NÃO SEMEAR NUMA MIGRATION
+ * =============================================================================
+ * Semear criaria a categoria para todo mundo, inclusive para quem nunca vai
+ * pagar fatura parcelada — mais uma linha no seletor de categoria de toda tela,
+ * para sempre. Aqui ela nasce no dia em que passa a significar alguma coisa.
+ *
+ * ⚠️ O 23505 NÃO É ERRO, é a corrida perdida. `finance_categories_unique` cobre
+ * (user_id, kind, normalized_name); duas ações simultâneas podem chegar juntas
+ * ao insert. Quem perde relê e usa a que o outro criou — é isso que torna a
+ * função idempotente de verdade, e não só "quase sempre".
+ *
+ * `null` em qualquer outra falha: um encargo sem categoria é levemente pior de
+ * analisar; um encargo NÃO REGISTRADO é dinheiro que some da dívida.
+ */
+async function categoriaDeEncargos(
+  supabase: ClienteSupabase,
+  userId: string,
+): Promise<string | null> {
+  const normalizado = NOME_DA_CATEGORIA_DE_ENCARGOS.toLowerCase();
+
+  async function achar(): Promise<string | null> {
+    const { data } = await supabase
+      .from("finance_categories")
+      .select("id")
+      .eq("kind", "expense")
+      .eq("normalized_name", normalizado)
+      .maybeSingle();
+    return (data as { id: string } | null)?.id ?? null;
+  }
+
+  const existente = await achar();
+  if (existente) return existente;
+
+  const { data, error } = await supabase
+    .from("finance_categories")
+    .insert({
+      user_id: userId,
+      name: NOME_DA_CATEGORIA_DE_ENCARGOS,
+      kind: "expense",
+      color_key: "terracota",
+    })
+    .select("id")
+    .single();
+
+  if (error) return error.code === "23505" ? achar() : null;
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 /* ------------------------------------------------------------------- cartões */
 
 /**
@@ -896,47 +1060,127 @@ export async function payStatement(input: unknown): Promise<ActionResult> {
     const [ano, mes] = [i.mesFatura.slice(0, 4), i.mesFatura.slice(5, 7)];
     const description = `Pagamento da fatura ${mes}/${ano}`;
 
-    const { data, error } = await supabase
-      .from("finance_transactions")
-      .insert([
-        {
-          user_id: user.id,
-          account_id: i.fromAccountId,
-          kind: "expense",
-          amount_cents: i.amountCents,
-          description,
-          occurred_on: i.occurredOn,
-          transfer_group_id: groupId,
-          // A conta de origem não é cartão (recusado acima), logo não tem fatura.
-          statement_month: null,
-        },
-        {
+    const linhas: Record<string, unknown>[] = [
+      {
+        user_id: user.id,
+        account_id: i.fromAccountId,
+        kind: "expense",
+        amount_cents: i.amountCents,
+        description,
+        occurred_on: i.occurredOn,
+        transfer_group_id: groupId,
+        // A conta de origem não é cartão (recusado acima), logo não tem fatura.
+        statement_month: null,
+      },
+      {
+        user_id: user.id,
+        account_id: i.cardAccountId,
+        kind: "income",
+        amount_cents: i.amountCents,
+        description,
+        occurred_on: i.occurredOn,
+        transfer_group_id: groupId,
+        // A fatura QUITADA, escolhida pelo usuário — não a fatura da data do
+        // pagamento. É o que permite reconciliar "esta fatura foi paga", e é
+        // dele que sai o `paidCents` de `faturaDoCartao()`: sem este mês
+        // gravado, "quanto já paguei da fatura de abril" não teria resposta e
+        // o formulário voltaria a sugerir o total bruto depois de um pagamento
+        // parcial.
+        //
+        // ATENÇÃO a quem for somar por statement_month: esta linha está dentro
+        // do mês da fatura e ANULARIA o total dela. Qualquer soma por
+        // statement_month precisa excluir income com transfer_group_id, que é
+        // o que `faturaDoCartao()` faz via `ehPagamentoDeFatura()` — lá ela sai
+        // do total e entra no pago.
+        statement_month: i.mesFatura,
+      },
+    ];
+
+    /*
+      =========================================================================
+      O ROTATIVO — e o que ele NÃO gera
+      =========================================================================
+      ⚠️ NENHUM lançamento é criado para o PRINCIPAL que rolou. Ele já foi
+      contado quando cada compra aconteceu, e continua exatamente onde estava: na
+      fatura de origem, em aberto, pesando em `debt_cents`. Criar aqui um
+      "saldo remanescente" na fatura seguinte contaria a MESMA despesa duas
+      vezes — o erro que o Dashboard já documenta ter corrigido no patrimônio.
+
+      O que é despesa nova são os ENCARGOS, e só eles.
+
+      O saldo é lido do BANCO, não do que o formulário mandou: a tela do usuário
+      pode estar desatualizada (outro pagamento registrado em outra aba), e
+      juros sobre um saldo que já não existe é dinheiro inventado.
+    */
+    let encargos = { jurosCents: 0, iofCents: 0, totalCents: 0 };
+    if (i.taxaMensalPercent > 0 || i.iofCents > 0) {
+      if (cartao.statement_closing_day === null) {
+        return {
+          ok: false,
+          error:
+            "Sem dia de fechamento cadastrado não dá para saber em que fatura os juros caem. Edite o cartão.",
+        };
+      }
+
+      const doCartao = await linhasDaFatura(supabase, i.cardAccountId, i.mesFatura);
+      const { openCents } = faturaDoCartao(
+        doCartao,
+        { id: i.cardAccountId, statement_closing_day: cartao.statement_closing_day },
+        i.mesFatura,
+      );
+      // O que sobra DEPOIS deste pagamento. Piso em zero: pagar mais do que se
+      // deve não gera juros negativos, gera crédito a favor.
+      const restante = Math.max(0, openCents - i.amountCents);
+      encargos = calcularEncargos({
+        saldoRemanescenteCents: restante,
+        taxaMensalPercent: i.taxaMensalPercent,
+        iofCents: i.iofCents,
+      });
+
+      if (encargos.totalCents > 0) {
+        const categoriaId = await categoriaDeEncargos(supabase, user.id);
+        const mesDoEncargo = faturaDoEncargo(
+          i.mesFatura,
+          i.occurredOn,
+          cartao.statement_closing_day,
+        );
+        linhas.push({
           user_id: user.id,
           account_id: i.cardAccountId,
-          kind: "income",
-          amount_cents: i.amountCents,
-          description,
+          category_id: categoriaId,
+          kind: "expense",
+          amount_cents: encargos.totalCents,
+          description:
+            encargos.iofCents > 0
+              ? `Juros e IOF sobre a fatura ${mes}/${ano}`
+              : `Juros sobre a fatura ${mes}/${ano}`,
           occurred_on: i.occurredOn,
-          transfer_group_id: groupId,
-          // A fatura QUITADA, escolhida pelo usuário — não a fatura da data do
-          // pagamento. É o que permite reconciliar "esta fatura foi paga", e é
-          // dele que sai o `paidCents` de `faturaDoCartao()`: sem este mês
-          // gravado, "quanto já paguei da fatura de abril" não teria resposta e
-          // o formulário voltaria a sugerir o total bruto depois de um pagamento
-          // parcial.
-          //
-          // ATENÇÃO a quem for somar por statement_month: esta linha está dentro
-          // do mês da fatura e ANULARIA o total dela. Qualquer soma por
-          // statement_month precisa excluir income com transfer_group_id, que é
-          // o que `faturaDoCartao()` faz via `ehPagamentoDeFatura()` — lá ela sai
-          // do total e entra no pago.
-          statement_month: i.mesFatura,
-        },
-      ])
+          // Sem `transfer_group_id`: o encargo NÃO faz parte da transferência.
+          // Amarrá-lo ao grupo o transformaria numa perna, `isTransfer()` o
+          // excluiria dos totais e os juros sumiriam das despesas do mês — que é
+          // o único lugar onde eles precisam aparecer.
+          is_paid: true,
+          statement_month: mesDoEncargo,
+        });
+      }
+    }
+
+    /*
+      UM único `.insert([...])` com as duas ou três linhas.
+
+      O PostgREST não dá transação entre chamadas: inserir os encargos numa
+      segunda chamada deixaria, no caso de falha, um pagamento gravado e um
+      encargo perdido — ou pior, um encargo gravado sem o pagamento que o
+      justifica. Um array é UM comando no Postgres. É a mesma razão de
+      `createInstallmentPurchase` inserir as doze parcelas de uma vez.
+    */
+    const { data, error } = await supabase
+      .from("finance_transactions")
+      .insert(linhas)
       .select("id");
 
     if (error) return { ok: false, error: error.message };
-    if (((data as { id: string }[] | null) ?? []).length !== 2) {
+    if (((data as { id: string }[] | null) ?? []).length !== linhas.length) {
       return { ok: false, error: "Não foi possível registrar o pagamento." };
     }
 
