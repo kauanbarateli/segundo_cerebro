@@ -376,6 +376,65 @@ export function planoDeParcelas({
   }));
 }
 
+export interface PlanoDeRecorrenciaArgs {
+  /** O valor de CADA ocorrência — não um total a dividir. */
+  valorCents: number;
+  ocorrencias: number;
+  /** Data da PRIMEIRA ocorrência, "YYYY-MM-DD". */
+  dataInicial: string;
+}
+
+/**
+ * Plano de uma RECORRÊNCIA: N ocorrências do MESMO valor, uma por mês.
+ *
+ * =============================================================================
+ * ⚠️ POR QUE NÃO É `planoDeParcelas` COM OUTRO NOME
+ * =============================================================================
+ * As duas produzem N linhas mensais e são OPOSTAS no balanço:
+ *
+ *   parcelamento    total DIVIDIDO em N   é dívida inteira desde a compra
+ *   recorrência     o MESMO valor N vezes NÃO é dívida (compromisso cancelável)
+ *
+ * "12× aluguel de R$ 2.000" não é uma dívida de R$ 24.000: saindo do imóvel no
+ * terceiro mês, os outros nove não acontecem. A linha que separa não é a
+ * duração — é se a contrapartida já foi entregue.
+ *
+ * Daí as três diferenças concretas com `planoDeParcelas`:
+ *
+ * 1. NÃO HÁ RATEIO DE CENTAVOS. Cada ocorrência carrega o valor cheio, então não
+ *    existe resto para a última absorver — e a restrição "cada parcela precisa
+ *    de ao menos um centavo" não se aplica.
+ * 2. NÃO HÁ `statementMonth`. Recorrência não é permitida em cartão: lá o
+ *    gatilho da 0023 força `is_paid = true`, e as doze ocorrências futuras
+ *    entrariam na dívida consumindo limite que o cartão ainda não comprometeu.
+ * 3. A DESCRIÇÃO NÃO GANHA SUFIXO "(3/12)". No extrato, "(3/12)" significa
+ *    parcela — e é justamente a confusão que `serie_tipo` existe para evitar.
+ *
+ * O que é IGUAL, e por isso é reusado: a aritmética de datas. `somaMesesNaData`
+ * já resolve o dia 31 em fevereiro, a virada de ano e o clamp não-cumulativo
+ * (a 3ª ocorrência de uma série que começa em 31/01 é 31/03, não 28/03).
+ */
+export function planoDeRecorrencia({
+  valorCents,
+  ocorrencias,
+  dataInicial,
+}: PlanoDeRecorrenciaArgs): ParcelaPlanejada[] {
+  if (!Number.isSafeInteger(valorCents) || valorCents <= 0) {
+    throw new RangeError(`valorCents deve ser inteiro positivo em centavos: ${valorCents}`);
+  }
+  if (!Number.isInteger(ocorrencias) || ocorrencias <= 0) {
+    throw new RangeError(`ocorrencias deve ser inteiro maior que zero: ${ocorrencias}`);
+  }
+
+  return Array.from({ length: ocorrencias }, (_, indice) => ({
+    numero: indice + 1,
+    total: ocorrencias,
+    amountCents: valorCents,
+    occurredOn: somaMesesNaData(dataInicial, indice),
+    statementMonth: null,
+  }));
+}
+
 /* --------------------------------------------------------------------- limite */
 
 export interface LimiteDisponivelArgs {

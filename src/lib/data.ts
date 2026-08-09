@@ -41,7 +41,6 @@ import {
   historicoMensal,
   mesesDoRecorte,
   periodoAnterior,
-  porSemana,
   topBeneficiarios,
   totaisDoPeriodo,
   type ContaParaCompetencia,
@@ -924,6 +923,20 @@ export interface FinanceSnapshot {
    * que está somando "o mês" e leve junto três anos de parcelas futuras.
    */
   futureCardTransactions: FinanceTransaction[];
+  /**
+   * TODOS os lançamentos ainda não quitados, de QUALQUER data — inclusive fora
+   * das duas janelas acima.
+   *
+   * ⚠️ É a lista que responde "quanto ainda vai sair", e ela não podia sair de
+   * `transactions`: uma recorrência de 36 meses ou uma compra parcelada em 24×
+   * fora do cartão vive quase toda além da janela de três meses, e o Painel
+   * mostraria uma fração do compromisso como se fosse o todo.
+   *
+   * O recorte é barato justamente porque é o oposto de uma janela de tempo: o
+   * que limita a lista é o que você AINDA NÃO PAGOU, e isso é naturalmente
+   * pequeno. Lançamento quitado — que é a esmagadora maioria — nunca entra.
+   */
+  pendentes: FinanceTransaction[];
   budgets: FinanceBudget[];
   transactionTags: { transaction_id: string; tag_id: string }[];
 }
@@ -973,6 +986,7 @@ export async function getFinanceSnapshot(monthIso: string): Promise<FinanceSnaps
     { data: tags },
     { data: transactions },
     { data: futureCardTransactions },
+    pendentes,
     { data: budgets },
   ] = await Promise.all([
     supabase.from("finance_accounts").select("*").is("archived_at", null).order("name"),
@@ -1005,6 +1019,30 @@ export async function getFinanceSnapshot(monthIso: string): Promise<FinanceSnaps
       .gt("occurred_on", toDate)
       .not("statement_month", "is", null)
       .order("occurred_on", { ascending: true }),
+    /*
+      O QUE AINDA VAI SAIR — sem recorte de tempo, e de propósito.
+
+      Uma recorrência de 36 meses ou uma compra em 24× fora do cartão vive quase
+      toda fora da janela de três meses. Recortando por data, o Painel mostraria
+      uma fração do compromisso como se fosse o todo — o tipo de número que
+      parece plausível e está errado.
+
+      O que limita a lista é o oposto de uma janela: é o que você AINDA NÃO
+      PAGOU. Lançamento quitado (a esmagadora maioria) nunca entra, e por isso a
+      consulta sem filtro de data continua barata.
+
+      ⚠️ PAGINADA. `select` solto é cortado no `db-max-rows` do projeto (1000 por
+      padrão no Supabase) SEM erro e sem aviso — e aqui o silêncio produziria uma
+      dívida MENOR que a real, que é o lado errado para errar.
+    */
+    lerTudoPaginado<FinanceTransaction>((inicio, fim) =>
+      supabase
+        .from("finance_transactions")
+        .select("*")
+        .eq("is_paid", false)
+        .order("id", { ascending: true })
+        .range(inicio, fim),
+    ),
     supabase.from("finance_budgets").select("*").eq("month", monthIso),
   ]);
 
@@ -1032,6 +1070,7 @@ export async function getFinanceSnapshot(monthIso: string): Promise<FinanceSnaps
     tags: (tags as FinanceTag[] | null) ?? [],
     transactions: (transactions as FinanceTransaction[] | null) ?? [],
     futureCardTransactions: (futureCardTransactions as FinanceTransaction[] | null) ?? [],
+    pendentes,
     budgets: (budgets as FinanceBudget[] | null) ?? [],
     transactionTags,
   };
@@ -1181,7 +1220,6 @@ export async function getFinanceAnalytics(
     porCategoria: expensesByCategory(txs, cats, meses, accounts),
     porEtiqueta: despesasPorEtiqueta(txs, tags, vinculos, meses, accounts),
     beneficiarios: topBeneficiarios(txs, meses, accounts),
-    semanas: porSemana(txs, meses, accounts),
     historico: historicoMensal(txs, accounts, monthIso, MESES_DO_HISTORICO),
     orfaos: foraDeCompetencia(txs, cartoesDe(accounts)),
   };

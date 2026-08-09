@@ -187,7 +187,24 @@ export interface FinanceTransaction {
   occurred_on: string;
   transfer_group_id: string | null;
   notes: string | null;
+  /**
+   * ⚠️ DERIVADO de `paid_cents` desde a 0023 — o gatilho
+   * `trg_finance_tx_pagamento` reescreve este campo na escrita.
+   *
+   * Mandá-lo `true` sem `paid_cents` não marca nada como pago. Em cartão e em
+   * perna de transferência ele é forçado a `true` (a garantia que a 0022
+   * instalou e a 0023 preservou).
+   */
   is_paid: boolean;
+  /**
+   * Quanto deste lançamento já foi pago, em centavos (0023). `0` = nada,
+   * `amount_cents` = quitado, o meio = pagamento parcial.
+   *
+   * É ele que a view `finance_account_balances` soma — não `amount_cents`. Sem
+   * isso, pagar R$ 300 de uma despesa de R$ 800 tiraria R$ 300 da conta no mundo
+   * real e zero no aplicativo.
+   */
+  paid_cents: number;
   created_at: string;
   updated_at: string;
   /**
@@ -195,6 +212,9 @@ export interface FinanceTransaction {
    * todos preenchidos numa parcelada, com 1 <= installment_no <= installment_total
    * (CHECK `finance_tx_installment_check`). Uma compra parcelada é N LINHAS
    * unidas por este grupo — não existe linha "mãe".
+   *
+   * ⚠️ ATENÇÃO AO NOME: desde a 0024 ele agrupa TAMBÉM recorrência. Quem
+   * distingue as duas é `serie_tipo`, e a diferença decide se a linha é dívida.
    */
   installment_group_id: string | null;
   /** O "3" de "3 de 12". */
@@ -210,7 +230,25 @@ export interface FinanceTransaction {
    * já pagas mudariam de mês e deixariam de bater com o extrato.
    */
   statement_month: string | null;
+  /**
+   * ⚠️ O QUE DECIDE SE A LINHA É DÍVIDA (0024).
+   *
+   * `"recorrencia"` — repete o MESMO valor N vezes. **Não é dívida**: é
+   * compromisso futuro e cancelável. Você não deve doze aluguéis; deve o deste
+   * mês.
+   *
+   * `"parcelamento"` — total dividido em N. **É dívida por inteiro desde a
+   * compra**, porque a contrapartida já foi entregue. Sair de casa não devolve
+   * o sofá.
+   *
+   * `null` — lançamento avulso, sem série. NÃO é "tanto faz": quem soma dívida
+   * decide pelo estado da linha (vencida e não paga), nunca supondo um tipo.
+   */
+  serie_tipo: SerieTipo | null;
 }
+
+/** Ver `FinanceTransaction.serie_tipo` — a diferença entre os dois é de balanço. */
+export type SerieTipo = "recorrencia" | "parcelamento";
 
 export interface FinanceBudget {
   id: string;

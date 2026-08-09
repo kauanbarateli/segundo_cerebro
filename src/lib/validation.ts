@@ -389,6 +389,11 @@ export const financeTransactionSchema = z.object({
   notes: textoOpcional(1_000),
   isPaid: z.boolean().default(true),
   tagIds: z.array(z.string().uuid()).max(10).default([]),
+  /**
+   * Só faz sentido editando uma ocorrência de série. Fora disso é ignorado —
+   * `installment_group_id` nulo não tem irmãos a alcançar.
+   */
+  escopo: z.enum(["esta", "futuras", "todas"]).default("esta"),
 });
 
 export const financeTransferSchema = z.object({
@@ -445,6 +450,53 @@ export const financeInstallmentSchema = z
   });
 
 /**
+ * RECORRÊNCIA — N ocorrências do MESMO valor, uma por mês.
+ *
+ * =============================================================================
+ * ⚠️ SCHEMA PRÓPRIO, E NÃO UMA FLAG EM `financeInstallmentSchema`
+ * =============================================================================
+ * Os dois têm a mesma forma na tela — N ocorrências a partir de uma data — e são
+ * OPOSTOS no balanço. Um campo compartilhado significaria que `amountCents` quer
+ * dizer "o total a dividir" ou "o valor de cada" dependendo de outro campo, e é
+ * assim que alguém acaba criando doze aluguéis de R$ 166,67.
+ *
+ * ⚠️ E ELE **NÃO** HERDA O `refine` DE CENTAVO POR PARCELA. Parcelamento divide
+ * um total, então precisa de `total >= parcelas` para nenhuma linha sair com zero
+ * centavo. Recorrência não divide nada — 3 ocorrências de R$ 0,02 são legítimas.
+ *
+ * O teto de 36 é o mesmo do parcelamento: consistência, e um limite à
+ * proliferação de linhas (36 ocorrências já são 36 registros por série).
+ */
+export const financeRecorrenciaSchema = z.object({
+  accountId: z.string().uuid("Escolha uma conta"),
+  categoryId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  description: z.string().trim().min(1, "Informe uma descrição").max(160),
+  /** O valor de CADA ocorrência. Nunca um total. */
+  amountCents: centavosPositivos("valor de cada ocorrência"),
+  ocorrencias: z
+    .number()
+    .int("O número de ocorrências precisa ser inteiro")
+    .min(2, "Uma recorrência precisa de ao menos 2 ocorrências")
+    .max(36, "No máximo 36 ocorrências"),
+  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+  tagIds: z.array(z.string().uuid()).max(10).default([]),
+});
+
+/**
+ * O ALCANCE de uma edição em série — o problema clássico de agenda.
+ *
+ * `"esta"` é o padrão porque é o único que não tem efeito colateral. `"todas"`
+ * reescreve mês JÁ FECHADO e conferido contra o extrato, e por isso a interface
+ * pede confirmação dizendo quantos meses passados mudam.
+ */
+export const escopoDeSerie = z.enum(["esta", "futuras", "todas"]).default("esta");
+
+/**
  * Pagamento de fatura de cartão (0010).
  *
  * Não tem `description`: ela é montada no servidor a partir do mês da fatura,
@@ -492,6 +544,37 @@ export const financeStatementPaymentSchema = z
     path: ["fromAccountId"],
     message: "O cartão não pode pagar a si mesmo: escolha a conta de onde sai o dinheiro",
   });
+
+/**
+ * Pagamento (total ou parcial) de UM lançamento — `payTransaction`.
+ *
+ * ⚠️ NÃO tem `fromAccountId`, e a ausência é decisão de modelo, não esquecimento.
+ *
+ * Uma FATURA precisa de conta de origem porque ela vive no cartão, e o dinheiro
+ * tem que vir de fora dele. Um lançamento avulso já está NA conta de onde o
+ * dinheiro sai (`account_id`) — pagá-lo é registrar que o dinheiro saiu dali.
+ * Um campo "pagar com" aqui ou seria um no-op (a mesma conta) ou criaria uma
+ * transferência silenciosa que contaria a saída duas vezes. Quem pagou de outra
+ * conta edita a conta do lançamento, que é o que de fato aconteceu.
+ *
+ * A taxa e o IOF são os mesmos de `financeStatementPaymentSchema`, com o mesmo
+ * teto e o mesmo motivo — ver lá.
+ */
+export const financeTransactionPaymentSchema = z.object({
+  transactionId: z.string().uuid("Lançamento inválido"),
+  amountCents: centavosPositivos("valor do pagamento"),
+  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+  taxaMensalPercent: z
+    .number({ invalid_type_error: "Informe a taxa de juros" })
+    .min(0, "A taxa não pode ser negativa")
+    .max(100, "Taxa acima de 100% ao mês — confira se não faltou a vírgula")
+    .default(0),
+  iofCents: z
+    .number()
+    .int("O IOF precisa estar em centavos inteiros")
+    .min(0, "O IOF não pode ser negativo")
+    .default(0),
+});
 
 export const financeBudgetSchema = z.object({
   categoryId: z.string().uuid(),

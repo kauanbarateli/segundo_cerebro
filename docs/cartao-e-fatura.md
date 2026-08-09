@@ -222,7 +222,94 @@ apareceriam em lugar nenhum.
 
 ---
 
-## 4. Migration 0022
+## 4. Pagamento parcial de um lançamento (`paid_cents`, migration 0023)
+
+### O obstáculo era o esquema
+
+`is_paid` é booleano. Não havia como representar "paguei R$ 300 de R$ 800".
+
+A **fatura** escapa disso porque não é uma linha: é um **conjunto** com o mesmo
+`statement_month`, e `faturaDoCartao()` deriva `openCents = totalCents −
+paidCents`. Um lançamento avulso não tem conjunto onde somar.
+
+Três caminhos, e a escolha está registrada porque as outras duas voltam a parecer
+boas ideias de longe:
+
+| | |
+|---|---|
+| **(a) coluna `paid_cents`** | ✅ escolhida — menor mudança que resolve |
+| (b) dividir a linha em duas | ❌ reescreve o histórico, quebra `installment_no`, o extrato deixa de bater |
+| (c) tabela de pagamentos | mais elegante, desnecessária hoje. Migrar de (a) para (c) é **aditivo** |
+
+### ⚠️ A 0023 substitui a função do gatilho da 0022
+
+A **garantia continua inteira**: linha de cartão sai sempre com `is_paid = true`.
+O que a nova versão acrescenta é `paid_cents = amount_cents` junto — sem isso, a
+coerência entre as duas colunas se quebraria justamente no cartão.
+
+Uma função e não duas porque o Postgres dispara gatilhos `before` da mesma tabela
+em **ordem alfabética de nome**: um segundo gatilho teria a ordem codificada na
+escolha do nome do arquivo, invisível e quebrável por um rename inocente.
+
+### `is_paid` passa a ser derivado
+
+Fora de cartão e fora de transferência, `is_paid := (paid_cents >= amount_cents)`.
+
+⚠️ **Consequência para quem escreve:** mandar `is_paid = true` sem `paid_cents`
+não marca mais nada como pago.
+
+### ⚠️ A view passou a somar `paid_cents`
+
+E o **significado dela não mudou**: continua respondendo "quanto já se moveu". O
+que mudou é a **precisão** — antes ela só sabia responder em tudo-ou-nada.
+
+**É um no-op para todo dado existente.** Com `is_paid ⟺ paid_cents >=
+amount_cents` garantido pelo gatilho e o backfill do passo 2 da migration:
+
+```
+linha paga      antes somava amount_cents; agora soma paid_cents, que é igual
+linha não paga  antes era filtrada fora;   agora soma paid_cents = 0
+```
+
+Sem essa mudança, pagar R$ 300 de uma despesa de R$ 800 tiraria R$ 300 da conta
+no mundo real e **zero** no aplicativo — e o saldo deixaria de bater com o
+extrato, que é o número contra o qual tudo é conferido.
+
+### ⚠️ O restante não vira lançamento novo
+
+Mesma regra do rotativo: a despesa já foi contada quando foi lançada. Só os
+**encargos** viram linha, e eles nascem **não pagos** — o juro é dívida nova, que
+ainda vai sair.
+
+### Por que não há "conta de origem"
+
+Uma **fatura** precisa dela porque vive no cartão e o dinheiro tem que vir de
+fora. Um lançamento avulso **já está na conta de onde o dinheiro sai**; pagá-lo é
+registrar que ele saiu dali, e a view faz o saldo se mover sozinho. Um campo
+"pagar com" seria um no-op (a mesma conta) ou criaria uma transferência que
+contaria a saída duas vezes.
+
+> Isto diverge do plano V2 §5.3, que listava "conta de origem" no fluxo. O plano
+> espelhava a forma de `StatementPaymentForm` sem notar que o caso avulso é
+> diferente. Quem pagou de outra conta edita a conta do lançamento — que é o que
+> de fato aconteceu.
+
+### Editar um lançamento parcialmente pago
+
+A caixa "Já pago / recebido" **sai da tela** nesse caso, e a action **preserva**
+`paid_cents`. Ela só sabe dizer tudo ou nada: marcar quitaria o que ainda se
+deve, desmarcar apagaria o que já saiu da conta — e as duas escolhas pareceriam
+inofensivas.
+
+### Trava otimista
+
+`payTransaction` atualiza com `.eq("paid_cents", valorLido)`. Sem isso, dois
+pagamentos concorrentes leem `paid_cents = 0`, ambos gravam 300, e a linha fica
+com 300 pagos depois de 600 terem saído da conta.
+
+---
+
+## 5. Migration 0022
 
 ⚠️ **Leia o cabeçalho de `0022_cartao_divida_desde_a_compra.sql` antes de
 aplicar.** Ele traz a consulta de contagem, e o reparo **faz a dívida saltar**:

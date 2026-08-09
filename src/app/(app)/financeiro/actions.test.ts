@@ -190,7 +190,15 @@ vi.mock("@/lib/supabase/server", () => ({
 
 // Import dinâmico pelo mesmo motivo: os mocks precisam estar de pé antes de o
 // módulo sob teste resolver suas dependências.
-const { upsertTransaction, upsertAccount, payStatement } = await import("./actions");
+const {
+  upsertTransaction,
+  upsertAccount,
+  payStatement,
+  payTransaction,
+  createRecurringSeries,
+  createInstallmentPurchase,
+  cancelarFuturasDaSerie,
+} = await import("./actions");
 
 /** Só as escritas de lançamento — auditoria e etiquetas são ruído aqui. */
 function lancamentosGravados(escritas: Escrita[]): Record<string, unknown>[] {
@@ -485,5 +493,331 @@ describe("payStatement — pagamento parcial com juros", () => {
     expect(r.ok).toBe(false);
     // E nada foi gravado: o pagamento inteiro é recusado, não gravado pela metade.
     expect(lancamentosGravados(escritas)).toHaveLength(0);
+  });
+});
+
+describe("payTransaction — pagar um lançamento avulso", () => {
+  /** Uma despesa de R$ 800 numa conta corrente, ainda não paga. */
+  function despesa(over: Record<string, unknown> = {}) {
+    return {
+      id: "33333333-3333-4333-8333-333333333333",
+      user_id: "usuario-1",
+      account_id: CORRENTE.id,
+      category_id: null,
+      kind: "expense",
+      amount_cents: 80_000,
+      paid_cents: 0,
+      description: "Conserto",
+      payee: null,
+      occurred_on: "2026-08-01",
+      transfer_group_id: null,
+      notes: null,
+      is_paid: false,
+      created_at: "",
+      updated_at: "",
+      installment_group_id: null,
+      installment_no: null,
+      installment_total: null,
+      statement_month: null,
+      serie_tipo: null,
+      ...over,
+    };
+  }
+
+  const ID = "33333333-3333-4333-8333-333333333333";
+
+  it("⚠️ PAGAMENTO PARCIAL MEXE EM `paid_cents` E NÃO CRIA LANÇAMENTO NENHUM", async () => {
+    /*
+      O TESTE DE INVARIANTE DO R4.
+
+      O restante já foi contado quando a despesa foi lançada. Uma linha nova de
+      "saldo remanescente" contaria a mesma saída duas vezes — e o sintoma seria
+      uma dívida que CRESCE a cada pagamento, o oposto do que pagar faz.
+    */
+    const { cliente, escritas } = criarBanco([CORRENTE], [despesa()]);
+    suporte.cliente = cliente;
+
+    const r = await payTransaction({
+      transactionId: ID,
+      amountCents: 30_000,
+      occurredOn: "2026-08-20",
+    });
+
+    expect(r.ok, `a action recusou: ${"error" in r ? r.error : ""}`).toBe(true);
+
+    const escritasDeTx = escritas.filter((e) => e.tabela === "finance_transactions");
+    // UMA escrita, e ela é um update de paid_cents. Nenhum insert.
+    expect(escritasDeTx.every((e) => e.operacao === "update")).toBe(true);
+    expect(escritasDeTx[0]!.linhas[0]!.paid_cents).toBe(30_000);
+  });
+
+  it("acumula sobre o que já havia sido pago", async () => {
+    const { cliente, escritas } = criarBanco([CORRENTE], [despesa({ paid_cents: 30_000 })]);
+    suporte.cliente = cliente;
+
+    await payTransaction({ transactionId: ID, amountCents: 20_000, occurredOn: "2026-08-20" });
+
+    const update = escritas.find((e) => e.tabela === "finance_transactions");
+    expect(update!.linhas[0]!.paid_cents).toBe(50_000);
+  });
+
+  it("recusa pagar MAIS do que falta, dizendo quanto falta", async () => {
+    // O CHECK `paid_cents <= amount_cents` recusaria no banco, com mensagem crua
+    // de constraint. Recusar aqui dá o número que a pessoa precisa.
+    const { cliente, escritas } = criarBanco([CORRENTE], [despesa({ paid_cents: 60_000 })]);
+    suporte.cliente = cliente;
+
+    const r = await payTransaction({ transactionId: ID, amountCents: 30_000, occurredOn: "2026-08-20" });
+
+    expect(r.ok).toBe(false);
+    expect("error" in r && r.error).toContain("200,00");
+    expect(escritas.filter((e) => e.tabela === "finance_transactions")).toHaveLength(0);
+  });
+
+  it("recusa lançamento já quitado", async () => {
+    const { cliente } = criarBanco([CORRENTE], [despesa({ paid_cents: 80_000, is_paid: true })]);
+    suporte.cliente = cliente;
+
+    const r = await payTransaction({ transactionId: ID, amountCents: 1_000, occurredOn: "2026-08-20" });
+    expect(r.ok).toBe(false);
+    expect("error" in r && r.error).toContain("quitado");
+  });
+
+  it("⚠️ RECUSA COMPRA DE CARTÃO — quem se paga lá é a FATURA", async () => {
+    /*
+      Em cartão o gatilho da 0023 mantém toda linha quitada (a dívida existe
+      desde a compra), então não há saldo a pagar. Deixar passar criaria um
+      segundo mecanismo de pagamento concorrendo com `payStatement`, e os dois
+      abateriam a mesma dívida.
+    */
+    const { cliente, escritas } = criarBanco(
+      [CARTAO],
+      [despesa({ account_id: CARTAO.id, statement_month: "2026-08-01" })],
+    );
+    suporte.cliente = cliente;
+
+    const r = await payTransaction({ transactionId: ID, amountCents: 10_000, occurredOn: "2026-08-20" });
+
+    expect(r.ok).toBe(false);
+    expect("error" in r && r.error).toContain("FATURA");
+    expect(escritas.filter((e) => e.tabela === "finance_transactions")).toHaveLength(0);
+  });
+
+  it("recusa perna de transferência — ela já aconteceu quando foi criada", async () => {
+    const { cliente } = criarBanco([CORRENTE], [despesa({ transfer_group_id: "g1" })]);
+    suporte.cliente = cliente;
+
+    const r = await payTransaction({ transactionId: ID, amountCents: 10_000, occurredOn: "2026-08-20" });
+    expect(r.ok).toBe(false);
+  });
+
+  it("com juros e saldo remanescente, cria UM lançamento — o de encargos, NÃO PAGO", async () => {
+    /*
+      R$ 500 de saldo (800 − 300) a 10% ao mês = R$ 50 de juros. Ele nasce com
+      `paid_cents = 0`: o juro é dívida nova, que ainda vai sair. Marcá-lo como
+      pago tiraria o dinheiro da conta no mesmo gesto em que a pessoa deixou de
+      pagar o principal.
+    */
+    const { cliente, escritas } = criarBanco([CORRENTE], [despesa()]);
+    suporte.cliente = cliente;
+
+    const r = await payTransaction({
+      transactionId: ID,
+      amountCents: 30_000,
+      occurredOn: "2026-08-20",
+      taxaMensalPercent: 10,
+    });
+
+    expect(r.ok, `a action recusou: ${"error" in r ? r.error : ""}`).toBe(true);
+
+    const inserts = escritas.filter(
+      (e) => e.tabela === "finance_transactions" && e.operacao === "insert",
+    );
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]!.linhas[0]!.amount_cents).toBe(5_000);
+    expect(inserts[0]!.linhas[0]!.paid_cents).toBe(0);
+    expect(inserts[0]!.linhas[0]!.is_paid).toBe(false);
+    // E o principal continua sem virar linha nova.
+    expect(inserts[0]!.linhas[0]!.amount_cents).not.toBe(50_000);
+  });
+
+  it("quitando por inteiro não há encargo, mesmo com taxa informada", async () => {
+    const { cliente, escritas } = criarBanco([CORRENTE], [despesa()]);
+    suporte.cliente = cliente;
+
+    await payTransaction({
+      transactionId: ID,
+      amountCents: 80_000,
+      occurredOn: "2026-08-20",
+      taxaMensalPercent: 10,
+    });
+
+    const inserts = escritas.filter(
+      (e) => e.tabela === "finance_transactions" && e.operacao === "insert",
+    );
+    expect(inserts).toHaveLength(0);
+  });
+});
+
+describe("séries — recorrência e parcelamento", () => {
+  const base = {
+    accountId: CORRENTE.id,
+    categoryId: "",
+    description: "Aluguel",
+    occurredOn: "2026-08-05",
+    tagIds: [] as string[],
+  };
+
+  it("⚠️ RECORRÊNCIA GRAVA `serie_tipo` — é a única coisa que a separa de parcela", () => {
+    /*
+      Sem esta coluna, doze aluguéis e doze parcelas são indistinguíveis na
+      estrutura: mesmo grupo, mesmo `installment_no`, mesmo "3/12". E o Painel
+      passaria a mostrar R$ 24.000 de passivo que não existe.
+    */
+    const { cliente, escritas } = criarBanco([CORRENTE]);
+    suporte.cliente = cliente;
+
+    return createRecurringSeries({ ...base, amountCents: 200_000, ocorrencias: 3 }).then((r) => {
+      expect(r.ok, `a action recusou: ${"error" in r ? r.error : ""}`).toBe(true);
+      const linhas = lancamentosGravados(escritas);
+      expect(linhas).toHaveLength(3);
+      expect(linhas.every((l) => l.serie_tipo === "recorrencia")).toBe(true);
+      // O MESMO valor em todas — nunca um total dividido.
+      expect(linhas.every((l) => l.amount_cents === 200_000)).toBe(true);
+    });
+  });
+
+  it("recorrência nasce NÃO PAGA — o dinheiro ainda não saiu", async () => {
+    const { cliente, escritas } = criarBanco([CORRENTE]);
+    suporte.cliente = cliente;
+
+    await createRecurringSeries({ ...base, amountCents: 200_000, ocorrencias: 3 });
+
+    const linhas = lancamentosGravados(escritas);
+    expect(linhas.every((l) => l.is_paid === false && l.paid_cents === 0)).toBe(true);
+  });
+
+  it("a descrição NÃO ganha o sufixo (3/12) — isso significaria parcela", async () => {
+    // No extrato, "(3/12)" quer dizer parcelamento. A distinção vem das colunas,
+    // e a tela mostra "3 de 12 · recorrente" a partir delas.
+    const { cliente, escritas } = criarBanco([CORRENTE]);
+    suporte.cliente = cliente;
+
+    await createRecurringSeries({ ...base, amountCents: 200_000, ocorrencias: 3 });
+
+    expect(lancamentosGravados(escritas).every((l) => l.description === "Aluguel")).toBe(true);
+  });
+
+  it("⚠️ RECUSA RECORRÊNCIA EM CARTÃO, sem gravar nada", async () => {
+    /*
+      Lá o gatilho da 0023 força `is_paid = true` em toda linha — a garantia que
+      impede o limite de deixar de ser consumido. Com ela, as ocorrências futuras
+      de uma assinatura comeriam limite que o cartão ainda não comprometeu.
+    */
+    const { cliente, escritas } = criarBanco([CARTAO]);
+    suporte.cliente = cliente;
+
+    const r = await createRecurringSeries({
+      ...base,
+      accountId: CARTAO.id,
+      amountCents: 4_500,
+      ocorrencias: 12,
+    });
+
+    expect(r.ok).toBe(false);
+    expect("error" in r && r.error).toContain("limite");
+    expect(lancamentosGravados(escritas)).toHaveLength(0);
+  });
+
+  it("parcelamento FORA do cartão nasce não pago, mas marcado como parcelamento", async () => {
+    /*
+      O dinheiro ainda não saiu da conta — marcar como pago derrubaria o saldo
+      pelo total no dia da compra e ele deixaria de bater com o extrato. A dívida
+      não some por isso: `serie_tipo = 'parcelamento'` manda as parcelas futuras
+      para a Dívida, porque a contrapartida já foi entregue.
+    */
+    const { cliente, escritas } = criarBanco([CORRENTE]);
+    suporte.cliente = cliente;
+
+    const r = await createInstallmentPurchase({
+      accountId: CORRENTE.id,
+      categoryId: "",
+      description: "Sofá",
+      totalAmountCents: 240_000,
+      installments: 3,
+      occurredOn: "2026-08-05",
+      tagIds: [],
+    });
+
+    expect(r.ok, `a action recusou: ${"error" in r ? r.error : ""}`).toBe(true);
+    const linhas = lancamentosGravados(escritas);
+    expect(linhas).toHaveLength(3);
+    expect(linhas.every((l) => l.serie_tipo === "parcelamento")).toBe(true);
+    expect(linhas.every((l) => l.is_paid === false && l.paid_cents === 0)).toBe(true);
+    // E o TOTAL é dividido, ao contrário da recorrência.
+    expect(linhas.map((l) => l.amount_cents)).toEqual([80_000, 80_000, 80_000]);
+  });
+
+  it("parcelamento NO cartão continua nascendo pago — a dívida existe desde a compra", async () => {
+    const { cliente, escritas } = criarBanco([CARTAO]);
+    suporte.cliente = cliente;
+
+    await createInstallmentPurchase({
+      accountId: CARTAO.id,
+      categoryId: "",
+      description: "Geladeira",
+      totalAmountCents: 240_000,
+      installments: 3,
+      occurredOn: "2026-08-05",
+      tagIds: [],
+    });
+
+    const linhas = lancamentosGravados(escritas);
+    expect(linhas.every((l) => l.is_paid === true)).toBe(true);
+    expect(linhas.every((l) => l.paid_cents === l.amount_cents)).toBe(true);
+  });
+
+  it("⚠️ ENCERRAR SÓ VALE PARA RECORRÊNCIA — parcelamento é recusado", async () => {
+    /*
+      Apagar parcelas futuras de uma compra parcelada apagaria dívida que
+      CONTINUA existindo: o sofá já está na sala e o banco vai cobrar. O sistema
+      passaria a mostrar que se deve menos do que se deve.
+    */
+    const parcela = {
+      id: "44444444-4444-4444-8444-444444444444",
+      installment_group_id: "g-1",
+      installment_no: 2,
+      serie_tipo: "parcelamento",
+    };
+    const { cliente, escritas } = criarBanco([CORRENTE], [parcela]);
+    suporte.cliente = cliente;
+
+    const r = await cancelarFuturasDaSerie("44444444-4444-4444-8444-444444444444");
+
+    expect(r.ok).toBe(false);
+    expect("error" in r && r.error).toContain("recorrência");
+    expect(escritas.some((e) => e.operacao === "delete")).toBe(false);
+  });
+
+  it("encerrar uma recorrência apaga a partir desta ocorrência", async () => {
+    const ocorrencia = {
+      id: "44444444-4444-4444-8444-444444444444",
+      installment_group_id: "g-1",
+      installment_no: 3,
+      serie_tipo: "recorrencia",
+    };
+    const { cliente, escritas } = criarBanco([CORRENTE], [ocorrencia]);
+    suporte.cliente = cliente;
+
+    const r = await cancelarFuturasDaSerie("44444444-4444-4444-8444-444444444444");
+
+    // O falso devolve lista vazia no delete, então a action reporta "nada a
+    // encerrar" — o que importa provar aqui é que ela CHEGOU ao delete, ou seja,
+    // que recorrência não é recusada como parcelamento é.
+    expect(escritas.some((e) => e.tabela === "finance_transactions" && e.operacao === "delete")).toBe(
+      true,
+    );
+    expect(r.ok).toBe(false);
+    expect("error" in r && r.error).toContain("futura");
   });
 });

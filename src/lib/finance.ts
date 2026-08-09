@@ -1,11 +1,12 @@
 import type {
   FinanceAccount,
+  FinanceAccountBalance,
   FinanceTransaction,
   FinanceCategory,
   FinanceTag,
   FinanceBudget,
 } from "@/lib/database.types";
-import { somaMeses } from "@/lib/credit";
+import { patrimonioEDivida, somaMeses } from "@/lib/credit";
 
 /**
  * Cálculos financeiros puros — sem I/O, testáveis.
@@ -441,82 +442,6 @@ export function historicoMensal(
   });
 }
 
-/* --------------------------------------------------------------- semanas */
-
-export interface FaixaSemanal {
-  /** "YYYY-MM-DD" do primeiro e do último dia da faixa. */
-  inicio: string;
-  fim: string;
-  incomeCents: number;
-  expenseCents: number;
-}
-
-/**
- * Soma o mesmo `Date.UTC` que `previousMonthIso` usa. Aritmética em UTC puro é
- * exata e não tem fuso: o perigo do módulo de datas é `new Date("2026-03-01")`,
- * que PARSEIA como UTC e devolve componentes locais. Aqui não há parse de
- * string — os componentes entram como números.
- */
-function somaDias(iso: string, dias: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y!, (m ?? 1) - 1, (d ?? 1) + dias)).toISOString().slice(0, 10);
-}
-
-/**
- * O período dividido em faixas de 7 dias por DATA DA COMPRA.
- *
- * ⚠️ AS FAIXAS SÃO ANCORADAS NA PRIMEIRA COMPRA DO PERÍODO, e não no dia 1 do
- * calendário. O motivo é a competência: num mês de cartão as compras vêm do
- * CICLO da fatura, que começa no dia do fechamento anterior — âncora fixa no dia
- * 1 deixaria as compras do fim do mês passado numa faixa negativa, ou fora do
- * gráfico. Ancorando no dado, a soma das barras é sempre igual ao total do
- * período, que é a única propriedade que precisa valer.
- *
- * Por isso cada barra mostra o INTERVALO DE DATAS no rótulo, e não "semana 1":
- * um número ordinal sugeriria uma semana do calendário que estas faixas não são.
- */
-export function porSemana(
-  txs: FinanceTransaction[],
-  meses: string[],
-  contas: ContaParaCompetencia[],
-): FaixaSemanal[] {
-  const alvo = conjuntoDeMeses(meses);
-  const cartoes = cartoesDe(contas);
-
-  const doPeriodo = txs.filter((tx) => !isTransfer(tx) && noPeriodo(tx, alvo, cartoes));
-  if (doPeriodo.length === 0) return [];
-
-  let inicio = doPeriodo[0]!.occurred_on;
-  let fim = inicio;
-  for (const tx of doPeriodo) {
-    if (tx.occurred_on < inicio) inicio = tx.occurred_on;
-    if (tx.occurred_on > fim) fim = tx.occurred_on;
-  }
-
-  const faixas: FaixaSemanal[] = [];
-  for (let cursor = inicio; cursor <= fim; cursor = somaDias(cursor, 7)) {
-    faixas.push({
-      inicio: cursor,
-      fim: somaDias(cursor, 6),
-      incomeCents: 0,
-      expenseCents: 0,
-    });
-  }
-
-  for (const tx of doPeriodo) {
-    // A última faixa absorve qualquer data além do fim calculado. Não deveria
-    // acontecer (o laço cobre até `fim`), mas um lançamento perdido é pior que
-    // uma barra ligeiramente mais longa: a soma das barras não bateria com o
-    // total exibido logo acima delas.
-    const faixa =
-      faixas.find((f) => tx.occurred_on >= f.inicio && tx.occurred_on <= f.fim) ??
-      faixas[faixas.length - 1]!;
-    if (tx.kind === "income") faixa.incomeCents += tx.amount_cents;
-    else if (tx.kind === "expense") faixa.expenseCents += tx.amount_cents;
-  }
-
-  return faixas;
-}
 
 /* ------------------------------------------------------------- variação */
 
@@ -532,6 +457,224 @@ export function previousMonthIso(monthIso: string): string {
 
 export function nextMonthIso(monthIso: string): string {
   return somaMeses(mesCanonicoDe(monthIso), 1);
+}
+
+/* ------------------------------------------ dívida, compromissos, previsto */
+
+/** O recorte de um lançamento que ainda não foi (totalmente) pago. */
+export type LancamentoPendente = Pick<
+  FinanceTransaction,
+  | "id"
+  | "account_id"
+  | "kind"
+  | "amount_cents"
+  | "paid_cents"
+  | "occurred_on"
+  | "transfer_group_id"
+  | "serie_tipo"
+  | "description"
+>;
+
+export interface Horizontes {
+  /** Dinheiro de fato: contas, poupança, investimento. Da view. */
+  patrimonioCents: number;
+  /**
+   * O que se deve INCONDICIONALMENTE — existe mesmo se você parar tudo hoje.
+   * Cartão (saldo negativo) + despesa vencida não paga + parcelamento futuro.
+   */
+  dividaCents: number;
+  /**
+   * O que ainda vai sair mas é CANCELÁVEL: ocorrências futuras de recorrência e
+   * despesas futuras ainda não vencidas.
+   */
+  compromissosCents: number;
+  /** Dívida + Compromissos. Tudo o que ainda vai sair. */
+  totalPrevistoCents: number;
+  /**
+   * Patrimônio menos DÍVIDA — nunca menos o total previsto. Ver o comentário
+   * de `horizontesDoDinheiro`.
+   */
+  liquidoCents: number;
+  /** Até que mês ("YYYY-MM-01") o previsto se estende. `null` se não há nada. */
+  ate: string | null;
+}
+
+/** Quanto ainda falta pagar de uma linha. Nunca negativo (o CHECK da 0023 garante). */
+function restanteDe(tx: Pick<LancamentoPendente, "amount_cents" | "paid_cents">): number {
+  return Math.max(0, tx.amount_cents - tx.paid_cents);
+}
+
+/**
+ * TRÊS NÚMEROS, E O NOME DE CADA UM É A DECISÃO.
+ *
+ * =============================================================================
+ * ⚠️ POR QUE "DÍVIDA" E "COMPROMISSOS" NÃO PODEM VIRAR UM NÚMERO SÓ
+ * =============================================================================
+ * O pedido era somar as despesas futuras no total do Painel — e ele está certo.
+ * O que estaria errado é chamar essa soma de DÍVIDA.
+ *
+ * "Dívida" carrega significado de balanço: passivo é o que existe mesmo se você
+ * parar tudo hoje. Doze aluguéis futuros não são isso — saindo do imóvel no
+ * terceiro mês, os outros nove simplesmente não acontecem. Doze parcelas de um
+ * sofá são, porque o sofá já está na sala.
+ *
+ * Com os dois separados e um terceiro somando-os, o futuro aparece no total (que
+ * é o que interessa no dia a dia) sem virar passivo.
+ *
+ * =============================================================================
+ * ⚠️ O LÍQUIDO USA SÓ A DÍVIDA
+ * =============================================================================
+ * `liquido = patrimônio − dívida`, NUNCA menos o total previsto. Patrimônio
+ * líquido é ativo menos passivo; compromisso cancelável não é passivo.
+ * Subtrair doze aluguéis futuros faria o Líquido despencar sem que nada tivesse
+ * acontecido — e o número deixaria de significar o que o nome promete.
+ *
+ * =============================================================================
+ * A CLASSIFICAÇÃO, NA ORDEM EM QUE ELA É DECIDIDA
+ * =============================================================================
+ *   1. VENCEU (occurred_on <= hoje) e não foi paga  -> DÍVIDA
+ *      Vale para recorrência também: você não deve doze aluguéis, mas DEVE o
+ *      deste mês se ele venceu e não foi pago.
+ *   2. É futura e é PARCELAMENTO                    -> DÍVIDA
+ *      A contrapartida já foi entregue. Cancelar não devolve o bem.
+ *   3. É futura e é qualquer outra coisa            -> COMPROMISSOS
+ *
+ * ⚠️ CONTA DE CARTÃO FICA DE FORA desta soma, e a exclusão é o que impede a
+ * dupla contagem: compra no cartão já pesa em `debt_cents` pelo SALDO da conta
+ * (a 0022 garante `is_paid = true` lá, então `paid_cents` é sempre cheio e a
+ * linha já está no `balance_cents`). Somá-la de novo aqui dobraria a dívida do
+ * cartão.
+ *
+ * Receita não paga (dinheiro a RECEBER) não entra em nenhum dos dois: nem
+ * dívida nem compromisso são entrada. Ela aparece no saldo previsto da conta,
+ * que é outra pergunta — ver `previstoPorConta`.
+ */
+export function horizontesDoDinheiro({
+  balances,
+  accounts,
+  pendentes,
+  lancamentosDeCartao,
+  hoje,
+}: {
+  balances: Pick<FinanceAccountBalance, "account_id" | "balance_cents">[];
+  accounts: ContaParaCompetencia[];
+  /** TODOS os lançamentos não quitados do usuário, de qualquer data. */
+  pendentes: LancamentoPendente[];
+  /** Linhas de cartão já carregadas — só para descobrir até quando a dívida vai. */
+  lancamentosDeCartao: Pick<
+    FinanceTransaction,
+    "account_id" | "kind" | "transfer_group_id" | "statement_month" | "occurred_on"
+  >[];
+  /** "AAAA-MM-DD" no fuso do app. Vem de fora: este módulo não tem relógio. */
+  hoje: string;
+}): Horizontes {
+  const { patrimonioCents, dividaCents: dividaDeCartaoCents } = patrimonioEDivida(
+    balances,
+    accounts,
+  );
+  const cartoes = cartoesDe(accounts);
+
+  let dividaPendenteCents = 0;
+  let compromissosCents = 0;
+  let ate: string | null = null;
+
+  function esticar(mes: string | null) {
+    if (mes !== null && (ate === null || mes > ate)) ate = mes;
+  }
+
+  for (const tx of pendentes) {
+    if (cartoes.has(tx.account_id)) continue;
+    if (isTransfer(tx)) continue;
+    if (tx.kind !== "expense") continue;
+
+    const restante = restanteDe(tx);
+    if (restante === 0) continue;
+
+    if (tx.occurred_on <= hoje) {
+      dividaPendenteCents += restante;
+    } else if (tx.serie_tipo === "parcelamento") {
+      dividaPendenteCents += restante;
+    } else {
+      compromissosCents += restante;
+    }
+    esticar(mesCanonicoDe(tx.occurred_on));
+  }
+
+  // O horizonte da dívida de cartão vem da FATURA, não da data da compra — é o
+  // mesmo critério de competência do resto do módulo.
+  for (const tx of lancamentosDeCartao) {
+    if (!cartoes.has(tx.account_id)) continue;
+    if (isTransfer(tx)) continue;
+    esticar(mesDeCompetencia(tx, cartoes));
+  }
+
+  const dividaCents = dividaDeCartaoCents + dividaPendenteCents;
+
+  return {
+    patrimonioCents,
+    dividaCents,
+    compromissosCents,
+    totalPrevistoCents: dividaCents + compromissosCents,
+    liquidoCents: patrimonioCents - dividaCents,
+    ate,
+  };
+}
+
+/**
+ * O que ainda vai sair (ou entrar) de cada conta, para o SALDO PREVISTO.
+ *
+ * ⚠️ NÃO substitui o saldo da view, ACOMPANHA. A view é a autoridade sobre o
+ * realizado, e é contra ela que o usuário confere o extrato do banco. Um saldo
+ * único que já descontasse o pendente divergiria do extrato todo dia — e a
+ * pessoa não teria como saber qual dos dois está errado.
+ *
+ * Aqui receita pendente CONTA (com sinal positivo): "quanto vou ter depois que
+ * tudo se resolver" inclui o que está para entrar. É a diferença desta função
+ * para `horizontesDoDinheiro`, que responde sobre dívida e só olha saída.
+ */
+export function previstoPorConta(pendentes: LancamentoPendente[]): Map<string, number> {
+  const porConta = new Map<string, number>();
+  for (const tx of pendentes) {
+    if (isTransfer(tx)) continue;
+    const restante = restanteDe(tx);
+    if (restante === 0) continue;
+    const delta = tx.kind === "expense" ? -restante : restante;
+    porConta.set(tx.account_id, (porConta.get(tx.account_id) ?? 0) + delta);
+  }
+  return porConta;
+}
+
+/**
+ * As despesas não pagas cuja COMPETÊNCIA é um dos meses do período.
+ *
+ * É o recorte mensal do total previsto, e o que completa o card "A pagar em
+ * {mês}": ele já somava as faturas que vencem no mês, e ignorava tudo que não
+ * fosse cartão. Uma conta de luz lançada e não paga não aparecia em lugar
+ * nenhum além de "Despesas do mês".
+ */
+export function pendentesDoPeriodo(
+  pendentes: LancamentoPendente[],
+  meses: string[],
+  contas: ContaParaCompetencia[],
+): { totalCents: number; quantidade: number } {
+  const alvo = conjuntoDeMeses(meses);
+  const cartoes = cartoesDe(contas);
+
+  let totalCents = 0;
+  let quantidade = 0;
+  for (const tx of pendentes) {
+    // Cartão fora: o que vence no mês, para cartão, é a FATURA — e ela já é
+    // somada por `faturasQueVencemEm`. Contar a compra aqui a somaria duas vezes.
+    if (cartoes.has(tx.account_id)) continue;
+    if (isTransfer(tx)) continue;
+    if (tx.kind !== "expense") continue;
+    const restante = restanteDe(tx);
+    if (restante === 0) continue;
+    if (!alvo.has(mesCanonicoDe(tx.occurred_on))) continue;
+    totalCents += restante;
+    quantidade++;
+  }
+  return { totalCents, quantidade };
 }
 
 /* --------------------------------------------------- o pacote do Painel */
@@ -554,7 +697,6 @@ export interface FinanceAnalytics {
   porCategoria: CategoryTotal[];
   porEtiqueta: TagTotal[];
   beneficiarios: BeneficiarioTotal[];
-  semanas: FaixaSemanal[];
   historico: MesDoHistorico[];
   /** Lançamentos de cartão sem fatura atribuída — contados, nunca omitidos. */
   orfaos: ForaDeCompetencia;

@@ -10,7 +10,9 @@ import {
   financeTransactionSchema,
   financeTransferSchema,
   financeInstallmentSchema,
+  financeRecorrenciaSchema,
   financeStatementPaymentSchema,
+  financeTransactionPaymentSchema,
   financeBudgetSchema,
   lerUuid,
   ID_INVALIDO,
@@ -21,6 +23,7 @@ import {
   faturaDoCartao,
   faturaDoEncargo,
   planoDeParcelas,
+  planoDeRecorrencia,
   ultimoFechamentoAte,
   ehPagamentoDeFatura,
 } from "@/lib/credit";
@@ -613,6 +616,55 @@ export async function upsertTransaction(input: unknown): Promise<ActionResult> {
     const conta = contas.get(i.accountId);
     if (!conta) return { ok: false, error: "Conta não encontrada." };
 
+    /*
+      ⚠️ EDITAR UM LANÇAMENTO PARCIALMENTE PAGO NÃO PODE APAGAR O PAGAMENTO.
+
+      A caixa "Já pago / recebido" só sabe dizer tudo ou nada. Traduzi-la
+      diretamente para `paid_cents` faria uma correção de descrição — ou de
+      valor — zerar os R$ 300 que já saíram da conta, e o saldo passaria a
+      divergir do extrato do banco por um gesto que não tinha nada a ver com
+      pagamento.
+
+      Por isso o valor já pago é PRESERVADO quando ele está no meio, e o
+      formulário esconde a caixa nesse caso (mostra "Pago X de Y" e manda usar
+      "Pagar"). O `min` cobre a edição que REDUZ o valor total para menos do que
+      já foi pago: aí o lançamento passa a estar quitado, que é a leitura certa
+      e a única que o CHECK `paid_cents <= amount_cents` aceita.
+    */
+    let pagoCents = i.isPaid ? i.amountCents : 0;
+    let serie: {
+      installment_group_id: string | null;
+      installment_no: number | null;
+      serie_tipo: string | null;
+    } | null = null;
+
+    if (i.id) {
+      const { data: atual } = await supabase
+        .from("finance_transactions")
+        .select("paid_cents, amount_cents, installment_group_id, installment_no, serie_tipo")
+        .eq("id", i.id)
+        .maybeSingle();
+      const anterior = atual as
+        | {
+            paid_cents: number;
+            amount_cents: number;
+            installment_group_id: string | null;
+            installment_no: number | null;
+            serie_tipo: string | null;
+          }
+        | null;
+      if (anterior) {
+        if (anterior.paid_cents > 0 && anterior.paid_cents < anterior.amount_cents) {
+          pagoCents = Math.min(anterior.paid_cents, i.amountCents);
+        }
+        serie = {
+          installment_group_id: anterior.installment_group_id,
+          installment_no: anterior.installment_no,
+          serie_tipo: anterior.serie_tipo,
+        };
+      }
+    }
+
     const row = {
       user_id: user.id,
       account_id: i.accountId,
@@ -625,7 +677,10 @@ export async function upsertTransaction(input: unknown): Promise<ActionResult> {
       notes: i.notes,
       // Ver `pagoNoCartao`: em cartão a dívida existe desde a compra, e
       // `is_paid = false` a apagaria do limite. A regra não pode vir do cliente.
-      is_paid: pagoNoCartao(conta, i.isPaid),
+      // O gatilho da 0023 deriva este campo de `paid_cents` de qualquer forma;
+      // mandá-lo coerente evita depender disso para o valor ficar certo.
+      is_paid: pagoNoCartao(conta, pagoCents >= i.amountCents),
+      paid_cents: pagoCents,
       // Vale para income também: estorno de compra abate a fatura do ciclo em
       // que caiu. E é reescrito em toda edição de propósito — mover o
       // lançamento para outra conta ou outra data muda a fatura dele, e um
@@ -657,6 +712,46 @@ export async function upsertTransaction(input: unknown): Promise<ActionResult> {
         .single();
       if (error) return { ok: false, error: error.message };
       txId = data.id as string;
+    }
+
+    /*
+      =========================================================================
+      EDIÇÃO EM SÉRIE — "esta e as futuras" / "todas"
+      =========================================================================
+      O problema clássico de agenda. A ocorrência editada já foi gravada acima;
+      aqui as IRMÃS recebem o que faz sentido propagar.
+
+      ⚠️ `occurred_on` E `paid_cents` NUNCA SE PROPAGAM. Cada ocorrência tem a sua
+      data (é o que a torna mensal) e o seu estado de pagamento — propagar
+      qualquer um dos dois apagaria justamente o que distingue uma ocorrência da
+      outra.
+
+      ⚠️ A DESCRIÇÃO SÓ SE PROPAGA EM RECORRÊNCIA. Em parcelamento ela carrega o
+      sufixo "(3/12)", gravado por linha; escrever a mesma string em todas
+      renomearia a 7ª parcela para "Geladeira (3/12)". Reconstruir o sufixo linha
+      a linha seriam N escritas sem transação — e o ganho (renomear uma compra
+      parcelada) não paga o risco de deixar metade renomeada.
+
+      "todas" alcança meses JÁ FECHADOS. Quem confirma é avisado do número deles
+      pela interface, e a decisão de oferecer a opção é do plano.
+    */
+    if (serie?.installment_group_id && i.escopo !== "esta") {
+      const patch: Record<string, unknown> = {
+        amount_cents: i.amountCents,
+        category_id: i.categoryId,
+      };
+      if (serie.serie_tipo === "recorrencia") patch.description = i.description;
+
+      let alcance = supabase
+        .from("finance_transactions")
+        .update(patch)
+        .eq("installment_group_id", serie.installment_group_id)
+        .neq("id", txId);
+
+      if (i.escopo === "futuras" && serie.installment_no !== null) {
+        alcance = alcance.gte("installment_no", serie.installment_no);
+      }
+      await alcance;
     }
 
     // Reescreve as etiquetas: mais simples e previsível que fazer diff.
@@ -940,8 +1035,8 @@ export async function createInstallmentPurchase(input: unknown): Promise<ActionR
     // Sem cartão não existe fatura, e o plano sai com statementMonth null — mas
     // as N parcelas mensais continuam fazendo sentido (carnê, boleto), então não
     // recusamos a operação. Cartão legado sem dia de fechamento cai aqui também.
-    const diaFechamento =
-      conta.kind === "credit_card" ? conta.statement_closing_day : null;
+    const ehCartao = conta.kind === "credit_card";
+    const diaFechamento = ehCartao ? conta.statement_closing_day : null;
 
     const plano = planoDeParcelas({
       totalCents: i.totalAmountCents,
@@ -966,15 +1061,30 @@ export async function createInstallmentPurchase(input: unknown): Promise<ActionR
           ? `${i.description} (${parcela.numero}/${parcela.total})`
           : i.description,
       occurred_on: parcela.occurredOn,
-      // `is_paid` true, como em qualquer compra no cartão: a dívida já existe
-      // por inteiro no instante da compra. É isso que faz `debt_cents` e
-      // `available_cents` da view refletirem o limite realmente comprometido —
-      // marcar as parcelas futuras como não pagas mostraria limite disponível
-      // que o cartão não te dá.
-      is_paid: true,
+      /*
+        ⚠️ EM CARTÃO, PAGO. FORA DELE, NÃO PAGO. E a dívida é a mesma nos dois.
+
+        No CARTÃO o banco adiantou o dinheiro: a dívida já existe por inteiro no
+        instante da compra, e é isso que faz `debt_cents` e `available_cents`
+        refletirem o limite realmente comprometido. Marcar as parcelas futuras
+        como não pagas mostraria limite disponível que o cartão não te dá.
+
+        FORA DO CARTÃO (carnê, boleto, crediário — o caso novo), o dinheiro ainda
+        NÃO saiu da conta. Marcar como pago derrubaria o saldo pelo total no dia
+        da compra, e ele deixaria de bater com o extrato do banco por doze meses.
+
+        A dívida não some por isso: `serie_tipo = 'parcelamento'` faz
+        `horizontesDoDinheiro` mandar as parcelas futuras não pagas para a
+        DÍVIDA, não para os Compromissos — a contrapartida já foi entregue, e
+        cancelar não devolve o bem. É essa coluna que carrega a diferença que o
+        `is_paid` deixou de carregar aqui.
+      */
+      is_paid: ehCartao,
+      paid_cents: ehCartao ? parcela.amountCents : 0,
       installment_group_id: groupId,
       installment_no: parcela.numero,
       installment_total: parcela.total,
+      serie_tipo: "parcelamento",
       statement_month: parcela.statementMonth,
     }));
 
@@ -1012,6 +1122,196 @@ export async function createInstallmentPurchase(input: unknown): Promise<ActionR
     await audit("installment_purchase", "created", groupId);
     revalidate();
     return { ok: true, id: groupId };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * RECORRÊNCIA: N ocorrências do MESMO valor, uma por mês.
+ *
+ * =============================================================================
+ * ⚠️ ELA NÃO É DÍVIDA, E É POR ISSO QUE `serie_tipo` EXISTE
+ * =============================================================================
+ * "12× aluguel de R$ 2.000" não é uma dívida de R$ 24.000: saindo do imóvel no
+ * terceiro mês, os outros nove simplesmente não acontecem. As linhas nascem
+ * `is_paid = false` e `serie_tipo = 'recorrencia'`, e `horizontesDoDinheiro`
+ * manda as futuras para COMPROMISSOS, nunca para Dívida.
+ *
+ * É o oposto exato de `createInstallmentPurchase`, que grava
+ * `serie_tipo = 'parcelamento'` justamente porque ali a contrapartida já foi
+ * entregue e a dívida existe por inteiro desde a compra.
+ *
+ * =============================================================================
+ * ⚠️ NÃO É PERMITIDA EM CARTÃO DE CRÉDITO
+ * =============================================================================
+ * Lá o gatilho da 0023 força `is_paid = true` em toda linha — a garantia que
+ * impede o limite de deixar de ser consumido. Com ela, as doze ocorrências
+ * futuras de uma assinatura entrariam na dívida e comeriam limite que o cartão
+ * ainda NÃO comprometeu (diferente de um parcelamento, em que o banco já
+ * autorizou o total).
+ *
+ * A alternativa seria abrir uma exceção no gatilho por `serie_tipo` — e aí
+ * "recorrência" viraria a forma de gravar compra de cartão não paga, que é
+ * exatamente o estado que apagava a dívida do sistema. A recusa é a resposta
+ * barata; a exceção custaria a garantia inteira.
+ */
+export async function createRecurringSeries(input: unknown): Promise<ActionResult> {
+  const parsed = financeRecorrenciaSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+  }
+  try {
+    const { supabase, user } = await requireUser();
+    const bloqueio = bloqueioPorLimite("financeiro:lancamento", user.id);
+    if (bloqueio) return bloqueio;
+
+    const i = parsed.data;
+    const contas = await carregarContas(supabase, [i.accountId]);
+    const conta = contas.get(i.accountId);
+    if (!conta) return { ok: false, error: "Conta não encontrada." };
+
+    if (conta.kind === "credit_card") {
+      return {
+        ok: false,
+        error:
+          "Recorrência não vai em cartão: cada ocorrência futura consumiria limite desde já. Lance na conta de onde a fatura é paga.",
+      };
+    }
+
+    const plano = planoDeRecorrencia({
+      valorCents: i.amountCents,
+      ocorrencias: i.ocorrencias,
+      dataInicial: i.occurredOn,
+    });
+
+    const groupId = crypto.randomUUID();
+    const linhas = plano.map((ocorrencia) => ({
+      user_id: user.id,
+      account_id: i.accountId,
+      category_id: i.categoryId,
+      kind: "expense",
+      amount_cents: ocorrencia.amountCents,
+      /*
+        SEM o sufixo "(3/12)" que o parcelamento acrescenta. No extrato, "(3/12)"
+        significa PARCELA — e confundir os dois é o erro que esta separação
+        inteira existe para evitar. A tela mostra "3 de 12 · recorrente" a partir
+        das colunas, que é onde a distinção pode vir com o tipo junto.
+      */
+      description: i.description,
+      occurred_on: ocorrencia.occurredOn,
+      // Nada foi pago ainda — nem a primeira. O dinheiro sai quando sair, e é a
+      // ação "Pagar" que registra isso.
+      is_paid: false,
+      paid_cents: 0,
+      installment_group_id: groupId,
+      installment_no: ocorrencia.numero,
+      installment_total: ocorrencia.total,
+      serie_tipo: "recorrencia",
+      // Recorrência não vai em cartão (acima), logo não pertence a fatura nenhuma.
+      statement_month: null,
+    }));
+
+    // UM insert com array, como no parcelamento: o PostgREST não dá transação
+    // entre chamadas, e N chamadas deixariam a série gravada pela metade.
+    const { data, error } = await supabase
+      .from("finance_transactions")
+      .insert(linhas)
+      .select("id");
+    if (error) return { ok: false, error: error.message };
+
+    const ids = ((data as { id: string }[] | null) ?? []).map((linha) => linha.id);
+    if (ids.length !== linhas.length) {
+      return { ok: false, error: "Não foi possível registrar todas as ocorrências." };
+    }
+
+    if (i.tagIds.length > 0) {
+      // Falha aqui não derruba a operação: a série já está gravada, e devolver
+      // erro faria o usuário repetir o formulário e criar uma SEGUNDA série.
+      await supabase.from("finance_transaction_tags").insert(
+        ids.flatMap((transactionId) =>
+          i.tagIds.map((tagId) => ({ transaction_id: transactionId, tag_id: tagId, user_id: user.id })),
+        ),
+      );
+    }
+
+    await audit("recurring_series", "created", groupId);
+    revalidate();
+    return { ok: true, id: groupId };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * Encerra uma RECORRÊNCIA: apaga as ocorrências a partir desta.
+ *
+ * =============================================================================
+ * ⚠️ SÓ PARA RECORRÊNCIA. NUNCA PARA PARCELAMENTO.
+ * =============================================================================
+ * Você sai do imóvel no terceiro mês e os nove aluguéis seguintes deixam de
+ * existir — é o caso que dá sentido a esta operação.
+ *
+ * Apagar parcelas futuras de uma compra parcelada apagaria DÍVIDA QUE CONTINUA
+ * EXISTINDO: o sofá já está na sala, e o banco vai cobrar as nove restantes de
+ * qualquer jeito. O sistema passaria a mostrar que você deve menos do que deve,
+ * que é o pior sentido para um número de dinheiro errar.
+ *
+ * Quem quiser mesmo apagar um parcelamento usa `deleteTransaction`, que apaga o
+ * GRUPO INTEIRO — inclusive as já pagas — e avisa disso no diálogo. É uma
+ * operação diferente, com uma confirmação diferente.
+ */
+export async function cancelarFuturasDaSerie(transactionId: string): Promise<ActionResult> {
+  if (!lerUuid(transactionId)) return { ok: false, error: ID_INVALIDO };
+  try {
+    const { supabase } = await requireUser();
+
+    const { data } = await supabase
+      .from("finance_transactions")
+      .select("installment_group_id, installment_no, serie_tipo")
+      .eq("id", transactionId)
+      .maybeSingle();
+
+    const alvo = data as {
+      installment_group_id: string | null;
+      installment_no: number | null;
+      serie_tipo: string | null;
+    } | null;
+    if (!alvo) return { ok: false, error: "Lançamento não encontrado." };
+
+    if (alvo.serie_tipo !== "recorrencia") {
+      return {
+        ok: false,
+        error:
+          "Só recorrência pode ser encerrada. Apagar parcelas futuras apagaria dívida que continua existindo.",
+      };
+    }
+    if (alvo.installment_group_id === null || alvo.installment_no === null) {
+      return { ok: false, error: "Este lançamento não faz parte de uma série." };
+    }
+
+    /*
+      A partir DESTA ocorrência, inclusive. Quem clica em "encerrar" na
+      ocorrência de novembro está dizendo "novembro em diante não acontece" — e
+      as já pagas ficam, porque elas aconteceram de verdade.
+    */
+    const { data: apagados, error } = await supabase
+      .from("finance_transactions")
+      .delete()
+      .eq("installment_group_id", alvo.installment_group_id)
+      .gte("installment_no", alvo.installment_no)
+      .eq("paid_cents", 0)
+      .select("id");
+
+    if (error) return { ok: false, error: error.message };
+    const quantos = ((apagados as { id: string }[] | null) ?? []).length;
+    if (quantos === 0) {
+      return { ok: false, error: "Nenhuma ocorrência futura em aberto para encerrar." };
+    }
+
+    await audit("recurring_series", "ended", alvo.installment_group_id);
+    revalidate();
+    return { ok: true, id: alvo.installment_group_id };
   } catch (e) {
     return fail(e);
   }
@@ -1188,6 +1488,166 @@ export async function payStatement(input: unknown): Promise<ActionResult> {
     await audit("statement_payment", "created", groupId);
     revalidate();
     return { ok: true, id: groupId };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * Pagar UM lançamento — total ou parcialmente, com juros se houver.
+ *
+ * =============================================================================
+ * ⚠️ O RESTANTE **NÃO** VIRA LANÇAMENTO NOVO
+ * =============================================================================
+ * É a mesma regra do rotativo de fatura, e o mesmo motivo: a despesa já foi
+ * contada quando foi lançada. Criar uma linha de "saldo remanescente" contaria a
+ * mesma saída duas vezes — o erro que o Painel já documenta ter corrigido no
+ * cálculo de patrimônio.
+ *
+ * O que muda é `paid_cents`. O restante continua na MESMA linha, agora
+ * parcialmente paga, e aparece na Dívida pelo que falta (ver
+ * `horizontesDoDinheiro`).
+ *
+ * ⚠️ E O QUE É DESPESA NOVA SÃO OS ENCARGOS. Só eles viram linha.
+ *
+ * =============================================================================
+ * POR QUE NÃO HÁ "CONTA DE ORIGEM"
+ * =============================================================================
+ * Um lançamento avulso já está NA conta de onde o dinheiro sai. Pagá-lo é
+ * registrar que ele saiu dali — e a view soma `paid_cents`, então o saldo se
+ * move sozinho. Um campo "pagar com" seria um no-op (a mesma conta) ou criaria
+ * uma transferência que contaria a saída duas vezes. Ver
+ * `financeTransactionPaymentSchema`.
+ */
+export async function payTransaction(input: unknown): Promise<ActionResult> {
+  const parsed = financeTransactionPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+  }
+  try {
+    const { supabase, user } = await requireUser();
+    const bloqueio = bloqueioPorLimite("financeiro:lancamento", user.id);
+    if (bloqueio) return bloqueio;
+
+    const i = parsed.data;
+
+    const { data: linha } = await supabase
+      .from("finance_transactions")
+      .select("id, account_id, kind, amount_cents, paid_cents, transfer_group_id, description")
+      .eq("id", i.transactionId)
+      .maybeSingle();
+
+    const alvo = linha as Pick<
+      FinanceTransaction,
+      | "id"
+      | "account_id"
+      | "kind"
+      | "amount_cents"
+      | "paid_cents"
+      | "transfer_group_id"
+      | "description"
+    > | null;
+    // `null` também quando a linha é de outro usuário: a RLS a esconde, e a
+    // mensagem é a mesma de propósito — não revela que ela existe.
+    if (!alvo) return { ok: false, error: "Lançamento não encontrado." };
+
+    if (alvo.transfer_group_id !== null) {
+      return {
+        ok: false,
+        error: "Transferência não se paga: as duas pernas já aconteceram quando ela foi criada.",
+      };
+    }
+
+    const contas = await carregarContas(supabase, [alvo.account_id]);
+    const conta = contas.get(alvo.account_id);
+    if (!conta) return { ok: false, error: "Conta não encontrada." };
+
+    // Em cartão quem se paga é a FATURA, não a compra. `payStatement` já faz
+    // isso, com rotativo — e o gatilho da 0023 mantém toda linha de cartão
+    // quitada, então não existe o que pagar aqui.
+    if (conta.kind === "credit_card") {
+      return {
+        ok: false,
+        error: "Compra no cartão não se paga sozinha: pague a FATURA, em Contas.",
+      };
+    }
+
+    const restante = alvo.amount_cents - alvo.paid_cents;
+    if (restante <= 0) return { ok: false, error: "Este lançamento já está quitado." };
+    if (i.amountCents > restante) {
+      return {
+        ok: false,
+        error: `Falta pagar apenas ${(restante / 100).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        })}.`,
+      };
+    }
+
+    /*
+      ⚠️ TRAVA OTIMISTA: o `eq("paid_cents", ...)` é o que impede duas abas de
+      pagarem a mesma coisa duas vezes.
+
+      Sem ele, dois pagamentos concorrentes leem `paid_cents = 0`, ambos gravam
+      300, e a linha fica com 300 pagos depois de 600 terem saído da conta. Com
+      ele, o segundo não encontra linha para atualizar e recebe um erro que pede
+      para recarregar — que é a verdade.
+
+      O PostgREST não dá transação entre chamadas; esta é a forma de obter a
+      atomicidade que importa aqui sem uma.
+    */
+    const novoPago = alvo.paid_cents + i.amountCents;
+    const { data: atualizado, error: erroUpdate } = await supabase
+      .from("finance_transactions")
+      .update({ paid_cents: novoPago })
+      .eq("id", alvo.id)
+      .eq("paid_cents", alvo.paid_cents)
+      .select("id");
+
+    if (erroUpdate) return { ok: false, error: erroUpdate.message };
+    if (((atualizado as { id: string }[] | null) ?? []).length === 0) {
+      return {
+        ok: false,
+        error: "Este lançamento mudou em outra aba. Recarregue a página e tente de novo.",
+      };
+    }
+
+    /*
+      Os encargos, e SÓ se sobrou saldo. Quitando por inteiro não há rotativo, e
+      uma taxa esquecida no campo não pode virar despesa do nada.
+
+      Eles nascem NÃO PAGOS: o juro é uma dívida nova, que ainda vai sair. Marcá-lo
+      como pago tiraria o dinheiro da conta no instante em que ele foi cobrado —
+      e ninguém paga juros no mesmo gesto em que deixa de pagar o principal.
+    */
+    const sobra = restante - i.amountCents;
+    if (alvo.kind === "expense" && sobra > 0 && (i.taxaMensalPercent > 0 || i.iofCents > 0)) {
+      const encargos = calcularEncargos({
+        saldoRemanescenteCents: sobra,
+        taxaMensalPercent: i.taxaMensalPercent,
+        iofCents: i.iofCents,
+      });
+      if (encargos.totalCents > 0) {
+        const categoriaId = await categoriaDeEncargos(supabase, user.id);
+        await supabase.from("finance_transactions").insert({
+          user_id: user.id,
+          account_id: alvo.account_id,
+          category_id: categoriaId,
+          kind: "expense",
+          amount_cents: encargos.totalCents,
+          description: `Juros sobre ${alvo.description}`,
+          occurred_on: i.occurredOn,
+          is_paid: false,
+          paid_cents: 0,
+          // Fora de cartão não há fatura a que pertencer.
+          statement_month: null,
+        });
+      }
+    }
+
+    await audit("transaction", "paid", alvo.id);
+    revalidate();
+    return { ok: true, id: alvo.id };
   } catch (e) {
     return fail(e);
   }

@@ -18,11 +18,12 @@ import {
   totalAPagarEm,
   calcularEncargos,
   faturaDoEncargo,
+  planoDeRecorrencia,
 } from "./credit";
 import type { FinanceAccount, FinanceAccountBalance, FinanceTransaction } from "./database.types";
 
 function tx(over: Partial<FinanceTransaction>): FinanceTransaction {
-  return {
+  const linha: FinanceTransaction = {
     id: crypto.randomUUID(),
     user_id: "u1",
     account_id: "cartao",
@@ -41,8 +42,13 @@ function tx(over: Partial<FinanceTransaction>): FinanceTransaction {
     installment_no: null,
     installment_total: null,
     statement_month: null,
+    serie_tipo: null,
+    paid_cents: 0,
     ...over,
   };
+  // `paid_cents` espelha `is_paid`: é a invariante que o gatilho da 0023 mantém
+  // no banco. Ver o mesmo helper em `finance.test.ts`.
+  return { ...linha, paid_cents: over.paid_cents ?? (linha.is_paid ? linha.amount_cents : 0) };
 }
 
 /* ------------------------------------------------------------------ faturaDe */
@@ -1115,5 +1121,94 @@ describe("invariante do rotativo: o principal NÃO é relançado", () => {
     const seguinte = faturaDoCartao([compra, pagamentoParcial, encargo], conta, "2026-09-01");
     expect(seguinte.totalCents).toBe(6_000);
     expect(seguinte.itens).toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------------------- recorrência */
+
+describe("planoDeRecorrencia", () => {
+  it("⚠️ REPETE O MESMO VALOR — não divide um total", () => {
+    /*
+      A diferença que separa recorrência de parcelamento, em uma linha de código.
+      `planoDeParcelas(200_000, 3)` daria três de R$ 666,67; aqui são três de
+      R$ 2.000. Confundir as duas é criar doze aluguéis de R$ 166,67.
+    */
+    const plano = planoDeRecorrencia({
+      valorCents: 200_000,
+      ocorrencias: 3,
+      dataInicial: "2026-08-05",
+    });
+
+    expect(plano.map((p) => p.amountCents)).toEqual([200_000, 200_000, 200_000]);
+    expect(plano.map((p) => p.occurredOn)).toEqual(["2026-08-05", "2026-09-05", "2026-10-05"]);
+    // Comparação direta com o parcelamento do MESMO total.
+    expect(planoDeParcelas({
+      totalCents: 200_000,
+      numeroDeParcelas: 3,
+      dataCompra: "2026-08-05",
+      diaFechamento: null,
+    }).map((p) => p.amountCents)).toEqual([66_666, 66_666, 66_668]);
+  });
+
+  it("nunca preenche `statementMonth` — recorrência não vai em cartão", () => {
+    // Lá o gatilho da 0023 forçaria `is_paid = true` e as ocorrências futuras
+    // consumiriam limite que o cartão ainda não comprometeu.
+    const plano = planoDeRecorrencia({ valorCents: 1000, ocorrencias: 3, dataInicial: "2026-08-05" });
+    expect(plano.every((p) => p.statementMonth === null)).toBe(true);
+  });
+
+  it("dia 31 vira o último dia nos meses curtos, SEM acumular o corte", () => {
+    /*
+      A propriedade que `somaMesesNaData` garante e que uma soma em cadeia
+      perderia: a 3ª ocorrência de uma série que começa em 31/01 é 31/03, não
+      28/03. O clamp de fevereiro não pode contaminar março.
+    */
+    const plano = planoDeRecorrencia({
+      valorCents: 1000,
+      ocorrencias: 4,
+      dataInicial: "2026-01-31",
+    });
+    expect(plano.map((p) => p.occurredOn)).toEqual([
+      "2026-01-31",
+      "2026-02-28",
+      "2026-03-31",
+      "2026-04-30",
+    ]);
+  });
+
+  it("atravessa a virada de ano", () => {
+    const plano = planoDeRecorrencia({
+      valorCents: 1000,
+      ocorrencias: 3,
+      dataInicial: "2026-11-10",
+    });
+    expect(plano.map((p) => p.occurredOn)).toEqual(["2026-11-10", "2026-12-10", "2027-01-10"]);
+  });
+
+  it("aguenta o teto de 36 ocorrências", () => {
+    const plano = planoDeRecorrencia({ valorCents: 1000, ocorrencias: 36, dataInicial: "2026-01-15" });
+    expect(plano).toHaveLength(36);
+    expect(plano[35]!.occurredOn).toBe("2028-12-15");
+    expect(plano[35]!.numero).toBe(36);
+    expect(plano[35]!.total).toBe(36);
+  });
+
+  it("⚠️ NÃO herda a restrição de centavo por parcela do parcelamento", () => {
+    // 3 parcelas de um total de 2 centavos é impossível (uma sairia com zero);
+    // 3 ocorrências de 2 centavos cada é perfeitamente válido.
+    expect(() =>
+      planoDeRecorrencia({ valorCents: 2, ocorrencias: 3, dataInicial: "2026-08-05" }),
+    ).not.toThrow();
+    expect(
+      planoDeRecorrencia({ valorCents: 2, ocorrencias: 3, dataInicial: "2026-08-05" }).map(
+        (p) => p.amountCents,
+      ),
+    ).toEqual([2, 2, 2]);
+  });
+
+  it("recusa entrada impossível em vez de gravar lixo", () => {
+    expect(() => planoDeRecorrencia({ valorCents: 0, ocorrencias: 3, dataInicial: "2026-08-05" })).toThrow(RangeError);
+    expect(() => planoDeRecorrencia({ valorCents: 100, ocorrencias: 0, dataInicial: "2026-08-05" })).toThrow(RangeError);
+    expect(() => planoDeRecorrencia({ valorCents: 100.5, ocorrencias: 3, dataInicial: "2026-08-05" })).toThrow(RangeError);
   });
 });

@@ -6,7 +6,6 @@ import {
   despesasPorEtiqueta,
   topBeneficiarios,
   historicoMensal,
-  porSemana,
   mesDeCompetencia,
   foraDeCompetencia,
   cartoesDe,
@@ -17,6 +16,9 @@ import {
   nextMonthIso,
   budgetProgress,
   isTransfer,
+  horizontesDoDinheiro,
+  previstoPorConta,
+  pendentesDoPeriodo,
   type ContaParaCompetencia,
 } from "./finance";
 import type { FinanceTransaction, FinanceCategory, FinanceBudget } from "./database.types";
@@ -35,7 +37,7 @@ const CONTAS: ContaParaCompetencia[] = [
 ];
 
 function tx(over: Partial<FinanceTransaction>): FinanceTransaction {
-  return {
+  const linha: FinanceTransaction = {
     id: crypto.randomUUID(),
     user_id: "u1",
     account_id: "a1",
@@ -56,8 +58,19 @@ function tx(over: Partial<FinanceTransaction>): FinanceTransaction {
     installment_no: null,
     installment_total: null,
     statement_month: null,
+    serie_tipo: null,
+    paid_cents: 0,
     ...over,
   };
+  /*
+    ⚠️ `paid_cents` ESPELHA `is_paid` por padrão.
+
+    É a invariante que o gatilho da 0023 mantém no banco
+    (`is_paid <=> paid_cents >= amount_cents`). Um fixture que a violasse estaria
+    testando um estado que não existe em produção — e passaria a "provar" coisas
+    sobre ele.
+  */
+  return { ...linha, paid_cents: over.paid_cents ?? (linha.is_paid ? linha.amount_cents : 0) };
 }
 
 describe("monthTotals", () => {
@@ -255,28 +268,6 @@ describe("agregações do Painel", () => {
     expect(h[1]!.expenseCents).toBe(7700); // julho, quando a fatura fecha
   });
 
-  it("porSemana: a soma das faixas é IGUAL ao total do período", () => {
-    /*
-      A única propriedade que precisa valer. As faixas são ancoradas na primeira
-      compra (e não no dia 1), justamente para que uma compra de cartão vinda do
-      fim do mês anterior não fique de fora — se ficasse, as barras somariam
-      menos que o número exibido logo acima delas.
-    */
-    const txs = [
-      tx({ account_id: CARTAO, occurred_on: "2026-06-25", statement_month: "2026-07-01", amount_cents: 10_00 }),
-      tx({ occurred_on: "2026-07-03", amount_cents: 20_00 }),
-      tx({ occurred_on: "2026-07-19", amount_cents: 30_00 }),
-    ];
-    const faixas = porSemana(txs, ["2026-07-01"], CONTAS);
-    const soma = faixas.reduce((s, f) => s + f.expenseCents, 0);
-    expect(soma).toBe(totaisDoPeriodo(txs, ["2026-07-01"], CONTAS).expenseCents);
-    expect(faixas[0]!.inicio).toBe("2026-06-25");
-  });
-
-  it("porSemana devolve lista vazia em período sem lançamento", () => {
-    expect(porSemana([], ["2026-07-01"], CONTAS)).toEqual([]);
-  });
-
   it("despesasPorEtiqueta conta o lançamento em CADA etiqueta dele", () => {
     // Por isso `share` é sobre a despesa ETIQUETADA, não sobre a do período:
     // sobre o total do período as fatias passariam de 100%.
@@ -431,5 +422,200 @@ describe("dinheiro em centavos (sem ponto flutuante)", () => {
 
   it("mascara valores quando pedido", () => {
     expect(formatBRL(12345, { hidden: true })).toBe("R$ ••••");
+  });
+});
+
+/* ------------------------------ dívida, compromissos e total previsto */
+
+describe("horizontesDoDinheiro", () => {
+  const HOJE = "2026-08-09";
+  const SALDOS = [
+    { account_id: CORRENTE, balance_cents: 500_000 },
+    { account_id: CARTAO, balance_cents: -120_000 },
+  ];
+
+  function calcular(pendentes: FinanceTransaction[]) {
+    return horizontesDoDinheiro({
+      balances: SALDOS,
+      accounts: CONTAS,
+      pendentes,
+      lancamentosDeCartao: [],
+      hoje: HOJE,
+    });
+  }
+
+  it("⚠️ RECORRÊNCIA FUTURA ENTRA EM COMPROMISSOS, E **NÃO** EM DÍVIDA", () => {
+    /*
+      O TESTE MAIS IMPORTANTE DESTA ETAPA.
+
+      "12× aluguel de R$ 2.000" não é uma dívida de R$ 24.000: saindo do imóvel
+      no terceiro mês, os outros nove simplesmente não acontecem. Se este teste
+      cair, o Painel passa a mostrar um passivo que não existe — e vai parecer
+      certo, porque o número tem origem rastreável.
+    */
+    const alugueis = [1, 2, 3].map((n) =>
+      tx({
+        occurred_on: `2026-${String(8 + n).padStart(2, "0")}-05`,
+        amount_cents: 200_000,
+        is_paid: false,
+        serie_tipo: "recorrencia",
+        installment_no: n,
+        installment_total: 3,
+      }),
+    );
+
+    const h = calcular(alugueis);
+    expect(h.compromissosCents).toBe(600_000);
+    // A dívida continua sendo SÓ o cartão.
+    expect(h.dividaCents).toBe(120_000);
+    expect(h.totalPrevistoCents).toBe(720_000);
+  });
+
+  it("⚠️ PARCELAMENTO FUTURO ENTRA EM DÍVIDA, POR INTEIRO", () => {
+    /*
+      O espelho do anterior, e a razão de `serie_tipo` existir. "12× de R$ 2.000
+      no sofá" é dívida de R$ 24.000 desde o dia da compra: o sofá já está na
+      sala, e mudar de casa não o devolve.
+    */
+    const parcelas = [1, 2, 3].map((n) =>
+      tx({
+        occurred_on: `2026-${String(8 + n).padStart(2, "0")}-05`,
+        amount_cents: 80_000,
+        is_paid: false,
+        serie_tipo: "parcelamento",
+        installment_no: n,
+        installment_total: 3,
+      }),
+    );
+
+    const h = calcular(parcelas);
+    expect(h.dividaCents).toBe(120_000 + 240_000);
+    expect(h.compromissosCents).toBe(0);
+  });
+
+  it("despesa VENCIDA e não paga é dívida — inclusive de recorrência", () => {
+    // Você não deve doze aluguéis, mas DEVE o deste mês se ele venceu e não foi
+    // pago. Quem decide aqui é a data, não o tipo da série.
+    const vencida = tx({
+      occurred_on: "2026-08-05",
+      amount_cents: 200_000,
+      is_paid: false,
+      serie_tipo: "recorrencia",
+    });
+    const h = calcular([vencida]);
+    expect(h.dividaCents).toBe(120_000 + 200_000);
+    expect(h.compromissosCents).toBe(0);
+  });
+
+  it("despesa avulsa futura é compromisso, não dívida", () => {
+    // `serie_tipo` null NÃO é "provavelmente parcelamento": quem decide é o
+    // estado da linha. Uma conta de luz lançada para o mês que vem é cancelável.
+    const futura = tx({ occurred_on: "2026-09-20", amount_cents: 30_000, is_paid: false });
+    const h = calcular([futura]);
+    expect(h.compromissosCents).toBe(30_000);
+    expect(h.dividaCents).toBe(120_000);
+  });
+
+  it("⚠️ NÃO CONTA DUAS VEZES: pendente de CARTÃO fica de fora da soma nova", () => {
+    /*
+      A INVARIANTE QUE PROTEGE O NÚMERO.
+
+      Compra no cartão já pesa em `debt_cents` pelo SALDO da conta — a 0022
+      garante `is_paid = true` lá, então ela já está em `balance_cents`. Somá-la
+      outra vez aqui dobraria a dívida do cartão, e o erro seria proporcional ao
+      uso: quanto mais o cartão fosse usado, mais errado o Painel ficaria.
+    */
+    const doCartao = tx({
+      account_id: CARTAO,
+      occurred_on: "2026-08-01",
+      amount_cents: 50_000,
+      is_paid: false,
+    });
+
+    const semEle = calcular([]);
+    const comEle = calcular([doCartao]);
+    expect(comEle.dividaCents).toBe(semEle.dividaCents);
+    expect(comEle.compromissosCents).toBe(semEle.compromissosCents);
+  });
+
+  it("⚠️ O LÍQUIDO USA SÓ A DÍVIDA — nunca o total previsto", () => {
+    /*
+      Patrimônio líquido é ativo menos PASSIVO. Compromisso cancelável não é
+      passivo. Subtraindo doze aluguéis futuros, o Líquido despencaria sem que
+      nada tivesse acontecido, e o número deixaria de significar o que o nome
+      promete.
+    */
+    const aluguelFuturo = tx({
+      occurred_on: "2026-12-05",
+      amount_cents: 200_000,
+      is_paid: false,
+      serie_tipo: "recorrencia",
+    });
+
+    const h = calcular([aluguelFuturo]);
+    expect(h.liquidoCents).toBe(h.patrimonioCents - h.dividaCents);
+    expect(h.liquidoCents).toBe(500_000 - 120_000);
+    // E o compromisso continua visível, no seu próprio número.
+    expect(h.compromissosCents).toBe(200_000);
+  });
+
+  it("pagamento parcial reduz a dívida pelo que RESTA, não pelo total", () => {
+    // R$ 800 com R$ 300 já pagos deve R$ 500. Somar os R$ 800 mostraria uma
+    // dívida que o pagamento não reduziu — e a pessoa duvidaria do pagamento.
+    const parcial = tx({
+      occurred_on: "2026-08-01",
+      amount_cents: 80_000,
+      is_paid: false,
+      paid_cents: 30_000,
+    });
+    expect(calcular([parcial]).dividaCents).toBe(120_000 + 50_000);
+  });
+
+  it("transferência e receita pendente não entram em nenhum dos dois", () => {
+    // Nem dívida nem compromisso são ENTRADA. Receita a receber aparece no saldo
+    // previsto da conta, que é outra pergunta.
+    const receber = tx({ kind: "income", occurred_on: "2026-09-01", amount_cents: 90_000, is_paid: false });
+    const perna = tx({ occurred_on: "2026-09-01", amount_cents: 70_000, is_paid: false, transfer_group_id: "g1" });
+    const h = calcular([receber, perna]);
+    expect(h.compromissosCents).toBe(0);
+    expect(h.dividaCents).toBe(120_000);
+  });
+
+  it("o horizonte é o mês mais distante do que ainda vai sair", () => {
+    const h = calcular([
+      tx({ occurred_on: "2026-09-10", amount_cents: 1000, is_paid: false }),
+      tx({ occurred_on: "2027-11-10", amount_cents: 1000, is_paid: false }),
+    ]);
+    expect(h.ate).toBe("2027-11-01");
+  });
+
+  it("sem nada pendente, o horizonte é null — e não uma data inventada", () => {
+    expect(calcular([]).ate).toBeNull();
+  });
+});
+
+describe("previstoPorConta e pendentesDoPeriodo", () => {
+  it("saldo previsto soma o que entra e subtrai o que sai", () => {
+    const mapa = previstoPorConta([
+      tx({ account_id: CORRENTE, amount_cents: 30_000, is_paid: false }),
+      tx({ account_id: CORRENTE, kind: "income", amount_cents: 10_000, is_paid: false }),
+    ]);
+    expect(mapa.get(CORRENTE)).toBe(-20_000);
+  });
+
+  it("pendentesDoPeriodo pega só as despesas do mês, e nenhuma de cartão", () => {
+    // Cartão fora porque o que vence no mês, para cartão, é a FATURA — e ela já
+    // é somada por `faturasQueVencemEm`.
+    const r = pendentesDoPeriodo(
+      [
+        tx({ occurred_on: "2026-08-15", amount_cents: 20_000, is_paid: false }),
+        tx({ occurred_on: "2026-09-15", amount_cents: 99_000, is_paid: false }),
+        tx({ account_id: CARTAO, occurred_on: "2026-08-15", amount_cents: 40_000, is_paid: false }),
+      ],
+      ["2026-08-01"],
+      CONTAS,
+    );
+    expect(r.totalCents).toBe(20_000);
+    expect(r.quantidade).toBe(1);
   });
 });

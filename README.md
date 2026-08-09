@@ -36,7 +36,8 @@ docs/database-setup.md                               # aplicar/validar/rollback
 docs/google-calendar-setup.md                        # Google Cloud + OAuth
 docs/papeis-e-admin.md                               # papéis, bloqueio, /admin
 docs/datas-e-fuso.md                                 # ⚠️ leia antes de mexer em data
-docs/cartao-e-fatura.md                              # ⚠️ limite, competência e rotativo
+docs/cartao-e-fatura.md                              # ⚠️ limite, competência, rotativo, paid_cents
+docs/recorrencia-e-divida.md                         # ⚠️ o que conta como dívida (e o que não)
 docs/cores-do-financeiro.md                          # paleta medida + o desvio do DS
 e2e/README.md                                        # os 5 fluxos e como rodá-los
 .env.example                                          # variáveis (placeholders)
@@ -102,6 +103,11 @@ servidor coincide com o da tela e o ida-e-volta fecha. Ver `docs/datas-e-fuso.md
 ⚠️ A migration `0022` **repara dados** e faz a dívida de cartão saltar (dívida que
 estava invisível passa a aparecer). Rode a consulta de contagem que está no
 cabeçalho dela **antes** de aplicar. Ver `docs/cartao-e-fatura.md`.
+
+⚠️ A `0023` **substitui o gatilho da 0022 e recria a view de saldos**. Ela
+preserva a garantia do cartão inteira e é um no-op para todo dado existente — mas
+é a migration mais delicada do módulo, e o cabeçalho dela tem quatro consultas de
+verificação para rodar depois. Aplique `0022`, `0023` e `0024` **nesta ordem**.
 
 ## 7. O que ainda depende de credenciais
 

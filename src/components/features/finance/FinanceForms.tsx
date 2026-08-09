@@ -11,7 +11,7 @@ import type {
   FinanceTag,
   FinanceTransaction,
 } from "@/lib/database.types";
-import { parseBRLToCents, formatCentsPlain, formatBRL, monthLabel, cn } from "@/lib/utils";
+import { parseBRLToCents, formatCentsPlain, formatBRL, monthLabel, plural, cn } from "@/lib/utils";
 import {
   CHAVES_DE_COR,
   NOME_DA_COR,
@@ -28,7 +28,9 @@ import {
   upsertTransaction,
   createTransfer,
   createInstallmentPurchase,
+  createRecurringSeries,
   payStatement,
+  payTransaction,
   upsertBudget,
 } from "@/app/(app)/financeiro/actions";
 
@@ -180,7 +182,8 @@ export function TransactionForm({
   // Texto, não número: um input numérico vazio devolve "" e `Number("")` é 0 —
   // o zero silencioso viraria "0 parcelas" e o schema recusaria com uma mensagem
   // que não explica nada. Guardando o texto, "vazio" continua sendo vazio.
-  const [installments, setInstallments] = useState("1");
+  const [installments, setInstallments] = useState("2");
+  const [repeticao, setRepeticao] = useState<"unica" | "parcelado" | "recorrente">("unica");
 
   const visibleCategories = categories.filter((c) => c.kind === kind);
 
@@ -210,6 +213,11 @@ export function TransactionForm({
     não debitada é um estado real. A regra vale só para `credit_card`.
   */
   const ehCartao = contaSelecionada?.kind === "credit_card";
+  /** Já saiu parte do dinheiro, mas não tudo — ver o bloco no rodapé do form. */
+  const parcialmentePago =
+    transaction !== null &&
+    transaction.paid_cents > 0 &&
+    transaction.paid_cents < transaction.amount_cents;
   /*
     Parcelar só faz sentido em DESPESA de CARTÃO e só na CRIAÇÃO.
 
@@ -218,12 +226,50 @@ export function TransactionForm({
     original e recriar, e um erro no meio deixaria a compra duplicada. Quem
     precisa disso exclui e lança de novo — explicitamente.
   */
-  const podeParcelar = transaction === null && kind === "expense" && ehCartao;
+  /*
+    ⚠️ TRÊS FORMAS DE REPETIR, E DUAS DELAS SÃO OPOSTAS NO BALANÇO.
+
+      única        um lançamento
+      parcelado    um TOTAL dividido em N — é DÍVIDA inteira desde a compra
+      recorrente   o MESMO valor N vezes — NÃO é dívida, é compromisso
+
+    "12× de R$ 2.000 no sofá" é dívida de R$ 24.000 desde o dia da compra; "12×
+    aluguel de R$ 2.000" não é dívida nenhuma — saindo do imóvel no terceiro mês,
+    os outros nove não acontecem. A linha que separa não é a duração: é se a
+    contrapartida já foi entregue.
+
+    Por isso as duas são escolhas EXPLÍCITAS na tela, e não um mesmo campo com
+    significado dependente de outro. O rótulo do valor muda junto ("Valor TOTAL"
+    contra "Valor de cada"), porque é aí que a confusão vira dinheiro errado.
+
+    PARCELAMENTO deixou de ser exclusivo do cartão: carnê e crediário são
+    parcelamento tanto quanto, e a dívida se comporta igual. O que muda fora do
+    cartão é `is_paid` — ver `createInstallmentPurchase`.
+  */
+  const podeRepetir = transaction === null && kind === "expense" && contaSelecionada !== null;
+  // Recorrência não vai em cartão: lá o gatilho da 0023 força `is_paid = true`, e
+  // as ocorrências futuras consumiriam limite que o cartão ainda não
+  // comprometeu. A action recusa; aqui a opção nem aparece.
+  const podeRecorrer = podeRepetir && !ehCartao;
+  const repeticaoEfetiva = repeticao === "recorrente" && !podeRecorrer ? "unica" : repeticao;
 
   const numeroDeParcelas = Number(installments);
   const parcelasValidas =
     Number.isInteger(numeroDeParcelas) && numeroDeParcelas >= 1 && numeroDeParcelas <= MAX_PARCELAS;
-  const parcelado = podeParcelar && parcelasValidas && numeroDeParcelas > 1;
+  const parcelado =
+    podeRepetir && repeticaoEfetiva === "parcelado" && parcelasValidas && numeroDeParcelas > 1;
+  const recorrente =
+    podeRecorrer && repeticaoEfetiva === "recorrente" && parcelasValidas && numeroDeParcelas > 1;
+  const emSerie = parcelado || recorrente;
+
+  /*
+    Editando uma OCORRÊNCIA de série: o problema clássico de agenda. "Só esta" é
+    o padrão porque é o único sem efeito colateral; "todas" reescreve mês já
+    fechado e conferido, e por isso diz quantos são antes de deixar salvar.
+  */
+  const daSerie = transaction?.installment_group_id != null;
+  const anteriores = (transaction?.installment_no ?? 1) - 1;
+  const [escopo, setEscopo] = useState<"esta" | "futuras" | "todas">("esta");
 
   const centavos = parseBRLToCents(amount);
 
@@ -271,8 +317,29 @@ export function TransactionForm({
       A validação nativa do input (min/max) cobre o caso digitado, mas não cobre
       campo vazio nem texto que o navegador transforma em "".
     */
-    if (podeParcelar && !parcelasValidas) {
-      setError(`Informe o número de parcelas, de 1 a ${MAX_PARCELAS}.`);
+    if (podeRepetir && repeticaoEfetiva !== "unica" && !parcelasValidas) {
+      setError(`Informe o número de vezes, de 2 a ${MAX_PARCELAS}.`);
+      return;
+    }
+
+    if (recorrente) {
+      start(async () => {
+        // Aqui `cents` é o valor de CADA ocorrência — não um total a dividir. É
+        // a diferença que o rótulo do campo declara e que `serie_tipo` grava.
+        const r = await createRecurringSeries({
+          accountId,
+          categoryId: String(fd.get("categoryId") ?? ""),
+          description: String(fd.get("description") ?? ""),
+          amountCents: cents,
+          ocorrencias: numeroDeParcelas,
+          occurredOn: String(fd.get("occurredOn") ?? ""),
+          tagIds: selectedTags,
+        });
+        if (r.ok) {
+          toast(`Recorrência de ${numeroDeParcelas} meses criada`, "success");
+          onDone();
+        } else setError(r.error ?? "Erro ao salvar");
+      });
       return;
     }
 
@@ -320,6 +387,9 @@ export function TransactionForm({
         // não pode depender do que o cliente manda.
         isPaid: ehCartao ? true : fd.get("isPaid") === "on",
         tagIds: selectedTags,
+        // Só tem efeito quando a linha pertence a uma série; a action ignora
+        // fora disso, porque sem `installment_group_id` não há irmãs a alcançar.
+        escopo,
       });
       if (r.ok) {
         toast("Lançamento salvo", "success");
@@ -344,7 +414,23 @@ export function TransactionForm({
       </Field>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label={parcelado ? "Valor TOTAL da compra (R$)" : "Valor (R$)"} hint="Ex.: 1.234,56">
+        {/*
+          ⚠️ O RÓTULO DO VALOR MUDA COM A REPETIÇÃO, e é aí que a confusão vira
+          dinheiro errado: em parcelamento o campo é o TOTAL a dividir; em
+          recorrência é o valor de CADA mês. Um rótulo genérico ("Valor") faria
+          "12× R$ 2.000" significar R$ 24.000 para um e R$ 166,67 para o outro,
+          com a mesma aparência na tela.
+        */}
+        <Field
+          label={
+            parcelado
+              ? "Valor TOTAL da compra (R$)"
+              : recorrente
+                ? "Valor de CADA mês (R$)"
+                : "Valor (R$)"
+          }
+          hint="Ex.: 1.234,56"
+        >
           <input
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -354,7 +440,7 @@ export function TransactionForm({
             className={inputCls}
           />
         </Field>
-        <Field label={parcelado ? "Data da compra" : "Data"}>
+        <Field label={parcelado ? "Data da compra" : recorrente ? "Primeira ocorrência" : "Data"}>
           <input
             name="occurredOn"
             type="date"
@@ -395,21 +481,84 @@ export function TransactionForm({
         </Field>
       </div>
 
-      {podeParcelar && (
-        <Field
-          label="Parcelas"
-          hint="1 = compra à vista. O valor acima é sempre o TOTAL da compra."
-        >
-          <input
-            type="number"
-            min={1}
-            max={MAX_PARCELAS}
-            step={1}
-            value={installments}
-            onChange={(e) => setInstallments(e.target.value)}
-            className={inputCls}
-          />
-        </Field>
+      {podeRepetir && (
+        <div className="space-y-3 rounded-md border border-line bg-surface-muted p-3.5">
+          <div>
+            <p className="mb-1.5 text-corpo font-medium text-ink">Repetição</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Repetição">
+              <PillButton
+                active={repeticaoEfetiva === "unica"}
+                onClick={() => setRepeticao("unica")}
+              >
+                Única
+              </PillButton>
+              <PillButton
+                active={repeticaoEfetiva === "parcelado"}
+                onClick={() => setRepeticao("parcelado")}
+              >
+                Parcelado
+              </PillButton>
+              {/*
+                Recorrência não aparece em cartão, e o motivo fica escrito logo
+                abaixo. Oferecer e recusar depois seria pior que não oferecer.
+              */}
+              {podeRecorrer && (
+                <PillButton
+                  active={repeticaoEfetiva === "recorrente"}
+                  onClick={() => setRepeticao("recorrente")}
+                >
+                  Recorrente
+                </PillButton>
+              )}
+            </div>
+          </div>
+
+          {ehCartao && (
+            <p className="text-legenda text-ink-subtle">
+              Recorrência não vai em cartão: cada ocorrência futura consumiria limite que o cartão
+              ainda não comprometeu. Assinatura no cartão? Lance na conta de onde a fatura é paga.
+            </p>
+          )}
+
+          {repeticaoEfetiva !== "unica" && (
+            <Field
+              label={parcelado ? "Parcelas" : "Meses"}
+              hint={
+                parcelado
+                  ? "O valor acima é o TOTAL da compra, dividido entre elas."
+                  : "O valor acima se repete inteiro em cada mês."
+              }
+            >
+              <input
+                type="number"
+                min={2}
+                max={MAX_PARCELAS}
+                step={1}
+                value={installments}
+                onChange={(e) => setInstallments(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          )}
+
+          {/*
+            ⚠️ A FRASE QUE SEPARA AS DUAS, dita em dinheiro e não em jargão. É o
+            único ponto da tela em que "isto é dívida" e "isto não é" aparecem
+            lado a lado — e é a diferença que o Painel vai refletir depois.
+          */}
+          {recorrente && parcelasValidas && centavos != null && centavos > 0 && (
+            <p aria-live="polite" className="text-corpo text-ink">
+              {numeroDeParcelas}× de {formatBRL(centavos)} ={" "}
+              <span className="font-medium">{formatBRL(centavos * numeroDeParcelas)}</span>{" "}
+              comprometidos.
+              <span className="text-ink-subtle">
+                {" "}
+                Isso NÃO é dívida — entra em &quot;Compromissos futuros&quot;, e some se você
+                encerrar a recorrência.
+              </span>
+            </p>
+          )}
+        </div>
       )}
 
       {previa && (
@@ -437,6 +586,54 @@ export function TransactionForm({
               </span>
             </span>
           )}
+        </div>
+      )}
+
+      {/*
+        ⚠️ EDITANDO UMA OCORRÊNCIA DE SÉRIE — o problema clássico de agenda.
+
+        "Só esta" é o padrão porque é o único sem efeito colateral. "Todas"
+        alcança mês JÁ FECHADO e conferido contra o extrato, e por isso a opção
+        diz quantos são antes de ser escolhida — o número é o aviso.
+
+        Só VALOR e CATEGORIA se propagam (e a descrição, em recorrência). Data e
+        estado de pagamento nunca: são o que distingue uma ocorrência da outra.
+      */}
+      {daSerie && (
+        <div className="space-y-2 rounded-md border border-line bg-surface-muted p-3.5">
+          <p className="text-corpo font-medium text-ink">Esta alteração vale para</p>
+          <div role="radiogroup" aria-label="Alcance da alteração" className="space-y-1.5">
+            {(
+              [
+                ["esta", "Só esta ocorrência"],
+                ["futuras", "Esta e as futuras"],
+                [
+                  "todas",
+                  anteriores > 0
+                    ? `Todas — inclusive ${plural(anteriores, "mês já fechado", "meses já fechados")}`
+                    : "Todas as ocorrências",
+                ],
+              ] as const
+            ).map(([valor, rotulo]) => (
+              <label key={valor} className="flex items-center gap-2 text-corpo text-ink-muted">
+                <input
+                  type="radio"
+                  name="escopo"
+                  checked={escopo === valor}
+                  onChange={() => setEscopo(valor)}
+                  className="h-4 w-4 border-line-strong"
+                />
+                <span className={valor === "todas" && anteriores > 0 ? "text-warning-ink" : ""}>
+                  {rotulo}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="text-legenda text-ink-subtle">
+            {transaction?.serie_tipo === "recorrencia"
+              ? "Propaga valor, categoria e descrição. A data de cada ocorrência não muda."
+              : "Propaga valor e categoria. A descrição fica só nesta — em parcelamento ela carrega o número da parcela."}
+          </p>
         </div>
       )}
 
@@ -479,10 +676,13 @@ export function TransactionForm({
         </Field>
       )}
 
-      {parcelado ? (
+      {emSerie ? (
         <p className="text-legenda text-ink-subtle">
-          Serão criados {numeroDeParcelas} lançamentos, um por mês, todos marcados como pagos —
-          a dívida no cartão existe por inteiro desde a compra.
+          {parcelado
+            ? ehCartao
+              ? `Serão criados ${numeroDeParcelas} lançamentos, um por mês, todos marcados como pagos — a dívida no cartão existe por inteiro desde a compra.`
+              : `Serão criados ${numeroDeParcelas} lançamentos, um por mês, nenhum marcado como pago: o dinheiro ainda não saiu da conta. A dívida aparece por inteiro assim mesmo — a contrapartida já foi entregue.`
+            : `Serão criados ${numeroDeParcelas} lançamentos, um por mês, nenhum pago. Use "Pagar" em cada um conforme o dinheiro sair.`}
         </p>
       ) : ehCartao ? (
         /*
@@ -493,6 +693,21 @@ export function TransactionForm({
         <p className="text-legenda text-ink-subtle">
           A dívida no cartão existe desde a compra — este lançamento já consome o limite. O
           pagamento é registrado na fatura, em Contas.
+        </p>
+      ) : parcialmentePago ? (
+        /*
+          ⚠️ A CAIXA SAI QUANDO EXISTE PAGAMENTO PARCIAL, e isso protege o dado.
+
+          "Já pago / recebido" só sabe dizer tudo ou nada. Mostrá-la aqui
+          ofereceria duas escolhas destrutivas — marcar quitaria o que ainda se
+          deve, desmarcar apagaria o que já saiu da conta — e as duas pareceriam
+          inofensivas. A action também preserva o valor por conta própria; esta
+          linha é a metade que explica por quê.
+        */
+        <p className="text-legenda text-ink-subtle">
+          Pago {formatBRL(transaction!.paid_cents)} de {formatBRL(transaction!.amount_cents)}. Para
+          registrar mais um pagamento, use <span className="font-medium text-ink">Pagar</span> na
+          lista de lançamentos — editar aqui não mexe no que já foi pago.
         </p>
       ) : (
         <label className="flex items-center gap-2 text-corpo text-ink-muted">
@@ -846,6 +1061,194 @@ export function StatementPaymentForm({
 
       <ErrorText message={error} />
       <Actions pending={pending} label="Pagar fatura" onCancel={onCancel} />
+    </form>
+  );
+}
+
+/* ------------------------------------------------- pagar um lançamento */
+
+/**
+ * PAGAR UM LANÇAMENTO — total ou em parte.
+ *
+ * ⚠️ NÃO HÁ CAMPO "PAGAR COM", e a ausência é a decisão. Um lançamento avulso já
+ * está NA conta de onde o dinheiro sai; pagá-lo é registrar que ele saiu dali. A
+ * fatura precisa de conta de origem porque vive no cartão e o dinheiro tem que
+ * vir de fora — aqui, um seletor seria um no-op ou criaria uma transferência que
+ * contaria a saída duas vezes.
+ *
+ * ⚠️ E O RESTANTE NÃO VIRA LANÇAMENTO NOVO. Ele já foi contado quando a despesa
+ * foi lançada; o que muda é `paid_cents` na MESMA linha. Só os encargos são
+ * despesa nova. É a mesma regra do rotativo de fatura.
+ */
+export function TransactionPaymentForm({
+  transaction,
+  onDone,
+  onCancel,
+}: {
+  transaction: FinanceTransaction;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const { toast } = useToast();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const restanteCents = Math.max(0, transaction.amount_cents - transaction.paid_cents);
+  const ehDespesa = transaction.kind === "expense";
+
+  const [valor, setValor] = useState(formatCentsPlain(restanteCents));
+  const [pagoEm, setPagoEm] = useState(today());
+  const [taxa, setTaxa] = useState("");
+  const [iof, setIof] = useState("");
+
+  const centavos = parseBRLToCents(valor) ?? 0;
+  const taxaNumero = taxa.trim() === "" ? 0 : Number(taxa.trim().replace(",", "."));
+  const taxaValida = Number.isFinite(taxaNumero) && taxaNumero >= 0 && taxaNumero <= 100;
+  const iofCents = iof.trim() === "" ? 0 : (parseBRLToCents(iof) ?? 0);
+
+  /** O que sobra DEPOIS deste pagamento. */
+  const sobraCents = Math.max(0, restanteCents - centavos);
+
+  const encargos = calcularEncargos({
+    saldoRemanescenteCents: sobraCents,
+    // Valor inválido vira zero na prévia e é recusado no envio, com mensagem: a
+    // prévia não pode derrubar o formulário enquanto a pessoa digita "1,".
+    taxaMensalPercent: taxaValida ? taxaNumero : 0,
+    iofCents: iofCents < 0 ? 0 : iofCents,
+  });
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    if (centavos <= 0) {
+      setError("Informe um valor válido, ex.: 1.234,56");
+      return;
+    }
+    if (centavos > restanteCents) {
+      setError(`Falta pagar apenas ${formatBRL(restanteCents)}.`);
+      return;
+    }
+    if (!taxaValida) {
+      setError("Taxa de juros inválida: informe um número entre 0 e 100 (% ao mês).");
+      return;
+    }
+    start(async () => {
+      const r = await payTransaction({
+        transactionId: transaction.id,
+        amountCents: centavos,
+        occurredOn: pagoEm,
+        taxaMensalPercent: taxaNumero,
+        iofCents,
+      });
+      if (r.ok) {
+        toast(
+          centavos === restanteCents ? "Lançamento quitado" : "Pagamento parcial registrado",
+          "success",
+        );
+        onDone();
+      } else setError(r.error ?? "Erro");
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <p className="text-corpo text-ink-subtle">
+        <span className="font-medium text-ink">{transaction.description}</span> ·{" "}
+        {formatBRL(transaction.amount_cents)}
+        {transaction.paid_cents > 0 && (
+          <>
+            {" "}
+            · já {ehDespesa ? "pago" : "recebido"} {formatBRL(transaction.paid_cents)}
+          </>
+        )}
+        {" · falta "}
+        <span className="font-medium text-ink">{formatBRL(restanteCents)}</span>
+      </p>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Valor (R$)" hint="Pode ser parcial — o resto continua em aberto.">
+          <input
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            inputMode="decimal"
+            required
+            placeholder="0,00"
+            className={inputCls}
+          />
+        </Field>
+        <Field label={ehDespesa ? "Data do pagamento" : "Data do recebimento"}>
+          <input
+            type="date"
+            required
+            value={pagoEm}
+            onChange={(e) => setPagoEm(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+      </div>
+
+      {/*
+        Os campos de encargo só existem quando SOBRA saldo e a linha é despesa.
+        Quitando por inteiro não há juros a cobrar, e um campo de taxa numa tela
+        de pagamento integral convida a preencher algo que não se aplica.
+      */}
+      {ehDespesa && sobraCents > 0 && (
+        <div className="space-y-4 rounded-md border border-line bg-surface-muted p-3.5">
+          <p className="text-legenda text-ink-subtle">
+            Restam <span className="font-medium text-ink">{formatBRL(sobraCents)}</span>. O saldo
+            continua NESTE lançamento, em aberto —{" "}
+            <span className="font-medium text-ink">não vira lançamento novo</span>, porque essa
+            despesa já foi contada quando você a registrou.
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Juros (% ao mês)" hint="Deixe vazio se não houver.">
+              <input
+                value={taxa}
+                onChange={(e) => setTaxa(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="IOF e outros encargos (R$)" hint="Opcional.">
+              <input
+                value={iof}
+                onChange={(e) => setIof(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+
+          <p aria-live="polite" className="text-corpo">
+            {!taxaValida ? (
+              <span className="text-danger-ink">
+                Taxa inválida: informe um número entre 0 e 100. Se a sua é 12,5% ao mês, digite
+                12,5 — não 1250.
+              </span>
+            ) : encargos.totalCents === 0 ? (
+              <span className="text-ink-subtle">
+                Sem taxa informada, nada de juros é lançado. O saldo apenas continua em aberto.
+              </span>
+            ) : (
+              <span className="text-ink">
+                Um lançamento de{" "}
+                <span className="font-medium">{formatBRL(encargos.totalCents)}</span> de encargos
+                será criado na mesma conta, ainda não pago.
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      <ErrorText message={error} />
+      <Actions
+        pending={pending}
+        label={centavos === restanteCents ? "Quitar" : "Registrar pagamento"}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

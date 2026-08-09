@@ -60,6 +60,7 @@ export default async function FinanceiroPage({
         transactions={snapshot.transactions}
         futureCardTransactions={snapshot.futureCardTransactions}
         budgets={snapshot.budgets}
+        pendentes={snapshot.pendentes}
         transactionTags={snapshot.transactionTags}
         hideValues={ctx.preferences?.finance_hide_values ?? false}
       />
